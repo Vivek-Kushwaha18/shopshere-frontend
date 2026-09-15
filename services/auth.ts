@@ -2,10 +2,6 @@
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-/* =========================
-   TYPES
-========================= */
-
 export interface SignupData {
   full_name: string;
   email: string;
@@ -34,48 +30,42 @@ export interface ChangePasswordData {
   confirm_password: string;
 }
 
-/* =========================
-   COMMON RESPONSE HANDLER
-========================= */
-
 async function handleResponse(response: Response) {
-  const data = await response.json().catch(() => null);
-  if (!data.status) {
-    console.error("API Error Response:", data);
+  const data = await response.json().catch(function () {
+    return null;
+  });
 
-    // let message = "Something went wrong. Please try again.";
+  if (response.ok) {
+    return data;
+  }
 
-    // Normal backend message
-    // if (typeof data?.message === "string") {
-      message = data.message;
-    // }
+  if (data && typeof data.message === "string") {
+    throw new Error(data.message);
+  }
 
-    // FastAPI simple detail message
-    // else if (typeof data?.detail === "string") {
-    //   message = data.detail;
-    // }
+  if (data && typeof data.detail === "string") {
+    throw new Error(data.detail);
+  }
 
-    // FastAPI validation errors (422)
-    // else if (Array.isArray(data?.detail)) {
-    //   message = data.detail
-    //     .map((error: any) => {
-    //       const field =
-    //         error.loc?.[error.loc.length - 1] || "field";
+  if (data && Array.isArray(data.detail)) {
+    const message = data.detail
+      .map(function (error: any) {
+        const field =
+          error.loc && error.loc.length > 0
+            ? error.loc[error.loc.length - 1]
+            : "field";
 
-    //       return `${field}: ${error.msg}`;
-    //     })
-    //     .join(", ");
-    // }
+        return field + ": " + error.msg;
+      })
+      .join(", ");
 
     throw new Error(message);
   }
 
-  return data;
+  throw new Error(
+    "Something went wrong. Please try again."
+  );
 }
-
-/* =========================
-   SIGNUP
-========================= */
 
 export async function signup(data: SignupData) {
   const url = `${API_URL}/auth/signup`;
@@ -105,25 +95,23 @@ export async function signup(data: SignupData) {
     return await handleResponse(response);
   } catch (error) {
     console.error("Signup API Error:", error);
-
     throw error;
   }
 }
 
-/* =========================
-   LOGIN
-========================= */
-
 export async function login(data: LoginData) {
-  const response = await fetch(`${API_URL}/auth/login`, {
-    method: "POST",
+  const response = await fetch(
+    `${API_URL}/auth/login`,
+    {
+      method: "POST",
 
-    headers: {
-      "Content-Type": "application/json",
-    },
+      headers: {
+        "Content-Type": "application/json",
+      },
 
-    body: JSON.stringify(data),
-  });
+      body: JSON.stringify(data),
+    }
+  );
 
   const result = await handleResponse(response);
 
@@ -144,32 +132,30 @@ export async function login(data: LoginData) {
   return result;
 }
 
-/* =========================
-   GET CURRENT USER
-========================= */
-
 export async function getMe() {
-  const token = localStorage.getItem("access_token");
+  const token =
+    localStorage.getItem("access_token");
 
   if (!token) {
-    throw new Error("You are not logged in.");
+    throw new Error(
+      "You are not logged in."
+    );
   }
 
-  const response = await fetch(`${API_URL}/auth/me`, {
-    method: "GET",
+  const response = await fetch(
+    `${API_URL}/auth/me`,
+    {
+      method: "GET",
 
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
 
   return handleResponse(response);
 }
-
-/* =========================
-   FORGET PASSWORD
-========================= */
 
 export async function forgetPassword(
   data: ForgetPasswordData
@@ -191,10 +177,6 @@ export async function forgetPassword(
 
   return handleResponse(response);
 }
-
-/* =========================
-   UPDATE PASSWORD
-========================= */
 
 export async function updatePassword(
   data: UpdatePasswordData
@@ -218,17 +200,16 @@ export async function updatePassword(
   return handleResponse(response);
 }
 
-/* =========================
-   CHANGE PASSWORD
-========================= */
-
 export async function changePassword(
   data: ChangePasswordData
 ) {
-  const token = localStorage.getItem("access_token");
+  const token =
+    localStorage.getItem("access_token");
 
   if (!token) {
-    throw new Error("You are not logged in.");
+    throw new Error(
+      "You are not logged in."
+    );
   }
 
   const response = await fetch(
@@ -242,9 +223,12 @@ export async function changePassword(
       },
 
       body: JSON.stringify({
-        current_password: data.current_password,
-        new_password: data.new_password,
-        confirm_password: data.confirm_password,
+        current_password:
+          data.current_password,
+        new_password:
+          data.new_password,
+        confirm_password:
+          data.confirm_password,
       }),
     }
   );
@@ -252,23 +236,17 @@ export async function changePassword(
   return handleResponse(response);
 }
 
-/* =========================
-   LOGOUT
-========================= */
-
 export function logout() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
 }
-
-/* =========================
-   GET ACCESS TOKEN
-========================= */
 
 export function getAccessToken() {
   if (typeof window === "undefined") {
     return null;
   }
 
-  return localStorage.getItem("access_token");
+  return localStorage.getItem(
+    "access_token"
+  );
 }

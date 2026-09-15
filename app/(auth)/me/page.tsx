@@ -16,13 +16,12 @@ const token =
 localStorage.getItem("access_token") ||
 sessionStorage.getItem("access_token");
 
-```
     if (!token) {
       setError("You are not logged in.");
       return;
     }
 
-    const result = await getMe(token);
+    const result = await getMe();
 
     console.log("Current user:", result);
 
@@ -39,19 +38,14 @@ sessionStorage.getItem("access_token");
 };
 
 fetchUser();
-```
 
 }, []);
 
-if (loading) {
-return ( <div className="flex min-h-[calc(100vh-128px)] items-center justify-center"> <p className="text-gray-500">
-Loading user... </p> </div>
-);
-}
+
 
 return ( <div className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-gray-50 px-6 py-12"> <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-sm">
 
-```
+
     <h1 className="mb-6 text-center text-3xl font-bold">
       My Profile
     </h1>
@@ -119,7 +113,6 @@ return ( <div className="flex min-h-[calc(100vh-128px)] items-center justify-cen
 
   </div>
 </div>
-```
 
 );
 }

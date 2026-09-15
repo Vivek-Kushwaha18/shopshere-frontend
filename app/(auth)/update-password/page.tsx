@@ -1,11 +1,19 @@
+
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import {
+  FormEvent,
+  Suspense,
+  useState,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { updatePassword } from "@/services/auth";
 
-export default function UpdatePasswordPage() {
+function UpdatePasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -259,5 +267,13 @@ export default function UpdatePasswordPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function UpdatePasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <UpdatePasswordForm />
+    </Suspense>
   );
 }
