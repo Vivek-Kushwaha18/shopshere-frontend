@@ -1,215 +1,197 @@
-
 "use client";
 
+import {
+  FormEvent,
+  useState,
+} from "react";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { login } from "@/services/auth";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import {
+  login,
+  getProfile,
+} from "@/services/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams =
+    useSearchParams();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [email, setEmail] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [password, setPassword] =
+    useState("");
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  async function handleSubmit(
+    e: FormEvent
+  ) {
     e.preventDefault();
 
     setError("");
-    setSuccess("");
-    setLoading(true);
 
     try {
-      const result = await login({
+      setLoading(true);
+
+      const response = await login({
         email,
         password,
       });
 
-      console.log("Login response:", result);
-
-      setSuccess("Login successful!");
-
-      setTimeout(() => {
-        router.push("/");
-      }, 1000);
-    } catch (error) {
-      console.error("Login error:", error);
-
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError("Login failed. Please check your email and password.");
+      if (!response.access_token) {
+        throw new Error(
+          "Access token was not returned by the server."
+        );
       }
+
+      localStorage.setItem(
+        "access_token",
+        response.access_token
+      );
+
+      if (response.refresh_token) {
+        localStorage.setItem(
+          "refresh_token",
+          response.refresh_token
+        );
+      }
+
+      /*
+       * Get current user using /auth/me
+       */
+
+      const user = await getProfile(
+        response.access_token
+      );
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(user)
+      );
+
+      /*
+       * Role based redirect
+       */
+
+      if (user.role === "seller") {
+        router.push(
+          "/seller/dashboard"
+        );
+      } else {
+        router.push(
+          "/customer/dashboard"
+        );
+      }
+    } catch (err: any) {
+      setError(
+        err.message || "Login failed."
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-gray-50 px-6 py-12">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
+        <h1 className="text-center text-3xl font-bold text-blue-600">
+          ShopSphere
+        </h1>
 
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">
-            Welcome Back
-          </h1>
+        <p className="mt-2 text-center text-gray-500">
+          Login to your account
+        </p>
 
-          <p className="mt-2 text-sm text-gray-500">
-            Login to your ShopSphere account
-          </p>
-        </div>
+        {searchParams.get(
+          "registered"
+        ) && (
+          <div className="mt-5 rounded-md bg-green-50 p-3 text-sm text-green-700">
+            Account created successfully.
+            Please login.
+          </div>
+        )}
 
-        {/* Error */}
         {error && (
-          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          <div className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-600">
             {error}
           </div>
         )}
 
-        {/* Success */}
-        {success && (
-          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-600">
-            {success}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-
-          {/* Email */}
+        <form
+          onSubmit={handleSubmit}
+          className="mt-6 space-y-5"
+        >
           <div>
-            <label
-              htmlFor="email"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Email
             </label>
 
             <input
-              id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
+              onChange={(e) =>
+                setEmail(e.target.value)
+              }
               required
-              disabled={loading}
-              autoComplete="email"
-              className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black disabled:bg-gray-100"
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
+              placeholder="Enter your email"
             />
           </div>
 
-          {/* Password */}
           <div>
-            <label
-              htmlFor="password"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Password
             </label>
 
-            <div className="relative">
-
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                disabled={loading}
-                autoComplete="current-password"
-                className="w-full rounded-lg border px-4 py-3 pr-20 outline-none focus:border-black disabled:bg-gray-100"
-              />
-
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 hover:text-black"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-
-            </div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
+              required
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
+              placeholder="Enter your password"
+            />
           </div>
 
-          {/* Remember + Forgot */}
-          <div className="flex items-center justify-between">
-
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                disabled={loading}
-              />
-
-              Remember me
-
-            </label>
-
+          <div className="flex justify-end">
             <Link
               href="/forgot-password"
-              className="text-sm font-medium text-black hover:underline"
+              className="text-sm font-medium text-blue-600 hover:underline"
             >
               Forgot Password?
             </Link>
-
           </div>
 
-          {/* Login Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-black py-3 font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-md bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading
+              ? "Logging in..."
+              : "Login"}
           </button>
-
         </form>
 
-        {/* OR */}
-        <div className="my-6 flex items-center gap-3">
-
-          <div className="h-px flex-1 bg-gray-200" />
-
-          <span className="text-xs text-gray-400">
-            OR
-          </span>
-
-          <div className="h-px flex-1 bg-gray-200" />
-
-        </div>
-
-        {/* Google */}
-        <button
-          type="button"
-          disabled={loading}
-          className="w-full rounded-lg border py-3 font-medium transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Continue with Google
-        </button>
-
-        {/* Signup */}
         <p className="mt-6 text-center text-sm text-gray-600">
-
           Don't have an account?{" "}
-
           <Link
             href="/signup"
-            className="font-semibold text-black hover:underline"
+            className="font-semibold text-blue-600 hover:underline"
           >
-            Create Account
+            Signup
           </Link>
-
         </p>
-
       </div>
     </div>
   );

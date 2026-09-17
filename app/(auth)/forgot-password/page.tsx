@@ -1,137 +1,107 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { forgetPassword } from "@/services/auth";
+import {
+  FormEvent,
+  useState,
+} from "react";
+
+import { forgotPassword } from "@/services/auth";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [message, setMessage] =
+    useState("");
 
-  const handleSubmit = async (
-    e: FormEvent<HTMLFormElement>
-  ) => {
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  async function handleSubmit(
+    e: FormEvent
+  ) {
     e.preventDefault();
 
+    setMessage("");
     setError("");
-    setSuccess("");
-    setLoading(true);
 
     try {
-      const result = await forgetPassword({
-        email: email,
-      });
+      setLoading(true);
 
-      console.log(
-        "Forgot password response:",
-        result
-      );
+      const response =
+        await forgotPassword(email);
 
-      setSuccess(
-        "Password reset request sent successfully. Please check your email."
+      setMessage(
+        response?.message ||
+          "Password reset instructions have been sent."
       );
-    } catch (error) {
-      console.error(
-        "Forgot password error:",
-        error
-      );
-
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError(
+    } catch (err: any) {
+      setError(
+        err.message ||
           "Unable to process your request."
-        );
-      }
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-gray-50 px-6 py-12">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow">
+        <h1 className="text-center text-2xl font-bold">
+          Forgot Password
+        </h1>
 
-        {/* Heading */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">
-            Forgot Password
-          </h1>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          Enter your email to continue.
+        </p>
 
-          <p className="mt-2 text-sm text-gray-500">
-            Enter your email to reset your password
-          </p>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            {error}
+        {message && (
+          <div className="mt-5 rounded-md bg-green-50 p-3 text-sm text-green-700">
+            {message}
           </div>
         )}
 
-        {/* Success */}
-        {success && (
-          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-600">
-            {success}
+        {error && (
+          <div className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-600">
+            {error}
           </div>
         )}
 
         <form
           onSubmit={handleSubmit}
-          className="space-y-5"
+          className="mt-6 space-y-5"
         >
-
-          {/* Email */}
           <div>
-            <label
-              htmlFor="email"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Email
             </label>
 
             <input
-              id="email"
               type="email"
               value={email}
               onChange={(e) =>
                 setEmail(e.target.value)
               }
-              placeholder="Enter your email"
               required
-              disabled={loading}
-              autoComplete="email"
-              className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black disabled:bg-gray-100"
+              placeholder="Enter your email"
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
             />
           </div>
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-black py-3 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+            className="w-full rounded-md bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {loading
               ? "Sending..."
-              : "Send Reset Link"}
+              : "Send Reset Instructions"}
           </button>
         </form>
-
-        {/* Login */}
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Remember your password?{" "}
-
-          <Link
-            href="/login"
-            className="font-semibold text-black hover:underline"
-          >
-            Login
-          </Link>
-        </p>
       </div>
     </div>
   );

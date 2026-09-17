@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+
+import Header from "@/components/header/Header";
+import Footer from "@/components/Footer/Footer";
+
 import "./globals.css";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "ShopSphere",
-  description: "Smart Shopping Platform",
+  description: "Smart Shopping",
 };
 
 export default function RootLayout({
@@ -15,16 +17,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-white text-gray-900">
-        <div className="flex min-h-screen flex-col">
-          <Header />
-
-          <main className="flex-1">
-            {children}
-          </main>
-
-          <Footer />
-        </div>
+      <body className="min-h-screen bg-gray-50">
+        <Header />
+        {children}
+        <Footer />
       </body>
     </html>
   );

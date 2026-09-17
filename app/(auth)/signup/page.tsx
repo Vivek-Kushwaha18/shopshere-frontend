@@ -1,206 +1,157 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signup } from "@/services/auth";
+import { UserRole } from "@/types/auth";
 
 export default function SignupPage() {
   const router = useRouter();
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  const [role, setRole] = useState<"customer" | "seller">("customer");
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
-
-  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [form, setForm] = useState({
+    full_name: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirm_password: "",
+    role: "customer" as UserRole,
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  const handleSubmit = async (
-    e: FormEvent<HTMLFormElement>
-  ) => {
+  function handleChange(
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement
+    >
+  ) {
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    });
+  }
+
+  async function handleSubmit(
+    e: FormEvent
+  ) {
     e.preventDefault();
 
     setError("");
-    setSuccess("");
 
-    if (password !== confirmPassword) {
+    if (
+      form.password !==
+      form.confirm_password
+    ) {
       setError("Passwords do not match.");
       return;
     }
 
-    if (!agreeTerms) {
-      setError("Please accept the terms and conditions.");
+    if (form.password.length < 8) {
+      setError(
+        "Password must be at least 8 characters."
+      );
       return;
     }
 
-    setLoading(true);
-
     try {
-      const result = await signup({
-        full_name: fullName,
-        email: email,
-        phone: phone,
-        password: password,
-        role: role,
+      setLoading(true);
+
+      await signup({
+        full_name: form.full_name,
+        email: form.email,
+        phone: form.phone || undefined,
+        password: form.password,
+        role: form.role,
       });
 
-       if (result.success) {
-        router.push("/login");
-        return;
-    }
-
-    setError(result.message);
-    } catch (error) {
-      console.error("Signup error:", error);
-
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError("Signup failed. Please try again.");
-      }
+      router.push("/login?registered=true");
+    } catch (err: any) {
+      setError(
+        err.message || "Signup failed."
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-gray-50 px-6 py-12">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-8 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
+        <h1 className="text-center text-3xl font-bold text-blue-600">
+          ShopSphere
+        </h1>
 
-        {/* Heading */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">
-            Create Account
-          </h1>
+        <p className="mt-2 text-center text-gray-500">
+          Create your account
+        </p>
 
-          <p className="mt-2 text-sm text-gray-500">
-            Create your ShopSphere account
-          </p>
-        </div>
-
-        {/* Error */}
         {error && (
-          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          <div className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-600">
             {error}
-          </div>
-        )}
-
-        {/* Success */}
-        {success && (
-          <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-600">
-            {success}
           </div>
         )}
 
         <form
           onSubmit={handleSubmit}
-          className="space-y-5"
+          className="mt-6 space-y-4"
         >
-
-          {/* Full Name */}
           <div>
-            <label
-              htmlFor="fullName"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Full Name
             </label>
 
             <input
-              id="fullName"
-              type="text"
-              value={fullName}
-              onChange={(e) =>
-                setFullName(e.target.value)
-              }
-              placeholder="Enter your full name"
+              name="full_name"
+              value={form.full_name}
+              onChange={handleChange}
               required
-              disabled={loading}
-              autoComplete="name"
-              className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black disabled:bg-gray-100"
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
+              placeholder="Enter your full name"
             />
           </div>
 
-          {/* Email */}
           <div>
-            <label
-              htmlFor="email"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Email
             </label>
 
             <input
-              id="email"
               type="email"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              placeholder="Enter your email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
               required
-              disabled={loading}
-              autoComplete="email"
-              className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black disabled:bg-gray-100"
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
+              placeholder="Enter your email"
             />
           </div>
 
-          {/* Phone */}
           <div>
-            <label
-              htmlFor="phone"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Phone
             </label>
 
             <input
-              id="phone"
               type="tel"
-              value={phone}
-              onChange={(e) =>
-                setPhone(e.target.value)
-              }
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
               placeholder="Enter your phone number"
-              required
-              disabled={loading}
-              autoComplete="tel"
-              className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black disabled:bg-gray-100"
             />
           </div>
 
-          {/* Account Type */}
           <div>
-            <label
-              htmlFor="role"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Account Type
             </label>
 
             <select
-              id="role"
-              value={role}
-              onChange={(e) =>
-                setRole(
-                  e.target.value as
-                    | "customer"
-                    | "seller"
-                )
-              }
-              disabled={loading}
-              className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black disabled:bg-gray-100"
+              name="role"
+              value={form.role}
+              onChange={handleChange}
+              className="w-full rounded-md border px-3 py-2"
             >
               <option value="customer">
                 Customer
@@ -212,117 +163,42 @@ export default function SignupPage() {
             </select>
           </div>
 
-          {/* Password */}
           <div>
-            <label
-              htmlFor="password"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Password
             </label>
 
-            <div className="relative">
-              <input
-                id="password"
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
-                value={password}
-                onChange={(e) =>
-                  setPassword(e.target.value)
-                }
-                placeholder="Create a password"
-                required
-                disabled={loading}
-                autoComplete="new-password"
-                className="w-full rounded-lg border px-4 py-3 pr-20 outline-none focus:border-black disabled:bg-gray-100"
-              />
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPassword(!showPassword)
-                }
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              required
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
+              placeholder="Minimum 8 characters"
+            />
           </div>
 
-          {/* Confirm Password */}
           <div>
-            <label
-              htmlFor="confirmPassword"
-              className="mb-2 block text-sm font-medium"
-            >
+            <label className="mb-1 block text-sm font-medium">
               Confirm Password
             </label>
 
-            <div className="relative">
-              <input
-                id="confirmPassword"
-                type={
-                  showConfirmPassword
-                    ? "text"
-                    : "password"
-                }
-                value={confirmPassword}
-                onChange={(e) =>
-                  setConfirmPassword(
-                    e.target.value
-                  )
-                }
-                placeholder="Confirm your password"
-                required
-                disabled={loading}
-                autoComplete="new-password"
-                className="w-full rounded-lg border px-4 py-3 pr-20 outline-none focus:border-black disabled:bg-gray-100"
-              />
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowConfirmPassword(
-                    !showConfirmPassword
-                  )
-                }
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500"
-              >
-                {showConfirmPassword
-                  ? "Hide"
-                  : "Show"}
-              </button>
-            </div>
+            <input
+              type="password"
+              name="confirm_password"
+              value={form.confirm_password}
+              onChange={handleChange}
+              required
+              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
+              placeholder="Confirm your password"
+            />
           </div>
 
-          {/* Terms */}
-          <label className="flex items-start gap-2 text-sm text-gray-600">
-            <input
-              type="checkbox"
-              checked={agreeTerms}
-              onChange={(e) =>
-                setAgreeTerms(e.target.checked)
-              }
-              disabled={loading}
-              className="mt-1"
-            />
-
-            <span>
-              I agree to the{" "}
-              <span className="font-medium text-black">
-                Terms and Conditions
-              </span>
-            </span>
-          </label>
-
-          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-black py-3 font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-md bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {loading
               ? "Creating Account..."
@@ -330,33 +206,11 @@ export default function SignupPage() {
           </button>
         </form>
 
-        {/* OR */}
-        <div className="my-6 flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-200" />
-
-          <span className="text-xs text-gray-400">
-            OR
-          </span>
-
-          <div className="h-px flex-1 bg-gray-200" />
-        </div>
-
-        {/* Google */}
-        <button
-          type="button"
-          disabled={loading}
-          className="w-full rounded-lg border py-3 font-medium hover:bg-gray-50"
-        >
-          Continue with Google
-        </button>
-
-        {/* Login */}
         <p className="mt-6 text-center text-sm text-gray-600">
           Already have an account?{" "}
-
           <Link
             href="/login"
-            className="font-semibold text-black hover:underline"
+            className="font-semibold text-blue-600 hover:underline"
           >
             Login
           </Link>
