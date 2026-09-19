@@ -1,9 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  useState,
+} from "react";
+
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
+
 import {
   Eye,
   EyeOff,
@@ -11,9 +15,13 @@ import {
   Lock,
 } from "lucide-react";
 
-import { login } from "@/services/auth";
+import {
+  login,
+  saveAuthSession,
+} from "@/services/auth";
 
 import { Button } from "@/components/ui/button";
+
 import {
   Card,
   CardContent,
@@ -21,14 +29,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 
 export default function LoginPage() {
-  const router = useRouter();
-
   const [showPassword, setShowPassword] =
     useState(false);
 
@@ -41,6 +48,10 @@ export default function LoginPage() {
     rememberMe: false,
   });
 
+  // ==========================================
+  // LOGIN SUBMIT
+  // ==========================================
+
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
   ) {
@@ -50,15 +61,34 @@ export default function LoginPage() {
       return;
     }
 
-    const email = formData.email
-      .trim()
-      .toLowerCase();
+    const email =
+      formData.email.trim().toLowerCase();
 
-    if (!email || !formData.password) {
-      Swal.fire({
+    const password =
+      formData.password;
+
+    // ==========================================
+    // BASIC VALIDATION
+    // ==========================================
+
+    if (!email) {
+      await Swal.fire({
         icon: "error",
-        title: "Missing information",
-        text: "Please enter your email and password.",
+        title: "Email required",
+        text:
+          "Please enter your email address.",
+        confirmButtonText: "OK",
+      });
+
+      return;
+    }
+
+    if (!password) {
+      await Swal.fire({
+        icon: "error",
+        title: "Password required",
+        text:
+          "Please enter your password.",
         confirmButtonText: "OK",
       });
 
@@ -68,16 +98,26 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // ========================================
+      // CALL LOGIN API
+      // ========================================
+
       const response = await login({
         email,
-        password: formData.password,
+        password,
       });
 
-      console.log("Login response:", response);
+      console.log(
+        "Login response:",
+        response
+      );
 
-      // Login failed
+      // ========================================
+      // LOGIN FAILED
+      // ========================================
+
       if (!response.success) {
-        Swal.fire({
+        await Swal.fire({
           icon: "error",
           title: "Login failed",
           text:
@@ -89,44 +129,109 @@ export default function LoginPage() {
         return;
       }
 
-      // Remove any old authentication data first
-      localStorage.removeItem(
-        "access_token"
+      // ========================================
+      // CHECK LOGIN RESPONSE
+      // ========================================
+
+      const accessToken =
+        response.data?.access_token;
+
+      const refreshToken =
+        response.data?.refresh_token;
+
+      const user =
+        response.data?.user;
+
+      if (
+        !accessToken ||
+        !refreshToken ||
+        !user
+      ) {
+        console.error(
+          "Invalid login response:",
+          response.data
+        );
+
+        await Swal.fire({
+          icon: "error",
+          title: "Login error",
+          text:
+            "The server returned incomplete login information.",
+          confirmButtonText: "OK",
+        });
+
+        return;
+      }
+
+      // ========================================
+      // SAVE REAL AUTH SESSION
+      // ========================================
+
+      saveAuthSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        user: user,
+      });
+
+      // ========================================
+      // REMOVE OLD VERIFICATION DATA
+      // ========================================
+
+      sessionStorage.removeItem(
+        "verification_email"
       );
 
-      localStorage.removeItem(
-        "refresh_token"
-      );
-
-      // Save new access token
-      localStorage.setItem(
-        "access_token",
-        response.data.access_token
-      );
-
-      // Save new refresh token
-      localStorage.setItem(
-        "refresh_token",
-        response.data.refresh_token
-      );
-
-      // Login means email is already verified,
-      // so old verification data is no longer needed.
       localStorage.removeItem(
         "verification_email"
       );
 
-      router.push("/");
+      // ========================================
+      // REMEMBER ME
+      // ========================================
+
+      if (formData.rememberMe) {
+        localStorage.setItem(
+          "remember_me",
+          "true"
+        );
+      } else {
+        localStorage.removeItem(
+          "remember_me"
+        );
+      }
+
+      // ========================================
+      // LOGIN SUCCESS
+      // ========================================
+
+      await Swal.fire({
+        icon: "success",
+        title: "Login successful!",
+        text:
+          `Welcome back, ${user.full_name}.`,
+        confirmButtonText: "Continue",
+      });
+
+      // ========================================
+      // GO TO HOME
+      // ========================================
+      //
+      // Full browser navigation reloads
+      // Header and reads the saved user.
+      //
+
+      window.location.href = "/";
     } catch (error) {
       console.error(
         "Login error:",
         error
       );
 
-      Swal.fire({
+      await Swal.fire({
         icon: "error",
         title: "Connection Error",
-        text: "Unable to connect to the server. Please try again.",
+        text:
+          "Unable to connect to the server. Please try again.",
         confirmButtonText: "OK",
       });
     } finally {
@@ -134,28 +239,34 @@ export default function LoginPage() {
     }
   }
 
+  // ==========================================
+  // INPUT CHANGE
+  // ==========================================
+
   function handleChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
     const {
       name,
       value,
-      type,
-      checked,
     } = event.target;
 
-    setFormData((previous) => ({
-      ...previous,
-      [name]:
-        type === "checkbox"
-          ? checked
-          : value,
-    }));
+    setFormData(
+      (previous) => ({
+        ...previous,
+        [name]: value,
+      })
+    );
   }
 
   return (
     <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
       <Card className="w-full max-w-md">
+
+        {/* =====================================
+            HEADER
+        ====================================== */}
+
         <CardHeader className="space-y-2 text-center">
           <CardTitle className="text-2xl font-bold">
             Welcome back
@@ -167,10 +278,18 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent>
+
+          {/* =====================================
+              LOGIN FORM
+          ====================================== */}
+
           <form
             onSubmit={handleSubmit}
             className="space-y-5"
           >
+
+            {/* EMAIL */}
+
             <div className="space-y-2">
               <Label htmlFor="email">
                 Email Address
@@ -188,12 +307,18 @@ export default function LoginPage() {
                   onChange={handleChange}
                   className="pl-9"
                   required
+                  disabled={loading}
+                  autoComplete="email"
                 />
               </div>
             </div>
 
+            {/* PASSWORD */}
+
             <div className="space-y-2">
+
               <div className="flex items-center justify-between">
+
                 <Label htmlFor="password">
                   Password
                 </Label>
@@ -204,9 +329,11 @@ export default function LoginPage() {
                 >
                   Forgot password?
                 </Link>
+
               </div>
 
               <div className="relative">
+
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
 
                 <Input
@@ -222,13 +349,16 @@ export default function LoginPage() {
                   onChange={handleChange}
                   className="pl-9 pr-10"
                   required
+                  disabled={loading}
+                  autoComplete="current-password"
                 />
 
                 <button
                   type="button"
                   onClick={() =>
                     setShowPassword(
-                      (previous) => !previous
+                      (previous) =>
+                        !previous
                     )
                   }
                   className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
@@ -237,6 +367,7 @@ export default function LoginPage() {
                       ? "Hide password"
                       : "Show password"
                   }
+                  disabled={loading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -244,21 +375,32 @@ export default function LoginPage() {
                     <Eye className="h-4 w-4" />
                   )}
                 </button>
+
               </div>
             </div>
 
+            {/* REMEMBER ME */}
+
             <div className="flex items-center gap-3">
+
               <Checkbox
                 id="rememberMe"
                 name="rememberMe"
-                checked={formData.rememberMe}
-                onCheckedChange={(checked) =>
-                  setFormData((previous) => ({
-                    ...previous,
-                    rememberMe:
-                      checked === true,
-                  }))
+                checked={
+                  formData.rememberMe
                 }
+                onCheckedChange={(
+                  checked
+                ) =>
+                  setFormData(
+                    (previous) => ({
+                      ...previous,
+                      rememberMe:
+                        checked === true,
+                    })
+                  )
+                }
+                disabled={loading}
               />
 
               <Label
@@ -267,7 +409,10 @@ export default function LoginPage() {
               >
                 Remember me
               </Label>
+
             </div>
+
+            {/* LOGIN BUTTON */}
 
             <Button
               type="submit"
@@ -279,9 +424,15 @@ export default function LoginPage() {
                 ? "Logging in..."
                 : "Login"}
             </Button>
+
           </form>
 
+          {/* =====================================
+              SEPARATOR
+          ====================================== */}
+
           <div className="my-6 flex items-center gap-4">
+
             <Separator className="flex-1" />
 
             <span className="text-xs text-muted-foreground">
@@ -289,18 +440,29 @@ export default function LoginPage() {
             </span>
 
             <Separator className="flex-1" />
+
           </div>
+
+          {/* =====================================
+              GOOGLE LOGIN
+          ====================================== */}
 
           <Button
             type="button"
             variant="outline"
             className="w-full"
+            disabled={loading}
           >
             Continue with Google
           </Button>
 
+          {/* =====================================
+              SIGN UP
+          ====================================== */}
+
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Don't have an account?{" "}
+
             <Link
               href="/signup"
               className="font-medium text-foreground underline underline-offset-4"
@@ -308,6 +470,7 @@ export default function LoginPage() {
               Sign Up
             </Link>
           </p>
+
         </CardContent>
       </Card>
     </main>

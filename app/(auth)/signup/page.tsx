@@ -1,10 +1,19 @@
 "use client";
 
-import { signup, sendVerificationCode, verifyEmail } from "@/services/auth";
+import {
+  signup,
+  sendVerificationCode,
+  verifyEmail,
+} from "@/services/auth";
+
 import Swal from "sweetalert2";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
+
 import {
   Eye,
   EyeOff,
@@ -15,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+
 import {
   Card,
   CardContent,
@@ -22,6 +32,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,28 +41,55 @@ import { Separator } from "@/components/ui/separator";
 export default function SignupPage() {
   const router = useRouter();
 
+  // ==========================================================
+  // PASSWORD VISIBILITY
+  // ==========================================================
+
   const [showPassword, setShowPassword] =
     useState(false);
 
-  const [showConfirmPassword, setShowConfirmPassword] =
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
+
+  // ==========================================================
+  // LOADING
+  // ==========================================================
+
+  const [loading, setLoading] =
     useState(false);
 
-  const [loading, setLoading] = useState(false);
+  const [resending, setResending] =
+    useState(false);
 
-  const [otpMode, setOtpMode] = useState(false);
+  // ==========================================================
+  // OTP MODE
+  // ==========================================================
 
-  const [otp, setOtp] = useState("");
+  const [otpMode, setOtpMode] =
+    useState(false);
 
-  const [resending, setResending] = useState(false);
+  const [otp, setOtp] =
+    useState("");
 
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    role: "customer",
-    password: "",
-    confirmPassword: "",
-  });
+  // ==========================================================
+  // FORM DATA
+  // ==========================================================
+
+  const [formData, setFormData] =
+    useState({
+      fullName: "",
+      email: "",
+      phone: "",
+      role: "customer",
+      password: "",
+      confirmPassword: "",
+    });
+
+  // ==========================================================
+  // SIGNUP
+  // ==========================================================
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -62,31 +100,68 @@ export default function SignupPage() {
       return;
     }
 
-    const fullName = formData.fullName.trim();
-    const email = formData.email.trim().toLowerCase();
-    const phone = formData.phone.trim();
+    const fullName =
+      formData.fullName.trim();
+
+    const email =
+      formData.email
+        .trim()
+        .toLowerCase();
+
+    const phone =
+      formData.phone.trim();
+
+    // ========================================================
+    // VALIDATE NAME
+    // ========================================================
 
     if (fullName.length < 2) {
       Swal.fire({
         icon: "error",
         title: "Invalid name",
-        text: "Full name must be at least 2 characters.",
+        text:
+          "Full name must be at least 2 characters.",
         confirmButtonText: "OK",
       });
 
       return;
     }
+
+    // ========================================================
+    // VALIDATE EMAIL
+    // ========================================================
+
+    if (!email) {
+      Swal.fire({
+        icon: "error",
+        title: "Email required",
+        text:
+          "Please enter your email address.",
+        confirmButtonText: "OK",
+      });
+
+      return;
+    }
+
+    // ========================================================
+    // VALIDATE PASSWORD
+    // ========================================================
 
     if (formData.password.length < 8) {
       Swal.fire({
         icon: "error",
         title: "Invalid password",
-        text: "Password must be at least 8 characters.",
+        text:
+          "Password must be at least 8 characters.",
         confirmButtonText: "OK",
       });
 
       return;
     }
+
+    // ========================================================
+    // CONFIRM PASSWORD
+    // ========================================================
 
     if (
       formData.password !==
@@ -95,7 +170,8 @@ export default function SignupPage() {
       Swal.fire({
         icon: "error",
         title: "Passwords do not match",
-        text: "Please make sure both passwords are the same.",
+        text:
+          "Please make sure both passwords are the same.",
         confirmButtonText: "OK",
       });
 
@@ -105,15 +181,24 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
+      // ======================================================
+      // CREATE ACCOUNT
+      // ======================================================
+
       const response = await signup({
         full_name: fullName,
         email,
         phone: phone || undefined,
         password: formData.password,
-        role: formData.role as
-          | "customer"
-          | "seller",
+        role:
+          formData.role as
+            | "customer"
+            | "seller",
       });
+
+      // ======================================================
+      // SIGNUP FAILED
+      // ======================================================
 
       if (!response.success) {
         Swal.fire({
@@ -128,47 +213,26 @@ export default function SignupPage() {
         return;
       }
 
-      // Save access token
-      localStorage.setItem(
-        "access_token",
-        response.data.access_token
-      );
+      // ======================================================
+      // SAVE EMAIL FOR VERIFICATION
+      // ======================================================
 
-      // Save refresh token
-      localStorage.setItem(
-        "refresh_token",
-        response.data.refresh_token
-      );
-
-      // Save email for the current verification flow.
-      localStorage.setItem(
+      sessionStorage.setItem(
         "verification_email",
         email
       );
 
-      // Send OTP immediately after signup.
-      const verificationResponse =
-        await sendVerificationCode();
-
-      if (!verificationResponse.success) {
-        Swal.fire({
-          icon: "error",
-          title: "OTP could not be sent",
-          text:
-            verificationResponse.data?.detail ||
-            "Your account was created, but we could not send the verification code. Please try again.",
-          confirmButtonText: "OK",
-        });
-
-        return;
-      }
+      // ======================================================
+      // SHOW OTP MODE
+      // ======================================================
 
       setOtpMode(true);
 
       await Swal.fire({
         icon: "success",
         title: "Account created",
-        text: `A verification code has been sent to ${email}. Enter the code below to verify your email.`,
+        text:
+          `A verification code has been sent to ${email}. Enter the code below to verify your email.`,
         confirmButtonText: "Enter Code",
       });
     } catch (error) {
@@ -180,13 +244,18 @@ export default function SignupPage() {
       Swal.fire({
         icon: "error",
         title: "Connection Error",
-        text: "Unable to connect to the server. Please try again.",
+        text:
+          "Unable to connect to the server. Please try again.",
         confirmButtonText: "OK",
       });
     } finally {
       setLoading(false);
     }
   }
+
+  // ==========================================================
+  // VERIFY OTP
+  // ==========================================================
 
   async function handleVerifyOTP(
     event: FormEvent<HTMLFormElement>
@@ -197,25 +266,58 @@ export default function SignupPage() {
       return;
     }
 
-    const normalizedCode = otp.trim();
+    const email =
+      formData.email
+        .trim()
+        .toLowerCase();
 
-    if (!normalizedCode) {
+    const normalizedCode =
+      otp.trim();
+
+    // ========================================================
+    // EMAIL VALIDATION
+    // ========================================================
+
+    if (!email) {
       Swal.fire({
         icon: "error",
-        title: "OTP required",
-        text: "Please enter the verification code.",
+        title: "Email missing",
+        text:
+          "Verification email is missing.",
         confirmButtonText: "OK",
       });
 
       return;
     }
 
-    if (normalizedCode.length !== 6) {
+    // ========================================================
+    // OTP VALIDATION
+    // ========================================================
+
+    if (!normalizedCode) {
+      Swal.fire({
+        icon: "error",
+        title: "OTP required",
+        text:
+          "Please enter the verification code.",
+        confirmButtonText: "OK",
+      });
+
+      return;
+    }
+
+    if (
+      !/^\d{6}$/.test(
+        normalizedCode
+      )
+    ) {
       Swal.fire({
         icon: "error",
         title: "Invalid OTP",
-        text: "Please enter the 6-digit verification code.",
-        confirmButtonText: "OK",
+        text:
+          "Please enter the 6-digit verification code.",
+        confirmButtonText:
+          "Try Again",
       });
 
       return;
@@ -224,9 +326,19 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const response = await verifyEmail({
-        code: normalizedCode,
-      });
+      // ======================================================
+      // VERIFY EMAIL
+      // ======================================================
+
+      const response =
+        await verifyEmail({
+          email,
+          code: normalizedCode,
+        });
+
+      // ======================================================
+      // VERIFICATION FAILED
+      // ======================================================
 
       if (!response.success) {
         Swal.fire({
@@ -234,25 +346,77 @@ export default function SignupPage() {
           title: "Invalid OTP",
           text:
             response.data?.detail ||
-            "The verification code is incorrect. Please try again.",
-          confirmButtonText: "Try Again",
+            "The verification code is incorrect or expired. Please try again.",
+          confirmButtonText:
+            "Try Again",
         });
 
         return;
       }
 
+      // ======================================================
+      // REMOVE OLD AUTH DATA
+      //
+      // IMPORTANT:
+      // User is verified, but NOT logged in yet.
+      //
+      // Therefore:
+      // - No access token
+      // - No refresh token
+      // - No stored user
+      // - No isLoggedIn
+      // ======================================================
+
       localStorage.removeItem(
+        "access_token"
+      );
+
+      localStorage.removeItem(
+        "refresh_token"
+      );
+
+      localStorage.removeItem(
+        "isLoggedIn"
+      );
+
+      localStorage.removeItem(
+        "user"
+      );
+
+      // ======================================================
+      // REMOVE VERIFICATION EMAIL
+      // ======================================================
+
+      sessionStorage.removeItem(
         "verification_email"
       );
+
+      // ======================================================
+      // NOTIFY HEADER
+      // ======================================================
+
+      window.dispatchEvent(
+        new Event("auth-change")
+      );
+
+      // ======================================================
+      // SUCCESS MESSAGE
+      // ======================================================
 
       await Swal.fire({
         icon: "success",
         title: "Email verified!",
-        text: "Your account has been verified successfully.",
-        confirmButtonText: "Go to Home",
+        text:
+          "Your account has been verified successfully. Please login to continue.",
+        confirmButtonText:
+          "Go to Login",
       });
 
-      router.push("/");
+      // ======================================================
+      // GO TO LOGIN PAGE
+      // ======================================================
+
+      router.push("/login");
     } catch (error) {
       console.error(
         "OTP verification error:",
@@ -262,7 +426,8 @@ export default function SignupPage() {
       Swal.fire({
         icon: "error",
         title: "Connection Error",
-        text: "Unable to verify your email. Please try again.",
+        text:
+          "Unable to verify your email. Please try again.",
         confirmButtonText: "OK",
       });
     } finally {
@@ -270,8 +435,32 @@ export default function SignupPage() {
     }
   }
 
+  // ==========================================================
+  // RESEND OTP
+  // ==========================================================
+
   async function handleResendOTP() {
-    if (resending || loading) {
+    if (
+      resending ||
+      loading
+    ) {
+      return;
+    }
+
+    const email =
+      formData.email
+        .trim()
+        .toLowerCase();
+
+    if (!email) {
+      Swal.fire({
+        icon: "error",
+        title: "Email missing",
+        text:
+          "Please enter your email address.",
+        confirmButtonText: "OK",
+      });
+
       return;
     }
 
@@ -279,7 +468,9 @@ export default function SignupPage() {
 
     try {
       const response =
-        await sendVerificationCode();
+        await sendVerificationCode(
+          email
+        );
 
       if (!response.success) {
         Swal.fire({
@@ -296,10 +487,11 @@ export default function SignupPage() {
 
       setOtp("");
 
-      Swal.fire({
+      await Swal.fire({
         icon: "success",
         title: "New OTP sent",
-        text: `A new verification code has been sent to ${formData.email.trim().toLowerCase()}.`,
+        text:
+          `A new verification code has been sent to ${email}.`,
         confirmButtonText: "OK",
       });
     } catch (error) {
@@ -311,7 +503,8 @@ export default function SignupPage() {
       Swal.fire({
         icon: "error",
         title: "Connection Error",
-        text: "Unable to resend the verification code.",
+        text:
+          "Unable to resend the verification code.",
         confirmButtonText: "OK",
       });
     } finally {
@@ -319,16 +512,29 @@ export default function SignupPage() {
     }
   }
 
+  // ==========================================================
+  // FORM CHANGE
+  // ==========================================================
+
   function handleChange(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const { name, value } = event.target;
+    const {
+      name,
+      value,
+    } = event.target;
 
-    setFormData((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    setFormData(
+      (previous) => ({
+        ...previous,
+        [name]: value,
+      })
+    );
   }
+
+  // ==========================================================
+  // OTP SCREEN
+  // ==========================================================
 
   if (otpMode) {
     return (
@@ -344,16 +550,51 @@ export default function SignupPage() {
               <br />
 
               <span className="font-medium text-foreground">
-                {formData.email.trim().toLowerCase()}
+                {formData.email
+                  .trim()
+                  .toLowerCase()}
               </span>
             </CardDescription>
           </CardHeader>
 
           <CardContent>
             <form
-              onSubmit={handleVerifyOTP}
+              onSubmit={
+                handleVerifyOTP
+              }
               className="space-y-5"
             >
+              <div className="space-y-2">
+                <Label htmlFor="otp-email">
+                  Email Address
+                </Label>
+
+                <Input
+                  id="otp-email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(
+                    event
+                  ) =>
+                    setFormData(
+                      (
+                        previous
+                      ) => ({
+                        ...previous,
+                        email:
+                          event
+                            .target
+                            .value,
+                      })
+                    )
+                  }
+                  disabled={
+                    loading ||
+                    resending
+                  }
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="otp">
                   Verification Code
@@ -367,17 +608,29 @@ export default function SignupPage() {
                   autoComplete="one-time-code"
                   placeholder="Enter 6-digit OTP"
                   value={otp}
-                  onChange={(event) => {
+                  onChange={(
+                    event
+                  ) => {
                     const value =
                       event.target.value
-                        .replace(/\D/g, "")
-                        .slice(0, 6);
+                        .replace(
+                          /\D/g,
+                          ""
+                        )
+                        .slice(
+                          0,
+                          6
+                        );
 
                     setOtp(value);
                   }}
                   maxLength={6}
                   className="text-center text-lg tracking-[0.4em]"
                   required
+                  disabled={
+                    loading ||
+                    resending
+                  }
                 />
               </div>
 
@@ -385,7 +638,10 @@ export default function SignupPage() {
                 type="submit"
                 className="w-full"
                 size="lg"
-                disabled={loading}
+                disabled={
+                  loading ||
+                  resending
+                }
               >
                 {loading
                   ? "Verifying..."
@@ -396,9 +652,12 @@ export default function SignupPage() {
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={handleResendOTP}
+                onClick={
+                  handleResendOTP
+                }
                 disabled={
-                  loading || resending
+                  loading ||
+                  resending
                 }
               >
                 {resending
@@ -417,8 +676,15 @@ export default function SignupPage() {
                 onClick={() => {
                   setOtpMode(false);
                   setOtp("");
+
+                  sessionStorage.removeItem(
+                    "verification_email"
+                  );
                 }}
-                disabled={loading || resending}
+                disabled={
+                  loading ||
+                  resending
+                }
               >
                 Use Another Email
               </Button>
@@ -439,6 +705,10 @@ export default function SignupPage() {
     );
   }
 
+  // ==========================================================
+  // SIGNUP SCREEN
+  // ==========================================================
+
   return (
     <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
       <Card className="w-full max-w-md">
@@ -457,7 +727,6 @@ export default function SignupPage() {
             onSubmit={handleSubmit}
             className="space-y-5"
           >
-            {/* Full Name */}
             <div className="space-y-2">
               <Label htmlFor="fullName">
                 Full Name
@@ -471,15 +740,21 @@ export default function SignupPage() {
                   name="fullName"
                   type="text"
                   placeholder="Enter your full name"
-                  value={formData.fullName}
-                  onChange={handleChange}
+                  value={
+                    formData.fullName
+                  }
+                  onChange={
+                    handleChange
+                  }
                   className="pl-9"
                   required
+                  disabled={
+                    loading
+                  }
                 />
               </div>
             </div>
 
-            {/* Email */}
             <div className="space-y-2">
               <Label htmlFor="email">
                 Email Address
@@ -493,15 +768,21 @@ export default function SignupPage() {
                   name="email"
                   type="email"
                   placeholder="you@example.com"
-                  value={formData.email}
-                  onChange={handleChange}
+                  value={
+                    formData.email
+                  }
+                  onChange={
+                    handleChange
+                  }
                   className="pl-9"
                   required
+                  disabled={
+                    loading
+                  }
                 />
               </div>
             </div>
 
-            {/* Phone */}
             <div className="space-y-2">
               <Label htmlFor="phone">
                 Phone Number
@@ -518,15 +799,21 @@ export default function SignupPage() {
                   name="phone"
                   type="tel"
                   placeholder="Enter your phone number"
-                  value={formData.phone}
-                  onChange={handleChange}
+                  value={
+                    formData.phone
+                  }
+                  onChange={
+                    handleChange
+                  }
                   className="pl-9"
                   maxLength={20}
+                  disabled={
+                    loading
+                  }
                 />
               </div>
             </div>
 
-            {/* Role */}
             <div className="space-y-2">
               <Label htmlFor="role">
                 Role
@@ -535,15 +822,29 @@ export default function SignupPage() {
               <select
                 id="role"
                 name="role"
-                value={formData.role}
-                onChange={(event) =>
-                  setFormData((previous) => ({
-                    ...previous,
-                    role: event.target.value,
-                  }))
+                value={
+                  formData.role
+                }
+                onChange={(
+                  event
+                ) =>
+                  setFormData(
+                    (
+                      previous
+                    ) => ({
+                      ...previous,
+                      role:
+                        event
+                          .target
+                          .value,
+                    })
+                  )
                 }
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 required
+                disabled={
+                  loading
+                }
               >
                 <option value="customer">
                   Customer
@@ -555,7 +856,6 @@ export default function SignupPage() {
               </select>
             </div>
 
-            {/* Password */}
             <div className="space-y-2">
               <Label htmlFor="password">
                 Password
@@ -573,19 +873,29 @@ export default function SignupPage() {
                       : "password"
                   }
                   placeholder="Create a password"
-                  value={formData.password}
-                  onChange={handleChange}
+                  value={
+                    formData.password
+                  }
+                  onChange={
+                    handleChange
+                  }
                   className="pl-9 pr-10"
                   required
                   minLength={8}
                   maxLength={128}
+                  disabled={
+                    loading
+                  }
                 />
 
                 <button
                   type="button"
                   onClick={() =>
                     setShowPassword(
-                      !showPassword
+                      (
+                        previous
+                      ) =>
+                        !previous
                     )
                   }
                   className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
@@ -593,6 +903,9 @@ export default function SignupPage() {
                     showPassword
                       ? "Hide password"
                       : "Show password"
+                  }
+                  disabled={
+                    loading
                   }
                 >
                   {showPassword ? (
@@ -608,7 +921,6 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Confirm Password */}
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">
                 Confirm Password
@@ -629,18 +941,26 @@ export default function SignupPage() {
                   value={
                     formData.confirmPassword
                   }
-                  onChange={handleChange}
+                  onChange={
+                    handleChange
+                  }
                   className="pl-9 pr-10"
                   required
                   minLength={8}
                   maxLength={128}
+                  disabled={
+                    loading
+                  }
                 />
 
                 <button
                   type="button"
                   onClick={() =>
                     setShowConfirmPassword(
-                      !showConfirmPassword
+                      (
+                        previous
+                      ) =>
+                        !previous
                     )
                   }
                   className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
@@ -648,6 +968,9 @@ export default function SignupPage() {
                     showConfirmPassword
                       ? "Hide password"
                       : "Show password"
+                  }
+                  disabled={
+                    loading
                   }
                 >
                   {showConfirmPassword ? (
@@ -659,11 +982,13 @@ export default function SignupPage() {
               </div>
             </div>
 
-            {/* Terms */}
             <div className="flex items-start gap-3">
               <Checkbox
                 id="terms"
                 required
+                disabled={
+                  loading
+                }
               />
 
               <Label
@@ -688,12 +1013,13 @@ export default function SignupPage() {
               </Label>
             </div>
 
-            {/* Submit */}
             <Button
               type="submit"
               className="w-full"
               size="lg"
-              disabled={loading}
+              disabled={
+                loading
+              }
             >
               {loading
                 ? "Creating Account..."
@@ -701,7 +1027,6 @@ export default function SignupPage() {
             </Button>
           </form>
 
-          {/* Divider */}
           <div className="my-6 flex items-center gap-4">
             <Separator className="flex-1" />
 
@@ -712,16 +1037,15 @@ export default function SignupPage() {
             <Separator className="flex-1" />
           </div>
 
-          {/* Google */}
           <Button
             type="button"
             variant="outline"
             className="w-full"
+            disabled={loading}
           >
             Continue with Google
           </Button>
 
-          {/* Login */}
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link

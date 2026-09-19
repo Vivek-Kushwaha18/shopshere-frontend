@@ -1,107 +1,172 @@
 import { apiFetch } from "./api";
 
-// ============================================================
-// SIGNUP
-// ============================================================
-
-export function signup(data: {
+export interface SignupData {
   full_name: string;
   email: string;
   phone?: string;
   password: string;
   role: "customer" | "seller";
-}) {
+}
+
+export interface LoginData {
+  email: string;
+  password: string;
+}
+
+export interface User {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  role: "customer" | "seller" | "admin";
+  is_active: boolean;
+  is_verified: boolean;
+}
+
+/* =========================
+   SIGNUP
+========================= */
+
+export function signup(data: SignupData) {
   return apiFetch("/auth/signup", {
     method: "POST",
     body: JSON.stringify({
       full_name: data.full_name.trim(),
       email: data.email.trim().toLowerCase(),
-      phone: data.phone?.trim() || undefined,
+      phone: data.phone
+        ? data.phone.trim()
+        : undefined,
       password: data.password,
       role: data.role,
     }),
   });
 }
 
-// ============================================================
-// LOGIN
-// ============================================================
+/* =========================
+   SEND VERIFICATION CODE
+========================= */
 
-export function login(data: {
+export function sendVerificationCode(
+  email: string
+) {
+  const normalizedEmail = String(email)
+    .trim()
+    .toLowerCase();
+
+  return apiFetch(
+    "/auth/send-verification-code",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        email: normalizedEmail,
+      }),
+    }
+  );
+}
+
+/* =========================
+   VERIFY EMAIL
+========================= */
+
+export function verifyEmail(data: {
   email: string;
-  password: string;
+  code: string;
 }) {
+  const normalizedEmail = String(data.email)
+    .trim()
+    .toLowerCase();
+
+  const normalizedCode = String(data.code)
+    .trim();
+
+  return apiFetch("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({
+      email: normalizedEmail,
+      code: normalizedCode,
+    }),
+  });
+}
+
+/* =========================
+   LOGIN
+========================= */
+
+export function login(data: LoginData) {
+  const normalizedEmail = String(data.email)
+    .trim()
+    .toLowerCase();
+
   return apiFetch("/auth/login", {
     method: "POST",
     body: JSON.stringify({
-      email: data.email.trim().toLowerCase(),
+      email: normalizedEmail,
       password: data.password,
     }),
   });
 }
 
-// ============================================================
-// GET PROFILE
-// ============================================================
+/* =========================
+   REFRESH TOKEN
+========================= */
 
-export function getProfile() {
-  return apiFetch("/auth/profile", {
-    method: "GET",
-  });
-}
-
-// ============================================================
-// UPDATE PROFILE
-// ============================================================
-
-export function updateProfile(data: {
-  full_name: string;
-  phone?: string;
+export function refreshToken(data: {
+  refresh_token: string;
 }) {
-  return apiFetch("/auth/profile", {
-    method: "PUT",
-    body: JSON.stringify({
-      full_name: data.full_name.trim(),
-      phone: data.phone?.trim() || undefined,
-    }),
-  });
-}
-
-// ============================================================
-// CHANGE PASSWORD
-// ============================================================
-
-export function changePassword(data: {
-  current_password: string;
-  new_password: string;
-}) {
-  return apiFetch("/auth/change-password", {
+  return apiFetch("/auth/refresh", {
     method: "POST",
     body: JSON.stringify({
-      current_password: data.current_password,
-      new_password: data.new_password,
+      refresh_token: data.refresh_token,
     }),
   });
 }
 
-// ============================================================
-// FORGOT PASSWORD
-// ============================================================
+/* =========================
+   FORGOT PASSWORD
+========================= */
 
-export function forgotPassword(data: {
-  email: string;
-}) {
-  return apiFetch("/auth/forgot-password", {
-    method: "POST",
-    body: JSON.stringify({
-      email: data.email.trim().toLowerCase(),
-    }),
-  });
+export function forgotPassword(
+  emailOrData:
+    | string
+    | {
+        email: string;
+      }
+) {
+  /*
+   * Supports both:
+   *
+   * forgotPassword("user@gmail.com")
+   *
+   * and
+   *
+   * forgotPassword({
+   *   email: "user@gmail.com"
+   * })
+   */
+
+  const email =
+    typeof emailOrData === "string"
+      ? emailOrData
+      : emailOrData?.email;
+
+  const normalizedEmail = String(email)
+    .trim()
+    .toLowerCase();
+
+  return apiFetch(
+    "/auth/forgot-password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        email: normalizedEmail,
+      }),
+    }
+  );
 }
 
-// ============================================================
-// RESET PASSWORD
-// ============================================================
+/* =========================
+   RESET PASSWORD
+========================= */
 
 export function resetPassword(data: {
   token: string;
@@ -116,52 +181,132 @@ export function resetPassword(data: {
   });
 }
 
-// ============================================================
-// SEND VERIFICATION CODE
-// ============================================================
+/* =========================
+   SAVE AUTH SESSION
+========================= */
 
-export function sendVerificationCode() {
-  return apiFetch("/auth/send-verification-code", {
-    method: "POST",
-  });
-}
-
-// ============================================================
-// VERIFY EMAIL
-// ============================================================
-
-export function verifyEmail(data: {
-  code: string;
-}) {
-  return apiFetch("/auth/verify-email", {
-    method: "POST",
-    body: JSON.stringify({
-      code: data.code.trim(),
-    }),
-  });
-}
-
-// ============================================================
-// REFRESH TOKEN
-// ============================================================
-
-export function refreshToken(data: {
+export function saveAuthSession(data: {
+  access_token: string;
   refresh_token: string;
+  user: User;
 }) {
-  return apiFetch("/auth/refresh", {
-    method: "POST",
-    body: JSON.stringify({
-      refresh_token: data.refresh_token,
-    }),
-  });
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(
+    "access_token",
+    data.access_token
+  );
+
+  localStorage.setItem(
+    "refresh_token",
+    data.refresh_token
+  );
+
+  localStorage.setItem(
+    "user",
+    JSON.stringify(data.user)
+  );
+
+  localStorage.setItem(
+    "isLoggedIn",
+    "true"
+  );
+
+  window.dispatchEvent(
+    new Event("auth-change")
+  );
 }
 
-// ============================================================
-// LOGOUT
-// ============================================================
+/* =========================
+   CLEAR AUTH SESSION
+========================= */
 
-export function logout() {
-  return apiFetch("/auth/logout", {
-    method: "POST",
-  });
+export function clearAuthSession() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem(
+    "access_token"
+  );
+
+  localStorage.removeItem(
+    "refresh_token"
+  );
+
+  localStorage.removeItem("user");
+
+  localStorage.removeItem(
+    "isLoggedIn"
+  );
+
+  localStorage.removeItem(
+    "remember_me"
+  );
+
+  window.dispatchEvent(
+    new Event("auth-change")
+  );
+}
+
+/* =========================
+   GET STORED USER
+========================= */
+
+export function getStoredUser(): User | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedUser =
+    localStorage.getItem("user");
+
+  if (!storedUser) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      storedUser
+    ) as User;
+  } catch (error) {
+    console.error(
+      "Unable to read stored user:",
+      error
+    );
+
+    localStorage.removeItem("user");
+
+    return null;
+  }
+}
+
+/* =========================
+   GET ACCESS TOKEN
+========================= */
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(
+    "access_token"
+  );
+}
+
+/* =========================
+   GET REFRESH TOKEN
+========================= */
+
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return localStorage.getItem(
+    "refresh_token"
+  );
 }

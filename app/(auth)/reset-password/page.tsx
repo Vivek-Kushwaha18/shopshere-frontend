@@ -5,12 +5,16 @@ import {
   Suspense,
   useState,
 } from "react";
+
 import Link from "next/link";
+
 import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+
 import Swal from "sweetalert2";
+
 import {
   Eye,
   EyeOff,
@@ -20,6 +24,7 @@ import {
 import { resetPassword } from "@/services/auth";
 
 import { Button } from "@/components/ui/button";
+
 import {
   Card,
   CardContent,
@@ -27,14 +32,27 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 import { Input } from "@/components/ui/input";
+
 import { Label } from "@/components/ui/label";
+
 
 function ResetPasswordContent() {
   const router = useRouter();
+
   const searchParams = useSearchParams();
 
-  const token = searchParams.get("token");
+  /*
+   * The backend should send the user to:
+   *
+   * /reset-password?token=YOUR_RESET_TOKEN
+   *
+   * We read that token here.
+   */
+  const token =
+    searchParams.get("token");
+
 
   const [showPassword, setShowPassword] =
     useState(false);
@@ -45,10 +63,13 @@ function ResetPasswordContent() {
   const [loading, setLoading] =
     useState(false);
 
-  const [formData, setFormData] = useState({
-    password: "",
-    confirmPassword: "",
-  });
+
+  const [formData, setFormData] =
+    useState({
+      password: "",
+      confirmPassword: "",
+    });
+
 
   function handleChange(
     event: React.ChangeEvent<HTMLInputElement>
@@ -64,6 +85,7 @@ function ResetPasswordContent() {
     }));
   }
 
+
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
   ) {
@@ -73,16 +95,34 @@ function ResetPasswordContent() {
       return;
     }
 
+
+    /*
+     * Token is required.
+     *
+     * If someone manually opens:
+     *
+     * /reset-password
+     *
+     * instead of:
+     *
+     * /reset-password?token=xxxxx
+     *
+     * we stop here.
+     */
     if (!token) {
       await Swal.fire({
         icon: "error",
-        title: "Invalid Link",
-        text: "This password reset link is invalid or missing.",
-        confirmButtonText: "OK",
+        title: "Invalid Reset Link",
+        text:
+          "This password reset link is invalid or missing. Please request a new password reset link.",
+        confirmButtonText: "Go to Forgot Password",
       });
+
+      router.push("/forgot-password");
 
       return;
     }
+
 
     if (
       !formData.password ||
@@ -90,24 +130,30 @@ function ResetPasswordContent() {
     ) {
       await Swal.fire({
         icon: "error",
-        title: "Missing information",
-        text: "Please enter your new password and confirm it.",
+        title: "Missing Information",
+        text:
+          "Please enter your new password and confirm it.",
         confirmButtonText: "OK",
       });
 
       return;
     }
 
-    if (formData.password.length < 8) {
+
+    if (
+      formData.password.length < 8
+    ) {
       await Swal.fire({
         icon: "error",
         title: "Weak Password",
-        text: "Password must be at least 8 characters long.",
+        text:
+          "Password must be at least 8 characters long.",
         confirmButtonText: "OK",
       });
 
       return;
     }
+
 
     if (
       formData.password !==
@@ -115,28 +161,33 @@ function ResetPasswordContent() {
     ) {
       await Swal.fire({
         icon: "error",
-        title: "Passwords do not match",
-        text: "Please make sure both passwords are the same.",
+        title: "Passwords Do Not Match",
+        text:
+          "Please make sure both passwords are the same.",
         confirmButtonText: "OK",
       });
 
       return;
     }
 
+
     setLoading(true);
+
 
     try {
       const response =
         await resetPassword({
-          token,
+          token: token,
           new_password:
             formData.password,
         });
+
 
       console.log(
         "Reset password response:",
         response
       );
+
 
       if (!response.success) {
         await Swal.fire({
@@ -144,12 +195,13 @@ function ResetPasswordContent() {
           title: "Password Reset Failed",
           text:
             response.data?.detail ||
-            "Unable to reset your password.",
+            "This password reset link may have expired or is invalid.",
           confirmButtonText: "OK",
         });
 
         return;
       }
+
 
       await Swal.fire({
         icon: "success",
@@ -161,12 +213,15 @@ function ResetPasswordContent() {
           "Go to Login",
       });
 
+
       router.push("/login");
+
     } catch (error) {
       console.error(
         "Reset password error:",
         error
       );
+
 
       await Swal.fire({
         icon: "error",
@@ -175,15 +230,78 @@ function ResetPasswordContent() {
           "Unable to connect to the server. Please try again.",
         confirmButtonText: "OK",
       });
+
     } finally {
       setLoading(false);
     }
   }
 
+
+  /*
+   * If there is no token, don't show the password
+   * form because there is nothing to reset.
+   */
+  if (!token) {
+    return (
+      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
+        <Card className="w-full max-w-md">
+
+          <CardHeader className="space-y-2 text-center">
+
+            <CardTitle className="text-2xl font-bold">
+              Invalid Reset Link
+            </CardTitle>
+
+            <CardDescription>
+              This password reset link is invalid
+              or missing.
+            </CardDescription>
+
+          </CardHeader>
+
+
+          <CardContent>
+
+            <div className="space-y-4">
+
+              <Button
+                type="button"
+                className="w-full"
+                size="lg"
+                onClick={() =>
+                  router.push(
+                    "/forgot-password"
+                  )
+                }
+              >
+                Request New Reset Link
+              </Button>
+
+
+              <Link
+                href="/login"
+                className="flex items-center justify-center text-sm font-medium underline underline-offset-4"
+              >
+                Back to Login
+              </Link>
+
+            </div>
+
+          </CardContent>
+
+        </Card>
+      </main>
+    );
+  }
+
+
   return (
     <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
+
       <Card className="w-full max-w-md">
+
         <CardHeader className="space-y-2 text-center">
+
           <CardTitle className="text-2xl font-bold">
             Reset Password
           </CardTitle>
@@ -191,21 +309,30 @@ function ResetPasswordContent() {
           <CardDescription>
             Enter your new password below.
           </CardDescription>
+
         </CardHeader>
 
+
         <CardContent>
+
           <form
             onSubmit={handleSubmit}
             className="space-y-5"
           >
+
             {/* New Password */}
+
             <div className="space-y-2">
+
               <Label htmlFor="password">
                 New Password
               </Label>
 
+
               <div className="relative">
+
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+
 
                 <Input
                   id="password"
@@ -222,7 +349,10 @@ function ResetPasswordContent() {
                   onChange={handleChange}
                   className="pl-9 pr-10"
                   required
+                  disabled={loading}
+                  autoComplete="new-password"
                 />
+
 
                 <button
                   type="button"
@@ -238,24 +368,35 @@ function ResetPasswordContent() {
                       ? "Hide password"
                       : "Show password"
                   }
+                  disabled={loading}
                 >
+
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
                   ) : (
                     <Eye className="h-4 w-4" />
                   )}
+
                 </button>
+
               </div>
+
             </div>
 
+
             {/* Confirm Password */}
+
             <div className="space-y-2">
+
               <Label htmlFor="confirmPassword">
                 Confirm Password
               </Label>
 
+
               <div className="relative">
+
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+
 
                 <Input
                   id="confirmPassword"
@@ -272,7 +413,10 @@ function ResetPasswordContent() {
                   onChange={handleChange}
                   className="pl-9 pr-10"
                   required
+                  disabled={loading}
+                  autoComplete="new-password"
                 />
+
 
                 <button
                   type="button"
@@ -288,15 +432,21 @@ function ResetPasswordContent() {
                       ? "Hide password"
                       : "Show password"
                   }
+                  disabled={loading}
                 >
+
                   {showConfirmPassword ? (
                     <EyeOff className="h-4 w-4" />
                   ) : (
                     <Eye className="h-4 w-4" />
                   )}
+
                 </button>
+
               </div>
+
             </div>
+
 
             <Button
               type="submit"
@@ -308,26 +458,43 @@ function ResetPasswordContent() {
                 ? "Resetting Password..."
                 : "Reset Password"}
             </Button>
+
           </form>
 
+
           <p className="mt-6 text-center text-sm text-muted-foreground">
+
             Remember your password?{" "}
+
             <Link
               href="/login"
               className="font-medium text-foreground underline underline-offset-4"
             >
               Login
             </Link>
+
           </p>
+
         </CardContent>
+
       </Card>
+
     </main>
   );
 }
 
+
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30">
+          <p className="text-sm text-muted-foreground">
+            Loading...
+          </p>
+        </main>
+      }
+    >
       <ResetPasswordContent />
     </Suspense>
   );

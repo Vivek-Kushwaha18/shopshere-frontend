@@ -2,6 +2,19 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://127.0.0.1:8000";
 
+function clearAuth() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("user");
+  localStorage.removeItem("isLoggedIn");
+
+  window.dispatchEvent(new Event("auth-change"));
+}
+
 export async function apiFetch(
   endpoint: string,
   options: RequestInit = {}
@@ -18,10 +31,12 @@ export async function apiFetch(
       options.headers || {}
     );
 
-    headers.set(
-      "Content-Type",
-      "application/json"
-    );
+    if (!headers.has("Content-Type")) {
+      headers.set(
+        "Content-Type",
+        "application/json"
+      );
+    }
 
     if (accessToken) {
       headers.set(
@@ -30,13 +45,10 @@ export async function apiFetch(
       );
     }
 
-    return fetch(
-      `${API_URL}${endpoint}`,
-      {
-        ...options,
-        headers,
-      }
-    );
+    return fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
   }
 
   try {
@@ -47,13 +59,30 @@ export async function apiFetch(
     let response = await makeRequest(token);
 
     // ==========================================================
+    // ENDPOINTS THAT SHOULD NOT AUTO-REFRESH
+    // ==========================================================
+
+    const authEndpointsWithoutRefresh = [
+      "/auth/signup",
+      "/auth/login",
+      "/auth/verify-email",
+      "/auth/send-verification-code",
+      "/auth/forgot-password",
+      "/auth/reset-password",
+      "/auth/refresh",
+    ];
+
+    const shouldTryRefresh =
+      response.status === 401 &&
+      !authEndpointsWithoutRefresh.includes(
+        endpoint
+      );
+
+    // ==========================================================
     // ACCESS TOKEN EXPIRED
     // ==========================================================
 
-    if (
-      response.status === 401 &&
-      endpoint !== "/auth/refresh"
-    ) {
+    if (shouldTryRefresh) {
       const refreshToken =
         typeof window !== "undefined"
           ? localStorage.getItem("refresh_token")
@@ -64,25 +93,7 @@ export async function apiFetch(
       // ========================================================
 
       if (!refreshToken) {
-        localStorage.removeItem(
-          "access_token"
-        );
-
-        localStorage.removeItem(
-          "refresh_token"
-        );
-
-        localStorage.removeItem(
-          "isLoggedIn"
-        );
-
-        localStorage.removeItem(
-          "verification_email"
-        );
-
-        window.dispatchEvent(
-          new Event("auth-change")
-        );
+        clearAuth();
 
         return {
           success: false,
@@ -95,7 +106,7 @@ export async function apiFetch(
       }
 
       // ========================================================
-      // REFRESH ACCESS TOKEN
+      // REFRESH TOKEN REQUEST
       // ========================================================
 
       const refreshResponse =
@@ -154,6 +165,14 @@ export async function apiFetch(
           "true"
         );
 
+        // Backend may return updated user data.
+        if (refreshData.user) {
+          localStorage.setItem(
+            "user",
+            JSON.stringify(refreshData.user)
+          );
+        }
+
         window.dispatchEvent(
           new Event("auth-change")
         );
@@ -162,33 +181,13 @@ export async function apiFetch(
         // RETRY ORIGINAL REQUEST
         // ======================================================
 
-        response = await makeRequest(
-          token
-        );
+        response = await makeRequest(token);
       } else {
         // ======================================================
         // REFRESH FAILED
         // ======================================================
 
-        localStorage.removeItem(
-          "access_token"
-        );
-
-        localStorage.removeItem(
-          "refresh_token"
-        );
-
-        localStorage.removeItem(
-          "isLoggedIn"
-        );
-
-        localStorage.removeItem(
-          "verification_email"
-        );
-
-        window.dispatchEvent(
-          new Event("auth-change")
-        );
+        clearAuth();
 
         return {
           success: false,
@@ -243,3 +242,5 @@ export async function apiFetch(
     };
   }
 }
+
+export { API_URL };

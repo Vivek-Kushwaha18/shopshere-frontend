@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+
 import {
   ShoppingCart,
   User,
@@ -17,60 +18,80 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import { getProfile, logout } from "@/services/auth";
+import {
+  clearAuthSession,
+  getStoredUser,
+} from "@/services/auth";
 
 interface UserData {
   id: number;
   full_name: string;
   email: string;
   phone?: string | null;
-  role: string;
+  role: "customer" | "seller" | "admin";
   is_active: boolean;
   is_verified: boolean;
 }
 
 export default function Header() {
-  const [mobileMenu, setMobileMenu] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [user, setUser] = useState<UserData | null>(null);
+  const [mobileMenu, setMobileMenu] =
+    useState(false);
 
-  const profileRef = useRef<HTMLDivElement>(null);
+  const [isLoggedIn, setIsLoggedIn] =
+    useState(false);
+
+  const [profileOpen, setProfileOpen] =
+    useState(false);
+
+  const [user, setUser] =
+    useState<UserData | null>(null);
+
+  const [search, setSearch] =
+    useState("");
+
+  const profileRef =
+    useRef<HTMLDivElement>(null);
+
+  // =====================================================
+  // LOAD AUTHENTICATION STATE
+  // =====================================================
 
   useEffect(() => {
-    async function loadUser() {
-      const token = localStorage.getItem("access_token");
+    function loadAuthUser() {
+      const accessToken =
+        localStorage.getItem(
+          "access_token"
+        );
 
-      if (!token) {
-        setIsLoggedIn(false);
-        setUser(null);
-        return;
-      }
+      const storedUser =
+        getStoredUser();
 
-      const result = await getProfile();
-
-      if (result.success) {
+      if (
+        accessToken &&
+        storedUser
+      ) {
         setIsLoggedIn(true);
-        setUser(result.data);
-
-        localStorage.setItem("isLoggedIn", "true");
+        setUser(
+          storedUser as UserData
+        );
       } else {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("isLoggedIn");
-
         setIsLoggedIn(false);
         setUser(null);
       }
     }
 
-    loadUser();
+    // Load when Header first appears
+    loadAuthUser();
 
+    // Listen for login/logout/session changes
     function handleAuthChange() {
-      loadUser();
+      loadAuthUser();
     }
 
-    window.addEventListener("auth-change", handleAuthChange);
+    window.addEventListener(
+      "auth-change",
+      handleAuthChange
+    );
 
     return () => {
       window.removeEventListener(
@@ -80,18 +101,28 @@ export default function Header() {
     };
   }, []);
 
-  // Close dropdown when clicking anywhere outside
+  // =====================================================
+  // CLOSE PROFILE DROPDOWN WHEN CLICKING OUTSIDE
+  // =====================================================
+
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(
+      event: MouseEvent
+    ) {
       if (
         profileRef.current &&
-        !profileRef.current.contains(event.target as Node)
+        !profileRef.current.contains(
+          event.target as Node
+        )
       ) {
         setProfileOpen(false);
       }
     }
 
-    document.addEventListener("click", handleClickOutside);
+    document.addEventListener(
+      "click",
+      handleClickOutside
+    );
 
     return () => {
       document.removeEventListener(
@@ -101,31 +132,39 @@ export default function Header() {
     };
   }, []);
 
-  async function handleLogout() {
-    try {
-      await logout();
-    } catch {
-      // Continue logout even if backend request fails
-    }
+  // =====================================================
+  // LOGOUT
+  // =====================================================
 
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("verification_email");
+  function handleLogout() {
+    // There is no /auth/logout endpoint
+    // in the current backend.
+    //
+    // Logout is therefore handled locally
+    // by removing the authentication session.
+
+    clearAuthSession();
 
     setIsLoggedIn(false);
     setUser(null);
     setProfileOpen(false);
+    setMobileMenu(false);
 
+    // Go back to home page
     window.location.href = "/";
   }
 
-  // Get initials for profile avatar
+  // =====================================================
+  // GET USER INITIALS
+  // =====================================================
+
   function getInitials() {
-    const name = user?.full_name?.trim();
+    const name =
+      user?.full_name?.trim();
 
     if (name) {
-      const parts = name.split(" ");
+      const parts =
+        name.split(/\s+/);
 
       if (parts.length >= 2) {
         return (
@@ -137,7 +176,8 @@ export default function Header() {
       return parts[0][0].toUpperCase();
     }
 
-    const email = user?.email?.trim();
+    const email =
+      user?.email?.trim();
 
     if (email) {
       return email[0].toUpperCase();
@@ -146,12 +186,45 @@ export default function Header() {
     return "U";
   }
 
+  // =====================================================
+  // SEARCH
+  // =====================================================
+
+  function handleSearch(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    const trimmedSearch =
+      search.trim();
+
+    if (!trimmedSearch) {
+      return;
+    }
+
+    window.location.href =
+      `/products?search=${encodeURIComponent(
+        trimmedSearch
+      )}`;
+  }
+
   return (
     <header className="sticky top-0 z-50 border-b bg-white">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
 
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
+      {/* =================================================
+          MAIN HEADER
+      ================================================== */}
+
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4">
+
+        {/* =================================================
+            LOGO
+        ================================================== */}
+
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2"
+        >
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-black font-bold text-white">
             S
           </div>
@@ -167,8 +240,12 @@ export default function Header() {
           </div>
         </Link>
 
-        {/* Desktop Navigation */}
+        {/* =================================================
+            DESKTOP NAVIGATION
+        ================================================== */}
+
         <nav className="hidden items-center gap-6 md:flex">
+
           <Link
             href="/"
             className="text-sm font-medium hover:text-gray-600"
@@ -196,24 +273,43 @@ export default function Header() {
           >
             AI Assistant
           </Link>
+
         </nav>
 
-        {/* Search */}
+        {/* =================================================
+            SEARCH
+        ================================================== */}
+
         <div className="hidden w-64 lg:block">
-          <div className="relative">
+
+          <form
+            onSubmit={handleSearch}
+            className="relative"
+          >
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
 
             <Input
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
               placeholder="Search products..."
               className="pl-9"
             />
-          </div>
+          </form>
+
         </div>
 
-        {/* Desktop Actions */}
+        {/* =================================================
+            DESKTOP ACTIONS
+        ================================================== */}
+
         <div className="hidden items-center gap-2 md:flex">
 
-          {/* Cart */}
+          {/* CART */}
+
           <Button
             variant="ghost"
             size="icon"
@@ -224,7 +320,10 @@ export default function Header() {
             </Link>
           </Button>
 
-          {/* Logged Out */}
+          {/* =================================================
+              LOGGED OUT
+          ================================================== */}
+
           {!isLoggedIn ? (
             <>
               <Button
@@ -244,17 +343,24 @@ export default function Header() {
             </>
           ) : (
 
-            /* Logged In */
+            /* =================================================
+               LOGGED IN
+            ================================================== */
+
             <div
               ref={profileRef}
               className="relative"
             >
 
-              {/* User Button */}
+              {/* USER BUTTON */}
+
               <Button
                 variant="ghost"
                 onClick={() =>
-                  setProfileOpen((prev) => !prev)
+                  setProfileOpen(
+                    (previous) =>
+                      !previous
+                  )
                 }
                 className="gap-2"
               >
@@ -267,14 +373,19 @@ export default function Header() {
                 </span>
               </Button>
 
-              {/* User Dropdown */}
+              {/* =================================================
+                  USER DROPDOWN
+              ================================================== */}
+
               {profileOpen && (
                 <div className="absolute right-0 top-12 w-72 rounded-lg border bg-white p-2 shadow-lg">
 
-                  {/* User Photo + Name + Email + Role */}
+                  {/* USER INFORMATION */}
+
                   <div className="flex items-center gap-3 px-3 py-3">
 
-                    {/* Profile Photo Button */}
+                    {/* PROFILE PHOTO */}
+
                     <button
                       type="button"
                       className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-gray-100 text-lg font-semibold uppercase"
@@ -282,13 +393,13 @@ export default function Header() {
                     >
                       {getInitials()}
 
-                      {/* Camera Icon */}
                       <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition group-hover:opacity-100">
                         <Camera className="h-5 w-5" />
                       </span>
                     </button>
 
-                    {/* Name + Email + Role */}
+                    {/* NAME / EMAIL / ROLE */}
+
                     <div className="min-w-0">
 
                       <p className="truncate font-semibold">
@@ -306,55 +417,85 @@ export default function Header() {
                       </p>
 
                     </div>
+
                   </div>
 
                   <div className="my-1 border-t" />
 
-                  {/* Orders */}
+                  {/* =================================================
+                      ORDERS
+                  ================================================== */}
+
                   <Link
                     href="/orders"
                     onClick={() =>
-                      setProfileOpen(false)
+                      setProfileOpen(
+                        false
+                      )
                     }
                     className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100"
                   >
                     <Package className="h-4 w-4" />
+
                     My Orders
                   </Link>
 
-                  {/* Wishlist */}
+                  {/* =================================================
+                      WISHLIST
+                  ================================================== */}
+
                   <Link
                     href="/wishlist"
                     onClick={() =>
-                      setProfileOpen(false)
+                      setProfileOpen(
+                        false
+                      )
                     }
                     className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100"
                   >
                     <Heart className="h-4 w-4" />
+
                     Wishlist
                   </Link>
 
                   <div className="my-1 border-t" />
 
-                  {/* Logout */}
+                  {/* =================================================
+                      LOGOUT
+                  ================================================== */}
+
                   <button
-                    onClick={handleLogout}
+                    type="button"
+                    onClick={
+                      handleLogout
+                    }
                     className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                   >
                     <LogOut className="h-4 w-4" />
+
                     Logout
                   </button>
+
                 </div>
               )}
+
             </div>
           )}
+
         </div>
 
-        {/* Mobile Menu Button */}
+        {/* =================================================
+            MOBILE MENU BUTTON
+        ================================================== */}
+
         <button
+          type="button"
           className="md:hidden"
           onClick={() =>
-            setMobileMenu(!mobileMenu)
+            setMobileMenu(
+              (previous) =>
+                !previous
+            )
           }
           aria-label="Toggle menu"
         >
@@ -364,13 +505,19 @@ export default function Header() {
             <Menu className="h-6 w-6" />
           )}
         </button>
+
       </div>
 
-      {/* Mobile Menu */}
+      {/* =================================================
+          MOBILE MENU
+      ================================================== */}
+
       {mobileMenu && (
         <div className="border-t bg-white px-4 py-4 md:hidden">
 
           <nav className="flex flex-col gap-4">
+
+            {/* HOME */}
 
             <Link
               href="/"
@@ -382,6 +529,8 @@ export default function Header() {
               Home
             </Link>
 
+            {/* PRODUCTS */}
+
             <Link
               href="/products"
               onClick={() =>
@@ -391,6 +540,8 @@ export default function Header() {
             >
               Products
             </Link>
+
+            {/* CATEGORIES */}
 
             <Link
               href="/categories"
@@ -402,6 +553,8 @@ export default function Header() {
               Categories
             </Link>
 
+            {/* AI ASSISTANT */}
+
             <Link
               href="/ai-assistant"
               onClick={() =>
@@ -412,23 +565,32 @@ export default function Header() {
               AI Assistant
             </Link>
 
+            {/* CART */}
+
             <Link
               href="/cart"
               onClick={() =>
                 setMobileMenu(false)
               }
-              className="text-sm font-medium"
+              className="flex items-center gap-2 text-sm font-medium"
             >
+              <ShoppingCart className="h-4 w-4" />
+
               Cart
             </Link>
 
-            {/* Mobile Logged Out */}
+            {/* =================================================
+                MOBILE LOGGED OUT
+            ================================================== */}
+
             {!isLoggedIn ? (
               <>
                 <Link
                   href="/login"
                   onClick={() =>
-                    setMobileMenu(false)
+                    setMobileMenu(
+                      false
+                    )
                   }
                   className="text-sm font-medium"
                 >
@@ -438,7 +600,9 @@ export default function Header() {
                 <Link
                   href="/signup"
                   onClick={() =>
-                    setMobileMenu(false)
+                    setMobileMenu(
+                      false
+                    )
                   }
                   className="text-sm font-medium"
                 >
@@ -447,12 +611,16 @@ export default function Header() {
               </>
             ) : (
               <>
-                {/* Mobile User */}
+                {/* =================================================
+                    MOBILE USER
+                ================================================== */}
+
                 <div className="border-t pt-4">
 
                   <div className="flex items-center gap-3">
 
-                    {/* Mobile Profile Photo */}
+                    {/* PROFILE PHOTO */}
+
                     <button
                       type="button"
                       className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-gray-100 text-lg font-semibold uppercase"
@@ -465,7 +633,8 @@ export default function Header() {
                       </span>
                     </button>
 
-                    {/* Mobile Name + Email + Role */}
+                    {/* USER INFO */}
+
                     <div className="min-w-0">
 
                       <p className="truncate font-semibold">
@@ -483,49 +652,71 @@ export default function Header() {
                       </p>
 
                     </div>
+
                   </div>
+
                 </div>
 
-                {/* Orders */}
+                {/* =================================================
+                    ORDERS
+                ================================================== */}
+
                 <Link
                   href="/orders"
                   onClick={() =>
-                    setMobileMenu(false)
+                    setMobileMenu(
+                      false
+                    )
                   }
                   className="flex items-center gap-2 text-sm font-medium"
                 >
                   <Package className="h-4 w-4" />
+
                   My Orders
                 </Link>
 
-                {/* Wishlist */}
+                {/* =================================================
+                    WISHLIST
+                ================================================== */}
+
                 <Link
                   href="/wishlist"
                   onClick={() =>
-                    setMobileMenu(false)
+                    setMobileMenu(
+                      false
+                    )
                   }
                   className="flex items-center gap-2 text-sm font-medium"
                 >
                   <Heart className="h-4 w-4" />
+
                   Wishlist
                 </Link>
 
-                {/* Logout */}
+                {/* =================================================
+                    LOGOUT
+                ================================================== */}
+
                 <button
-                  onClick={() => {
-                    setMobileMenu(false);
-                    handleLogout();
-                  }}
+                  type="button"
+                  onClick={
+                    handleLogout
+                  }
                   className="flex items-center gap-2 text-left text-sm font-medium text-red-600"
                 >
                   <LogOut className="h-4 w-4" />
+
                   Logout
                 </button>
+
               </>
             )}
+
           </nav>
+
         </div>
       )}
+
     </header>
   );
 }
