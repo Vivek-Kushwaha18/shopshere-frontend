@@ -1,93 +1,66 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import CategoryCard, {
+  Category,
+} from "@/components/categories/CategoryCard";
 
-import { getCategories } from "@/services/category";
-import type { Category } from "@/types/category";
+const categories: Category[] = [
+  {
+    id: 1,
+    name: "Electronics",
+    description:
+      "Discover phones, laptops, headphones, smart devices and more.",
+    icon: "electronics",
+  },
+  {
+    id: 2,
+    name: "Fashion",
+    description:
+      "Explore clothing, shoes, bags and accessories for every style.",
+    icon: "fashion",
+  },
+  {
+    id: 3,
+    name: "Home & Living",
+    description:
+      "Make your home better with furniture, decor, lighting and essentials.",
+    icon: "home",
+  },
+  {
+    id: 4,
+    name: "Beauty",
+    description:
+      "Find skincare, makeup, personal care and beauty essentials.",
+    icon: "beauty",
+  },
+];
 
 export default function CategoriesPage() {
-  const [categories, setCategories] =
-    useState<Category[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function loadCategories() {
-      try {
-        const data = await getCategories();
-
-        setCategories(
-          data.filter(
-            (category) => !category.is_deleted
-          )
-        );
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load categories."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadCategories();
-  }, []);
-
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">
-          Categories
-        </h1>
+    <div className="min-h-screen bg-muted/30">
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mx-auto mb-10 max-w-2xl text-center">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            Shop by Category
+          </h1>
 
-        <p className="mt-2 text-gray-600">
-          Browse products by category.
-        </p>
-      </div>
-
-      {loading && <p>Loading categories...</p>}
-
-      {!loading && error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-          <p className="text-red-600">
-            {error}
+          <p className="mt-3 text-muted-foreground">
+            Explore our collection and find products
+            that match your needs.
           </p>
         </div>
-      )}
 
-      {!loading &&
-        !error &&
-        categories.length === 0 && (
-          <div className="rounded-lg border p-8 text-center">
-            No categories available.
-          </div>
-        )}
-
-      {!loading &&
-        !error &&
-        categories.length > 0 && (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/products?category=${category.id}`}
-                className="rounded-xl border bg-white p-6 transition hover:-translate-y-1 hover:shadow-lg"
-              >
-                <h2 className="text-xl font-semibold">
-                  {category.name}
-                </h2>
-
-                <p className="mt-3 text-sm text-gray-500">
-                  View products →
-                </p>
-              </Link>
-            ))}
-          </div>
-        )}
+        {/* Categories */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {categories.map((category) => (
+            <CategoryCard
+              key={category.id}
+              category={category}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

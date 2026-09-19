@@ -1,108 +1,215 @@
 "use client";
 
-import {
-  FormEvent,
-  useState,
-} from "react";
+import Link from "next/link";
+import { FormEvent, useState } from "react";
+import { ArrowLeft, Mail } from "lucide-react";
+import Swal from "sweetalert2";
 
 import { forgotPassword } from "@/services/auth";
 
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
 export default function ForgotPasswordPage() {
-  const [email, setEmail] =
-    useState("");
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] =
+    useState(false);
 
   const [loading, setLoading] =
     useState(false);
 
-  async function handleSubmit(
-    e: FormEvent
-  ) {
-    e.preventDefault();
+  const [error, setError] =
+    useState("");
 
-    setMessage("");
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (loading) {
+      return;
+    }
+
+    const normalizedEmail = email
+      .trim()
+      .toLowerCase();
+
+    if (!normalizedEmail) {
+      setError(
+        "Please enter your email address."
+      );
+
+      return;
+    }
+
     setError("");
+    setLoading(true);
 
     try {
-      setLoading(true);
-
       const response =
-        await forgotPassword(email);
+        await forgotPassword({
+          email: normalizedEmail,
+        });
 
-      setMessage(
-        response?.message ||
-          "Password reset instructions have been sent."
+      if (!response.success) {
+        setError(
+          response.data?.detail ||
+            "Unable to process your request."
+        );
+
+        return;
+      }
+
+      // Store normalized email for the success message
+      setEmail(normalizedEmail);
+
+      setSubmitted(true);
+
+    } catch (error) {
+      console.error(
+        "Forgot password error:",
+        error
       );
-    } catch (err: any) {
-      setError(
-        err.message ||
-          "Unable to process your request."
-      );
+
+      Swal.fire({
+        icon: "error",
+        title: "Connection Error",
+        text: "Unable to connect to the server. Please try again.",
+        confirmButtonText: "OK",
+      });
     } finally {
       setLoading(false);
     }
   }
 
+  function handleTryAnotherEmail() {
+    setSubmitted(false);
+    setError("");
+    setEmail("");
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow">
-        <h1 className="text-center text-2xl font-bold">
-          Forgot Password
-        </h1>
+    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-2 text-center">
+          <CardTitle className="text-2xl font-bold">
+            Forgot your password?
+          </CardTitle>
 
-        <p className="mt-2 text-center text-sm text-gray-500">
-          Enter your email to continue.
-        </p>
+          <CardDescription>
+            Enter your email address and we'll send you
+            instructions to reset your password.
+          </CardDescription>
+        </CardHeader>
 
-        {message && (
-          <div className="mt-5 rounded-md bg-green-50 p-3 text-sm text-green-700">
-            {message}
-          </div>
-        )}
+        <CardContent>
+          {submitted ? (
+            <div className="space-y-5 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border bg-muted">
+                <Mail className="h-5 w-5" />
+              </div>
 
-        {error && (
-          <div className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-600">
-            {error}
-          </div>
-        )}
+              <div>
+                <h2 className="font-semibold">
+                  Check your email
+                </h2>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-6 space-y-5"
-        >
-          <div>
-            <label className="mb-1 block text-sm font-medium">
-              Email
-            </label>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  If an account exists for{" "}
+                  <span className="font-medium text-foreground">
+                    {email}
+                  </span>
+                  , you will receive password reset
+                  instructions.
+                </p>
+              </div>
 
-            <input
-              type="email"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              required
-              placeholder="Enter your email"
-              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
-            />
-          </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={
+                  handleTryAnotherEmail
+                }
+              >
+                Try another email
+              </Button>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading
-              ? "Sending..."
-              : "Send Reset Instructions"}
-          </button>
-        </form>
-      </div>
-    </div>
+              <Link
+                href="/login"
+                className="flex items-center justify-center gap-2 text-sm font-medium underline underline-offset-4"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Login
+              </Link>
+            </div>
+          ) : (
+            <>
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-5"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="email">
+                    Email Address
+                  </Label>
+
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(event) =>
+                        setEmail(
+                          event.target.value
+                        )
+                      }
+                      className="pl-9"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={loading}
+                >
+                  {loading
+                    ? "Sending..."
+                    : "Send Reset Instructions"}
+                </Button>
+              </form>
+
+              <Link
+                href="/login"
+                className="mt-6 flex items-center justify-center gap-2 text-sm font-medium underline underline-offset-4"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Login
+              </Link>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </main>
   );
 }

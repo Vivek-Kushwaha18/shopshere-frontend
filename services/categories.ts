@@ -1,20 +1,19 @@
-import { apiRequest } from "./api";
+import { apiFetch } from "./api";
 
-import {
-  CategoriesResponse,
-  CategoryResponse,
-} from "@/types/category";
-
-export async function getCategories(): Promise<CategoriesResponse> {
-  return apiRequest("/categories/", {
-    method: "GET",
-  });
+export function getCategories() {
+  return apiFetch("/categories/");
 }
 
-export async function getCategory(
-  categoryId: number
-): Promise<CategoryResponse> {
-  return apiRequest(`/categories/${categoryId}`, {
-    method: "GET",
+export function getCategory(id: number) {
+  return apiFetch(`/categories/${id}`);
+}
+
+export function createCategory(data: {
+  name: string;
+  description?: string;
+}) {
+  return apiFetch("/categories/", {
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }

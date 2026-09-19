@@ -1,198 +1,315 @@
 "use client";
 
-import {
-  FormEvent,
-  useState,
-} from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import Swal from "sweetalert2";
 import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+} from "lucide-react";
+
+import { login } from "@/services/auth";
+
+import { Button } from "@/components/ui/button";
 import {
-  login,
-  getProfile,
-} from "@/services/auth";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams =
-    useSearchParams();
 
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
+  const [showPassword, setShowPassword] =
+    useState(false);
 
   const [loading, setLoading] =
     useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    rememberMe: false,
+  });
 
   async function handleSubmit(
-    e: FormEvent
+    event: FormEvent<HTMLFormElement>
   ) {
-    e.preventDefault();
+    event.preventDefault();
 
-    setError("");
+    if (loading) {
+      return;
+    }
 
-    try {
-      setLoading(true);
+    const email = formData.email
+      .trim()
+      .toLowerCase();
 
-      const response = await login({
-        email,
-        password,
+    if (!email || !formData.password) {
+      Swal.fire({
+        icon: "error",
+        title: "Missing information",
+        text: "Please enter your email and password.",
+        confirmButtonText: "OK",
       });
 
-      if (!response.access_token) {
-        throw new Error(
-          "Access token was not returned by the server."
-        );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await login({
+        email,
+        password: formData.password,
+      });
+
+      console.log("Login response:", response);
+
+      // Login failed
+      if (!response.success) {
+        Swal.fire({
+          icon: "error",
+          title: "Login failed",
+          text:
+            response.data?.detail ||
+            "Invalid email or password.",
+          confirmButtonText: "OK",
+        });
+
+        return;
       }
 
+      // Remove any old authentication data first
+      localStorage.removeItem(
+        "access_token"
+      );
+
+      localStorage.removeItem(
+        "refresh_token"
+      );
+
+      // Save new access token
       localStorage.setItem(
         "access_token",
-        response.access_token
+        response.data.access_token
       );
 
-      if (response.refresh_token) {
-        localStorage.setItem(
-          "refresh_token",
-          response.refresh_token
-        );
-      }
-
-      /*
-       * Get current user using /auth/me
-       */
-
-      const user = await getProfile(
-        response.access_token
-      );
-
+      // Save new refresh token
       localStorage.setItem(
-        "user",
-        JSON.stringify(user)
+        "refresh_token",
+        response.data.refresh_token
       );
 
-      /*
-       * Role based redirect
-       */
-
-      if (user.role === "seller") {
-        router.push(
-          "/seller/dashboard"
-        );
-      } else {
-        router.push(
-          "/customer/dashboard"
-        );
-      }
-    } catch (err: any) {
-      setError(
-        err.message || "Login failed."
+      // Login means email is already verified,
+      // so old verification data is no longer needed.
+      localStorage.removeItem(
+        "verification_email"
       );
+
+      router.push("/");
+    } catch (error) {
+      console.error(
+        "Login error:",
+        error
+      );
+
+      Swal.fire({
+        icon: "error",
+        title: "Connection Error",
+        text: "Unable to connect to the server. Please try again.",
+        confirmButtonText: "OK",
+      });
     } finally {
       setLoading(false);
     }
   }
 
+  function handleChange(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const {
+      name,
+      value,
+      type,
+      checked,
+    } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : value,
+    }));
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
-        <h1 className="text-center text-3xl font-bold text-blue-600">
-          ShopSphere
-        </h1>
+    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-2 text-center">
+          <CardTitle className="text-2xl font-bold">
+            Welcome back
+          </CardTitle>
 
-        <p className="mt-2 text-center text-gray-500">
-          Login to your account
-        </p>
+          <CardDescription>
+            Login to your ShopSphere account.
+          </CardDescription>
+        </CardHeader>
 
-        {searchParams.get(
-          "registered"
-        ) && (
-          <div className="mt-5 rounded-md bg-green-50 p-3 text-sm text-green-700">
-            Account created successfully.
-            Please login.
-          </div>
-        )}
+        <CardContent>
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="email">
+                Email Address
+              </Label>
 
-        {error && (
-          <div className="mt-5 rounded-md bg-red-50 p-3 text-sm text-red-600">
-            {error}
-          </div>
-        )}
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-6 space-y-5"
-        >
-          <div>
-            <label className="mb-1 block text-sm font-medium">
-              Email
-            </label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="pl-9"
+                  required
+                />
+              </div>
+            </div>
 
-            <input
-              type="email"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              required
-              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
-              placeholder="Enter your email"
-            />
-          </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">
+                  Password
+                </Label>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">
-              Password
-            </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-medium underline underline-offset-4"
+                >
+                  Forgot password?
+                </Link>
+              </div>
 
-            <input
-              type="password"
-              value={password}
-              onChange={(e) =>
-                setPassword(e.target.value)
-              }
-              required
-              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
-              placeholder="Enter your password"
-            />
-          </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
 
-          <div className="flex justify-end">
-            <Link
-              href="/forgot-password"
-              className="text-sm font-medium text-blue-600 hover:underline"
+                <Input
+                  id="password"
+                  name="password"
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  placeholder="Enter your password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="pl-9 pr-10"
+                  required
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPassword(
+                      (previous) => !previous
+                    )
+                  }
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="rememberMe"
+                name="rememberMe"
+                checked={formData.rememberMe}
+                onCheckedChange={(checked) =>
+                  setFormData((previous) => ({
+                    ...previous,
+                    rememberMe:
+                      checked === true,
+                  }))
+                }
+              />
+
+              <Label
+                htmlFor="rememberMe"
+                className="text-sm font-normal"
+              >
+                Remember me
+              </Label>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={loading}
             >
-              Forgot Password?
-            </Link>
+              {loading
+                ? "Logging in..."
+                : "Login"}
+            </Button>
+          </form>
+
+          <div className="my-6 flex items-center gap-4">
+            <Separator className="flex-1" />
+
+            <span className="text-xs text-muted-foreground">
+              OR
+            </span>
+
+            <Separator className="flex-1" />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
           >
-            {loading
-              ? "Logging in..."
-              : "Login"}
-          </button>
-        </form>
+            Continue with Google
+          </Button>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link
-            href="/signup"
-            className="font-semibold text-blue-600 hover:underline"
-          >
-            Signup
-          </Link>
-        </p>
-      </div>
-    </div>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Don't have an account?{" "}
+            <Link
+              href="/signup"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              Sign Up
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
+    </main>
   );
 }

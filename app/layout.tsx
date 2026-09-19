@@ -1,13 +1,11 @@
+
 import type { Metadata } from "next";
-
-import Header from "@/components/header/Header";
-import Footer from "@/components/Footer/Footer";
-
 import "./globals.css";
+import Header from "@/components/layout/Header";
 
 export const metadata: Metadata = {
   title: "ShopSphere",
-  description: "Smart Shopping",
+  description: "AI-Powered Multi-Vendor E-Commerce Platform",
 };
 
 export default function RootLayout({
@@ -17,10 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50">
+      <body className="min-h-screen bg-background antialiased">
         <Header />
-        {children}
-        <Footer />
+
+        <main>{children}</main>
       </body>
     </html>
   );
