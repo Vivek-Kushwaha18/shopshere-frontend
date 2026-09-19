@@ -41,11 +41,13 @@ export function login(data: {
 }
 
 // ============================================================
-// PROFILE
+// GET PROFILE
 // ============================================================
 
 export function getProfile() {
-  return apiFetch("/auth/profile");
+  return apiFetch("/auth/profile", {
+    method: "GET",
+  });
 }
 
 // ============================================================
@@ -75,7 +77,10 @@ export function changePassword(data: {
 }) {
   return apiFetch("/auth/change-password", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      current_password: data.current_password,
+      new_password: data.new_password,
+    }),
   });
 }
 
@@ -104,7 +109,10 @@ export function resetPassword(data: {
 }) {
   return apiFetch("/auth/reset-password", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      token: data.token,
+      new_password: data.new_password,
+    }),
   });
 }
 
@@ -113,12 +121,9 @@ export function resetPassword(data: {
 // ============================================================
 
 export function sendVerificationCode() {
-  return apiFetch(
-    "/auth/send-verification-code",
-    {
-      method: "POST",
-    }
-  );
+  return apiFetch("/auth/send-verification-code", {
+    method: "POST",
+  });
 }
 
 // ============================================================
@@ -128,15 +133,12 @@ export function sendVerificationCode() {
 export function verifyEmail(data: {
   code: string;
 }) {
-  return apiFetch(
-    "/auth/verify-email",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        code: data.code.trim(),
-      }),
-    }
-  );
+  return apiFetch("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({
+      code: data.code.trim(),
+    }),
+  });
 }
 
 // ============================================================
@@ -148,7 +150,9 @@ export function refreshToken(data: {
 }) {
   return apiFetch("/auth/refresh", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      refresh_token: data.refresh_token,
+    }),
   });
 }
 
