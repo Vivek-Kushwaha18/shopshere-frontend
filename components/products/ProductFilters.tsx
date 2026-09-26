@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,39 +13,32 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
-const categories = [
-  "Electronics",
-  "Fashion",
-  "Home & Living",
-  "Beauty",
-];
+import type { Category } from "@/services/categories";
 
-const ratings = [
-  { label: "4★ & above", value: 4 },
-  { label: "3★ & above", value: 3 },
-  { label: "2★ & above", value: 2 },
-];
+interface ProductFiltersProps {
+  categories?: Category[];
+  selectedCategory: number | null;
+  minPrice: number | undefined;
+  maxPrice: number | undefined;
+  onCategoryChange: (
+    categoryId: number | null
+  ) => void;
+  onPriceChange: (
+    minPrice: number | undefined,
+    maxPrice: number | undefined
+  ) => void;
+  onClear: () => void;
+}
 
-export default function ProductFilters() {
-  const [selectedCategories, setSelectedCategories] =
-    useState<string[]>([]);
-
-  const [selectedRating, setSelectedRating] =
-    useState<number | null>(null);
-
-  function toggleCategory(category: string) {
-    setSelectedCategories((current) =>
-      current.includes(category)
-        ? current.filter((item) => item !== category)
-        : [...current, category]
-    );
-  }
-
-  function clearFilters() {
-    setSelectedCategories([]);
-    setSelectedRating(null);
-  }
-
+export default function ProductFilters({
+  categories = [],
+  selectedCategory,
+  minPrice,
+  maxPrice,
+  onCategoryChange,
+  onPriceChange,
+  onClear,
+}: ProductFiltersProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -56,62 +48,102 @@ export default function ProductFilters() {
         </CardTitle>
 
         <Button
+          type="button"
           variant="ghost"
           size="sm"
-          onClick={clearFilters}
+          onClick={onClear}
         >
           Clear
         </Button>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {/* Categories */}
+
+        {/* CATEGORY */}
+
         <div>
           <h3 className="mb-4 font-semibold">
             Category
           </h3>
 
-          <div className="space-y-3">
-            {categories.map((category) => (
-              <div
-                key={category}
-                className="flex items-center gap-3"
-              >
-                <Checkbox
-                  id={`category-${category}`}
-                  checked={selectedCategories.includes(
-                    category
-                  )}
-                  onCheckedChange={() =>
-                    toggleCategory(category)
-                  }
-                />
-
-                <Label
-                  htmlFor={`category-${category}`}
-                  className="cursor-pointer font-normal"
+          {categories.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No categories available.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {categories.map((category) => (
+                <div
+                  key={category.id}
+                  className="flex items-center gap-3"
                 >
-                  {category}
-                </Label>
-              </div>
-            ))}
-          </div>
+                  <Checkbox
+                    id={`category-${category.id}`}
+                    checked={
+                      selectedCategory ===
+                      category.id
+                    }
+                    onCheckedChange={(checked) => {
+                      onCategoryChange(
+                        checked
+                          ? category.id
+                          : null
+                      );
+                    }}
+                  />
+
+                  <Label
+                    htmlFor={`category-${category.id}`}
+                    className="cursor-pointer font-normal"
+                  >
+                    {category.name}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <Separator />
 
-        {/* Price */}
+        {/* PRICE */}
+
         <div>
           <h3 className="mb-4 font-semibold">
             Price
           </h3>
 
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline">
-              ₹0
+            <Button
+              type="button"
+              variant={
+                minPrice === 0 &&
+                maxPrice === 5000
+                  ? "default"
+                  : "outline"
+              }
+              onClick={() =>
+                onPriceChange(0, 5000)
+              }
+            >
+              ₹0 - ₹5,000
             </Button>
 
-            <Button variant="outline">
+            <Button
+              type="button"
+              variant={
+                minPrice === 5000 &&
+                maxPrice === undefined
+                  ? "default"
+                  : "outline"
+              }
+              onClick={() =>
+                onPriceChange(
+                  5000,
+                  undefined
+                )
+              }
+            >
               ₹5,000+
             </Button>
           </div>
@@ -119,42 +151,20 @@ export default function ProductFilters() {
 
         <Separator />
 
-        {/* Rating */}
+        {/* RATING */}
+
         <div>
           <h3 className="mb-4 font-semibold">
             Customer Rating
           </h3>
 
-          <div className="space-y-3">
-            {ratings.map((rating) => (
-              <div
-                key={rating.value}
-                className="flex items-center gap-3"
-              >
-                <Checkbox
-                  id={`rating-${rating.value}`}
-                  checked={
-                    selectedRating === rating.value
-                  }
-                  onCheckedChange={(checked) => {
-                    setSelectedRating(
-                      checked
-                        ? rating.value
-                        : null
-                    );
-                  }}
-                />
-
-                <Label
-                  htmlFor={`rating-${rating.value}`}
-                  className="cursor-pointer font-normal"
-                >
-                  {rating.label}
-                </Label>
-              </div>
-            ))}
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Rating filters will be available
+            when the product review API is
+            connected.
+          </p>
         </div>
+
       </CardContent>
     </Card>
   );

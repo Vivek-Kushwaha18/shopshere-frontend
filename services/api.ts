@@ -12,7 +12,9 @@ function clearAuth() {
   localStorage.removeItem("user");
   localStorage.removeItem("isLoggedIn");
 
-  window.dispatchEvent(new Event("auth-change"));
+  window.dispatchEvent(
+    new Event("auth-change")
+  );
 }
 
 export async function apiFetch(
@@ -31,13 +33,37 @@ export async function apiFetch(
       options.headers || {}
     );
 
-    if (!headers.has("Content-Type")) {
+    /*
+     * Check whether the request body is FormData.
+     */
+    const isFormData =
+      typeof FormData !== "undefined" &&
+      options.body instanceof FormData;
+
+    /*
+     * IMPORTANT:
+     *
+     * FormData must NOT have:
+     * Content-Type: application/json
+     *
+     * The browser automatically creates:
+     * multipart/form-data; boundary=...
+     */
+    if (isFormData) {
+      headers.delete("Content-Type");
+    } else if (
+      options.body &&
+      !headers.has("Content-Type")
+    ) {
       headers.set(
         "Content-Type",
         "application/json"
       );
     }
 
+    /*
+     * Add access token.
+     */
     if (accessToken) {
       headers.set(
         "Authorization",
@@ -45,10 +71,36 @@ export async function apiFetch(
       );
     }
 
-    return fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    /*
+     * Make sure endpoint starts with /
+     */
+    const normalizedEndpoint =
+      endpoint.startsWith("/")
+        ? endpoint
+        : `/${endpoint}`;
+
+    const url =
+      `${API_URL}${normalizedEndpoint}`;
+
+    console.log(
+      "API REQUEST:",
+      url
+    );
+
+    try {
+      return await fetch(url, {
+        ...options,
+        headers,
+      });
+    } catch (error) {
+      console.error(
+        "FETCH FAILED:",
+        url,
+        error
+      );
+
+      throw error;
+    }
   }
 
   try {
@@ -56,7 +108,8 @@ export async function apiFetch(
     // FIRST REQUEST
     // ==========================================================
 
-    let response = await makeRequest(token);
+    let response =
+      await makeRequest(token);
 
     // ==========================================================
     // ENDPOINTS THAT SHOULD NOT AUTO-REFRESH
@@ -85,7 +138,9 @@ export async function apiFetch(
     if (shouldTryRefresh) {
       const refreshToken =
         typeof window !== "undefined"
-          ? localStorage.getItem("refresh_token")
+          ? localStorage.getItem(
+              "refresh_token"
+            )
           : null;
 
       // ========================================================
@@ -165,11 +220,12 @@ export async function apiFetch(
           "true"
         );
 
-        // Backend may return updated user data.
         if (refreshData.user) {
           localStorage.setItem(
             "user",
-            JSON.stringify(refreshData.user)
+            JSON.stringify(
+              refreshData.user
+            )
           );
         }
 
@@ -181,11 +237,12 @@ export async function apiFetch(
         // RETRY ORIGINAL REQUEST
         // ======================================================
 
-        response = await makeRequest(token);
+        response =
+          await makeRequest(token);
       } else {
-        // ======================================================
+        // ========================================================
         // REFRESH FAILED
-        // ======================================================
+        // ========================================================
 
         clearAuth();
 
@@ -221,6 +278,12 @@ export async function apiFetch(
       };
     }
 
+    console.log(
+      "API RESPONSE:",
+      response.status,
+      data
+    );
+
     return {
       success: response.ok,
       status: response.status,
@@ -228,7 +291,7 @@ export async function apiFetch(
     };
   } catch (error) {
     console.error(
-      "API request failed:",
+      "API FETCH ERROR:",
       error
     );
 
@@ -237,7 +300,9 @@ export async function apiFetch(
       status: 0,
       data: {
         detail:
-          "Unable to connect to the server.",
+          error instanceof Error
+            ? error.message
+            : "Unable to connect to the server.",
       },
     };
   }

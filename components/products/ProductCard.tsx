@@ -1,26 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Heart, ShoppingCart, Star } from "lucide-react";
+import { Package } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
-
-export interface Product {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  originalPrice?: number;
-  image: string;
-  rating: number;
-  reviews: number;
-  category: string;
-}
+import type { Product } from "@/types/product";
 
 interface ProductCardProps {
   product: Product;
@@ -29,96 +12,77 @@ interface ProductCardProps {
 export default function ProductCard({
   product,
 }: ProductCardProps) {
+  const hasDiscount =
+    product.original_price !== null &&
+    product.original_price !== undefined &&
+    product.original_price > product.price;
+
   return (
-    <Card className="group overflow-hidden transition-shadow hover:shadow-lg">
-      {/* Product Image */}
-      <div className="relative aspect-square overflow-hidden bg-muted">
-        <img
-          src={product.image}
-          alt={product.name}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+    <Link
+      href={`/products/${product.id}`}
+      className="group block"
+    >
+      <article className="overflow-hidden rounded-xl border bg-white transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+        {/* IMAGE */}
 
-        {/* Wishlist Button */}
-        <Button
-          variant="secondary"
-          size="icon"
-          className="absolute right-3 top-3 rounded-full shadow-sm"
-        >
-          <Heart className="h-4 w-4" />
-          <span className="sr-only">
-            Add to wishlist
-          </span>
-        </Button>
+        <div className="relative aspect-square overflow-hidden bg-gray-100">
+          {product.image_url ? (
+            <img
+              src={product.image_url}
+              alt={product.name}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Package className="h-12 w-12 text-gray-300" />
+            </div>
+          )}
 
-        {/* Discount */}
-        {product.originalPrice &&
-          product.originalPrice > product.price && (
-            <span className="absolute left-3 top-3 rounded-full bg-destructive px-2 py-1 text-xs font-medium text-white">
-              {Math.round(
-                ((product.originalPrice - product.price) /
-                  product.originalPrice) *
-                  100
-              )}
-              % OFF
+          {hasDiscount && (
+            <span className="absolute left-3 top-3 rounded-md bg-red-500 px-2 py-1 text-xs font-semibold text-white">
+              Sale
             </span>
           )}
-      </div>
-
-      {/* Product Information */}
-      <CardContent className="p-4">
-        <p className="mb-1 text-xs font-medium text-muted-foreground">
-          {product.category}
-        </p>
-
-        <Link href={`/products/${product.id}`}>
-          <h3 className="line-clamp-2 font-semibold hover:text-primary">
-            {product.name}
-          </h3>
-        </Link>
-
-        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-          {product.description}
-        </p>
-
-        {/* Rating */}
-        <div className="mt-3 flex items-center gap-1">
-          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-
-          <span className="text-sm font-medium">
-            {product.rating}
-          </span>
-
-          <span className="text-sm text-muted-foreground">
-            ({product.reviews})
-          </span>
         </div>
 
-        {/* Price */}
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xl font-bold">
-            ₹{product.price.toLocaleString("en-IN")}
-          </span>
+        {/* CONTENT */}
 
-          {product.originalPrice &&
-            product.originalPrice > product.price && (
-              <span className="text-sm text-muted-foreground line-through">
+        <div className="p-4">
+          <h2 className="line-clamp-2 min-h-[48px] text-base font-semibold text-gray-900">
+            {product.name}
+          </h2>
+
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-lg font-bold text-gray-900">
+              ₹
+              {product.price.toLocaleString(
+                "en-IN"
+              )}
+            </span>
+
+            {hasDiscount && (
+              <span className="text-sm text-gray-400 line-through">
                 ₹
-                {product.originalPrice.toLocaleString(
+                {product.original_price!.toLocaleString(
                   "en-IN"
                 )}
               </span>
             )}
-        </div>
-      </CardContent>
+          </div>
 
-      {/* Card Footer */}
-      <CardFooter className="p-4 pt-0">
-        <Button className="w-full">
-          <ShoppingCart className="mr-2 h-4 w-4" />
-          Add to Cart
-        </Button>
-      </CardFooter>
-    </Card>
+          <p className="mt-2 text-sm">
+            {product.stock > 0 ? (
+              <span className="text-green-600">
+                In stock
+              </span>
+            ) : (
+              <span className="text-red-600">
+                Out of stock
+              </span>
+            )}
+          </p>
+        </div>
+      </article>
+    </Link>
   );
 }

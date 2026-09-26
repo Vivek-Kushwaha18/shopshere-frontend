@@ -38,6 +38,7 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [showPassword, setShowPassword] =
     useState(false);
 
@@ -215,14 +216,27 @@ export default function LoginPage() {
       });
 
       // ========================================
-      // GO TO HOME
+      // ROLE-BASED REDIRECT
       // ========================================
-      //
-      // Full browser navigation reloads
-      // Header and reads the saved user.
-      //
 
-      // window.location.href = "/";
+      if (user.role === "seller") {
+        router.push(
+          "/seller/dashboard"
+        );
+        return;
+      }
+
+      if (user.role === "admin") {
+        router.push(
+          "/admin/dashboard"
+        );
+        return;
+      }
+
+      // ========================================
+      // CUSTOMER
+      // ========================================
+
       router.push("/");
     } catch (error) {
       console.error(
