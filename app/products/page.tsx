@@ -3,14 +3,23 @@
 import {
   Suspense,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
 import { useSearchParams } from "next/navigation";
-
 import Link from "next/link";
 
 import { Package } from "lucide-react";
+
+import ProductSearch from "@/components/products/ProductSearch";
+import ProductFilters from "@/components/products/ProductFilters";
+import ProductGrid from "@/components/products/ProductGrid";
+
+import {
+  getCategories,
+  type Category,
+} from "@/services/categories";
 
 import {
   getProducts,
@@ -20,11 +29,75 @@ import {
 function ProductsContent() {
   const searchParams = useSearchParams();
 
-  const search =
+  // =====================================================
+  // URL SEARCH
+  // =====================================================
+
+  const urlSearch =
     searchParams.get("search")?.trim() || "";
+
+  // =====================================================
+  // URL CATEGORY
+  // =====================================================
+
+  const categoryParam =
+    searchParams.get("category");
+
+  const parsedCategoryId =
+    categoryParam
+      ? Number(categoryParam)
+      : null;
+
+  const urlCategoryId =
+    parsedCategoryId !== null &&
+    Number.isInteger(parsedCategoryId) &&
+    parsedCategoryId > 0
+      ? parsedCategoryId
+      : null;
+
+  // =====================================================
+  // PRODUCT DATA
+  // =====================================================
 
   const [products, setProducts] =
     useState<Product[]>([]);
+
+  // =====================================================
+  // CATEGORY DATA
+  // =====================================================
+
+  const [categories, setCategories] =
+    useState<Category[]>([]);
+
+  // =====================================================
+  // SEARCH
+  // =====================================================
+
+  const [search, setSearch] =
+    useState(urlSearch);
+
+  // =====================================================
+  // FILTERS
+  // =====================================================
+
+  const [selectedCategory, setSelectedCategory] =
+    useState<number | null>(
+      urlCategoryId
+    );
+
+  const [minPrice, setMinPrice] =
+    useState<number | undefined>(
+      undefined
+    );
+
+  const [maxPrice, setMaxPrice] =
+    useState<number | undefined>(
+      undefined
+    );
+
+  // =====================================================
+  // PAGE STATE
+  // =====================================================
 
   const [loading, setLoading] =
     useState(true);
@@ -32,42 +105,50 @@ function ProductsContent() {
   const [error, setError] =
     useState("");
 
+  // =====================================================
+  // KEEP SEARCH IN SYNC WITH URL
+  // =====================================================
+
   useEffect(() => {
-    async function loadProducts() {
+    setSearch(urlSearch);
+  }, [urlSearch]);
+
+  // =====================================================
+  // KEEP CATEGORY IN SYNC WITH URL
+  // =====================================================
+
+  useEffect(() => {
+    setSelectedCategory(
+      urlCategoryId
+    );
+  }, [urlCategoryId]);
+
+  // =====================================================
+  // LOAD PRODUCTS + CATEGORIES
+  // =====================================================
+
+  useEffect(() => {
+    async function loadData() {
       try {
         setLoading(true);
         setError("");
 
-        const result = await getProducts();
+        const [
+          productData,
+          categoryData,
+        ] = await Promise.all([
+          getProducts(),
+          getCategories(),
+        ]);
 
-        if (!search) {
-          setProducts(result);
-          return;
-        }
+        setProducts(productData);
 
-        const normalizedSearch =
-          search.toLowerCase();
-
-        const filteredProducts =
-          result.filter((product) => {
-            const productName =
-              product.name.toLowerCase();
-
-            const productDescription =
-              product.description
-                ?.toLowerCase() || "";
-
-            return (
-              productName.includes(
-                normalizedSearch
-              ) ||
-              productDescription.includes(
-                normalizedSearch
-              )
-            );
-          });
-
-        setProducts(filteredProducts);
+        setCategories(
+          categoryData.filter(
+            (category) =>
+              category.is_active !== false
+          )
+        );
       } catch (error) {
         console.error(
           "Products loading error:",
@@ -84,8 +165,104 @@ function ProductsContent() {
       }
     }
 
-    loadProducts();
-  }, [search]);
+    loadData();
+  }, []);
+
+  // =====================================================
+  // FILTER PRODUCTS
+  // =====================================================
+
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch =
+      search.trim().toLowerCase();
+
+    return products.filter((product) => {
+      // =================================================
+      // SEARCH
+      // =================================================
+
+      const productName =
+        product.name.toLowerCase();
+
+      const productDescription =
+        product.description
+          ?.toLowerCase() || "";
+
+      const matchesSearch =
+        !normalizedSearch ||
+        productName.includes(
+          normalizedSearch
+        ) ||
+        productDescription.includes(
+          normalizedSearch
+        );
+
+      // =================================================
+      // CATEGORY
+      // =================================================
+
+      const matchesCategory =
+        selectedCategory === null ||
+        product.category_id ===
+          selectedCategory;
+
+      // =================================================
+      // MIN PRICE
+      // =================================================
+
+      const matchesMinPrice =
+        minPrice === undefined ||
+        product.price >= minPrice;
+
+      // =================================================
+      // MAX PRICE
+      // =================================================
+
+      const matchesMaxPrice =
+        maxPrice === undefined ||
+        product.price <= maxPrice;
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesMinPrice &&
+        matchesMaxPrice
+      );
+    });
+  }, [
+    products,
+    search,
+    selectedCategory,
+    minPrice,
+    maxPrice,
+  ]);
+
+  // =====================================================
+  // SELECTED CATEGORY NAME
+  // =====================================================
+
+  const selectedCategoryName =
+    selectedCategory !== null
+      ? categories.find(
+          (category) =>
+            category.id ===
+            selectedCategory
+        )?.name
+      : undefined;
+
+  // =====================================================
+  // CLEAR FILTERS
+  // =====================================================
+
+  const handleClearFilters = () => {
+    setSelectedCategory(null);
+    setMinPrice(undefined);
+    setMaxPrice(undefined);
+  };
+
+  // =====================================================
+  // LOADING
+  // =====================================================
 
   if (loading) {
     return (
@@ -98,6 +275,10 @@ function ProductsContent() {
       </main>
     );
   }
+
+  // =====================================================
+  // ERROR
+  // =====================================================
 
   if (error) {
     return (
@@ -115,137 +296,143 @@ function ProductsContent() {
     );
   }
 
+  // =====================================================
+  // UI
+  // =====================================================
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <section className="mb-8">
         <p className="text-sm font-medium text-gray-500">
           ShopSphere
         </p>
 
         <h1 className="mt-1 text-3xl font-bold text-gray-900">
-          {search
-            ? "Search Results"
-            : "All Products"}
+          {selectedCategoryName
+            ? selectedCategoryName
+            : search
+              ? "Search Results"
+              : "All Products"}
         </h1>
 
         <p className="mt-2 text-gray-500">
-          {search
-            ? `Showing products matching "${search}".`
-            : "Explore all products available on ShopSphere."}
+          {selectedCategoryName
+            ? `Explore products from ${selectedCategoryName}.`
+            : search
+              ? `Showing products matching "${search}".`
+              : "Explore all products available on ShopSphere."}
         </p>
 
         <p className="mt-2 text-sm text-gray-500">
-          {products.length}{" "}
-          {products.length === 1
+          {filteredProducts.length}{" "}
+          {filteredProducts.length === 1
             ? "product"
             : "products"}
         </p>
       </section>
 
-      {products.length === 0 ? (
-        <div className="rounded-xl border bg-white p-12 text-center">
-          <Package className="mx-auto h-12 w-12 text-gray-300" />
+      {/* =================================================
+          SEARCH
+      ================================================= */}
 
-          <h2 className="mt-4 text-xl font-semibold text-gray-900">
-            {search
-              ? "No matching products found"
-              : "No products found"}
-          </h2>
+      <div className="mb-8">
+        <ProductSearch
+          onSearch={(value) => {
+            setSearch(value);
+          }}
+        />
+      </div>
 
-          <p className="mt-2 text-sm text-gray-500">
-            {search
-              ? `No products matched "${search}".`
-              : "There are currently no products available."}
-          </p>
+      {/* =================================================
+          FILTERS + PRODUCTS
+      ================================================= */}
 
-          {search && (
-            <Link
-              href="/products"
-              className="mt-5 inline-flex rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
-            >
-              View All Products
-            </Link>
+      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+
+        {/* =================================================
+            FILTERS
+        ================================================= */}
+
+        <div>
+          <ProductFilters
+            categories={categories}
+            selectedCategory={
+              selectedCategory
+            }
+            minPrice={minPrice}
+            maxPrice={maxPrice}
+            onCategoryChange={
+              setSelectedCategory
+            }
+            onPriceChange={(
+              min,
+              max
+            ) => {
+              setMinPrice(min);
+              setMaxPrice(max);
+            }}
+            onClear={
+              handleClearFilters
+            }
+          />
+        </div>
+
+        {/* =================================================
+            PRODUCTS
+        ================================================= */}
+
+        <div>
+          {filteredProducts.length === 0 ? (
+            <div className="rounded-xl border bg-white p-12 text-center">
+
+              <Package className="mx-auto h-12 w-12 text-gray-300" />
+
+              <h2 className="mt-4 text-xl font-semibold text-gray-900">
+                {selectedCategoryName
+                  ? `No products found in ${selectedCategoryName}`
+                  : search
+                    ? "No matching products found"
+                    : "No products found"}
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-500">
+                {selectedCategoryName
+                  ? `There are currently no products available in ${selectedCategoryName}.`
+                  : search
+                    ? `No products matched "${search}".`
+                    : "There are currently no products available."}
+              </p>
+
+              {(search ||
+                selectedCategory !== null) && (
+                <Link
+                  href="/products"
+                  className="mt-5 inline-flex rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+                >
+                  View All Products
+                </Link>
+              )}
+
+            </div>
+          ) : (
+            <ProductGrid
+              products={filteredProducts}
+            />
           )}
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {products.map((product) => {
-            const hasDiscount =
-              product.original_price != null &&
-              product.original_price >
-                product.price;
-
-            return (
-              <Link
-                key={product.id}
-                href={`/products/${product.id}`}
-                className="group block"
-              >
-                <article className="overflow-hidden rounded-xl border bg-white transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
-                  <div className="relative aspect-square overflow-hidden bg-gray-100">
-                    {product.image_url ? (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <Package className="h-12 w-12 text-gray-300" />
-                      </div>
-                    )}
-
-                    {hasDiscount && (
-                      <span className="absolute left-3 top-3 rounded-md bg-red-500 px-2 py-1 text-xs font-semibold text-white">
-                        Sale
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="p-4">
-                    <h2 className="line-clamp-2 min-h-[48px] font-semibold text-gray-900">
-                      {product.name}
-                    </h2>
-
-                    <div className="mt-3 flex items-center gap-2">
-                      <span className="text-lg font-bold text-gray-900">
-                        ₹
-                        {product.price.toLocaleString(
-                          "en-IN"
-                        )}
-                      </span>
-
-                      {hasDiscount && (
-                        <span className="text-sm text-gray-400 line-through">
-                          ₹
-                          {product.original_price!.toLocaleString(
-                            "en-IN"
-                          )}
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="mt-2 text-sm">
-                      {product.stock > 0 ? (
-                        <span className="text-green-600">
-                          In stock
-                        </span>
-                      ) : (
-                        <span className="text-red-600">
-                          Out of stock
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </article>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      </div>
     </main>
   );
 }
+
+// =========================================================
+// PAGE
+// =========================================================
 
 export default function ProductsPage() {
   return (

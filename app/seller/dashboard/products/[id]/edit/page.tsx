@@ -1,23 +1,37 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
 import {
-  ArrowLeft,
-  Pencil,
-} from "lucide-react";
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import Swal from "sweetalert2";
 
 import {
-  getProduct,
-  updateProduct,
-  type Product,
-} from "@/services/products";
+  ArrowLeft,
+  ImagePlus,
+  Loader2,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import {
   getCategories,
   type Category,
 } from "@/services/categories";
+
+import {
+  deleteProductImage,
+  getProduct,
+  replaceProductImages,
+  setPrimaryProductImage,
+  updateProduct,
+  type Product,
+} from "@/services/products";
 
 export default function EditProductPage() {
   const params = useParams();
@@ -25,11 +39,16 @@ export default function EditProductPage() {
 
   const productId = Number(params.id);
 
+  // =========================================================
+  // PRODUCT
+  // =========================================================
+
   const [product, setProduct] =
     useState<Product | null>(null);
 
-  const [categories, setCategories] =
-    useState<Category[]>([]);
+  // =========================================================
+  // PRODUCT FIELDS
+  // =========================================================
 
   const [name, setName] =
     useState("");
@@ -49,11 +68,32 @@ export default function EditProductPage() {
   const [categoryId, setCategoryId] =
     useState("");
 
+  // =========================================================
+  // CATEGORIES
+  // =========================================================
+
+  const [categories, setCategories] =
+    useState<Category[]>([]);
+
+  const [loadingCategories, setLoadingCategories] =
+    useState(true);
+
+  // =========================================================
+  // PAGE STATE
+  // =========================================================
+
   const [loading, setLoading] =
     useState(true);
 
   const [saving, setSaving] =
     useState(false);
+
+  const [imageUpdatingId, setImageUpdatingId] =
+    useState<number | null>(null);
+
+  // =========================================================
+  // MESSAGES
+  // =========================================================
 
   const [error, setError] =
     useState("");
@@ -61,13 +101,17 @@ export default function EditProductPage() {
   const [success, setSuccess] =
     useState("");
 
+  // =========================================================
+  // LOAD PRODUCT + CATEGORIES
+  // =========================================================
+
   useEffect(() => {
     async function loadData() {
       if (
         !Number.isInteger(productId) ||
         productId <= 0
       ) {
-        setError("Invalid product.");
+        setError("Invalid product ID.");
         setLoading(false);
         return;
       }
@@ -78,14 +122,20 @@ export default function EditProductPage() {
 
         const [
           productResult,
-          categoriesResult,
+          categoryResult,
         ] = await Promise.all([
           getProduct(productId),
           getCategories(),
         ]);
 
         setProduct(productResult);
-        setCategories(categoriesResult);
+
+        setCategories(
+          categoryResult.filter(
+            (category) =>
+              category.is_active !== false
+          )
+        );
 
         setName(productResult.name);
 
@@ -116,7 +166,7 @@ export default function EditProductPage() {
         );
       } catch (error) {
         console.error(
-          "Edit product loading error:",
+          "Seller edit product loading error:",
           error
         );
 
@@ -127,15 +177,20 @@ export default function EditProductPage() {
         );
       } finally {
         setLoading(false);
+        setLoadingCategories(false);
       }
     }
 
     loadData();
   }, [productId]);
 
-  async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
+  // =========================================================
+  // SAVE PRODUCT INFORMATION
+  // =========================================================
+
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
     if (saving) {
@@ -159,20 +214,24 @@ export default function EditProductPage() {
       return;
     }
 
-    if (!price) {
-      setError("Price is required.");
+    if (!price.trim()) {
+      setError(
+        "Price is required."
+      );
       return;
     }
 
-    if (!originalPrice) {
+    if (!originalPrice.trim()) {
       setError(
         "Original price is required."
       );
       return;
     }
 
-    if (!stock) {
-      setError("Stock is required.");
+    if (!stock.trim()) {
+      setError(
+        "Stock is required."
+      );
       return;
     }
 
@@ -183,7 +242,8 @@ export default function EditProductPage() {
       return;
     }
 
-    const priceNumber = Number(price);
+    const priceNumber =
+      Number(price);
 
     const originalPriceNumber =
       Number(originalPrice);
@@ -194,7 +254,11 @@ export default function EditProductPage() {
     const categoryIdNumber =
       Number(categoryId);
 
-    if (!Number.isFinite(priceNumber)) {
+    if (
+      !Number.isFinite(
+        priceNumber
+      )
+    ) {
       setError(
         "Please enter a valid price."
       );
@@ -212,14 +276,22 @@ export default function EditProductPage() {
       return;
     }
 
-    if (!Number.isInteger(stockNumber)) {
+    if (
+      !Number.isInteger(
+        stockNumber
+      )
+    ) {
       setError(
         "Stock must be a whole number."
       );
       return;
     }
 
-    if (!Number.isInteger(categoryIdNumber)) {
+    if (
+      !Number.isInteger(
+        categoryIdNumber
+      )
+    ) {
       setError(
         "Please select a valid category."
       );
@@ -233,7 +305,9 @@ export default function EditProductPage() {
       return;
     }
 
-    if (originalPriceNumber < 0) {
+    if (
+      originalPriceNumber < 0
+    ) {
       setError(
         "Original price cannot be negative."
       );
@@ -263,13 +337,18 @@ export default function EditProductPage() {
             stock: stockNumber,
             category_id:
               categoryIdNumber,
+            image:
+              product?.image ??
+              null,
           }
         );
 
-      setProduct(updatedProduct);
+      setProduct(
+        updatedProduct
+      );
 
       setSuccess(
-        "Product updated successfully."
+        "Product information updated successfully."
       );
 
       setTimeout(() => {
@@ -279,7 +358,7 @@ export default function EditProductPage() {
       }, 700);
     } catch (error) {
       console.error(
-        "Update product error:",
+        "Seller update product error:",
         error
       );
 
@@ -291,133 +370,381 @@ export default function EditProductPage() {
     } finally {
       setSaving(false);
     }
-  }
+  };
+
+  // =========================================================
+  // SET EXISTING PRIMARY IMAGE
+  // =========================================================
+
+  const handleSetPrimaryImage = async (
+    imageId: number
+  ) => {
+    if (imageUpdatingId !== null) {
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccess("");
+      setImageUpdatingId(imageId);
+
+      const updatedProduct =
+        await setPrimaryProductImage(
+          productId,
+          imageId
+        );
+
+      setProduct(
+        updatedProduct
+      );
+
+      setSuccess(
+        "Main image updated successfully."
+      );
+    } catch (error) {
+      console.error(
+        "Set primary image error:",
+        error
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to change main image."
+      );
+    } finally {
+      setImageUpdatingId(null);
+    }
+  };
+
+  // =========================================================
+  // DELETE EXISTING IMAGE
+  // =========================================================
+
+  const handleDeleteExistingImage =
+    async (
+      imageId: number
+    ) => {
+      if (imageUpdatingId !== null) {
+        return;
+      }
+
+      const currentImages =
+        product?.images ?? [];
+
+      if (currentImages.length <= 1) {
+        await Swal.fire(
+          "Cannot Delete",
+          "A product must have at least one image.",
+          "warning"
+        );
+
+        return;
+      }
+
+      const result =
+        await Swal.fire({
+          icon: "warning",
+          title: "Delete Image?",
+          text: "This image will be permanently removed from the product.",
+          showCancelButton: true,
+          confirmButtonText:
+            "Yes, Delete",
+          cancelButtonText:
+            "Cancel",
+        });
+
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      try {
+        setError("");
+        setSuccess("");
+        setImageUpdatingId(imageId);
+
+        await deleteProductImage(
+          productId,
+          imageId
+        );
+
+        const updatedProduct =
+          await getProduct(
+            productId
+          );
+
+        setProduct(
+          updatedProduct
+        );
+
+        setSuccess(
+          "Product image deleted successfully."
+        );
+      } catch (error) {
+        console.error(
+          "Delete product image error:",
+          error
+        );
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Unable to delete product image."
+        );
+      } finally {
+        setImageUpdatingId(null);
+      }
+    };
+
+  // =========================================================
+  // LOADING
+  // =========================================================
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+      <main className="min-h-screen bg-gray-50">
+        <div className="mx-auto max-w-5xl px-4 py-10">
           <div className="flex min-h-[300px] items-center justify-center">
-            <p className="text-gray-600">
-              Loading product...
-            </p>
+            <div className="text-center">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-500" />
+
+              <p className="mt-3 text-sm text-gray-500">
+                Loading product...
+              </p>
+            </div>
           </div>
         </div>
       </main>
     );
   }
 
+  // =========================================================
+  // ERROR WITHOUT PRODUCT
+  // =========================================================
+
   if (error && !product) {
     return (
-      <main className="min-h-screen bg-white">
-        <div className="mx-auto max-w-4xl px-4 py-10">
+      <main className="min-h-screen bg-gray-50">
+        <div className="mx-auto max-w-5xl px-4 py-10">
 
           <Link
             href="/seller/dashboard/products"
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-black"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Products
           </Link>
 
-          <div className="mt-6 rounded-xl border border-black bg-white p-6">
-            <h1 className="text-xl font-semibold text-black">
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-6">
+
+            <h1 className="text-xl font-semibold text-red-700">
               Unable to load product
             </h1>
 
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-red-600">
               {error}
             </p>
-          </div>
 
+          </div>
         </div>
       </main>
     );
   }
 
+  // =========================================================
+  // EXISTING IMAGES
+  // =========================================================
+
+  const existingImages =
+    product?.images ?? [];
+
+  // =========================================================
+  // UI
+  // =========================================================
+
   return (
-    <main className="min-h-screen bg-white">
-      <div className="mx-auto max-w-4xl px-4 py-10">
+    <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
+      <div className="mx-auto max-w-5xl">
 
-        {/* Back */}
-        <Link
-          href="/seller/dashboard/products"
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Products
-        </Link>
+        {/* BACK BUTTON */}
 
-        {/* Header */}
-        <div className="mt-8">
-          <div className="flex items-center gap-3">
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white">
-              <Pencil className="h-5 w-5 text-black" />
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-bold text-black">
-                Edit Product
-              </h1>
-
-              <p className="mt-1 text-sm text-gray-600">
-                Update your product information.
-              </p>
-            </div>
-
-          </div>
+        <div className="mb-5">
+          <Link
+            href="/seller/dashboard/products"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-black"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Products
+          </Link>
         </div>
 
-        {/* Current Image */}
-        {product?.image_url && (
-          <div className="mt-8 rounded-xl border border-gray-200 bg-white p-4">
-            <p className="mb-3 text-sm font-medium text-black">
-              Current Product Image
-            </p>
+        {/* HEADER */}
 
-            <div className="overflow-hidden rounded-lg bg-gray-50">
-              <img
-                src={product.image_url}
-                alt={product.name}
-                className="h-64 w-full object-contain"
-              />
-            </div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Edit Product
+          </h1>
 
-            <p className="mt-3 text-xs text-gray-500">
-              Product image is currently unchanged
-              when editing product details.
-            </p>
+          <p className="mt-1 text-sm text-gray-500">
+            Update product information and images.
+          </p>
+        </div>
+
+        {/* MESSAGES */}
+
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
           </div>
         )}
 
-        {/* Form */}
+        {success && (
+          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+            {success}
+          </div>
+        )}
+
+        {/* EXISTING IMAGES */}
+
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+
+          <div className="flex items-center justify-between">
+
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Current Product Images
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Set the main image or remove an existing image.
+              </p>
+            </div>
+
+            <span className="text-sm text-gray-500">
+              {existingImages.length}{" "}
+              {existingImages.length === 1
+                ? "image"
+                : "images"}
+            </span>
+
+          </div>
+
+          {existingImages.length === 0 ? (
+            <div className="mt-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+              <p className="text-sm text-gray-500">
+                No existing product images.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+
+              {existingImages.map(
+                (image) => (
+                  <div
+                    key={image.id}
+                    className={`overflow-hidden rounded-xl border ${
+                      image.is_primary
+                        ? "border-black ring-2 ring-black"
+                        : "border-gray-200"
+                    }`}
+                  >
+
+                    <div className="relative aspect-square bg-gray-100">
+
+                      <img
+                        src={
+                          image.image_url
+                        }
+                        alt={
+                          product?.name ||
+                          "Product image"
+                        }
+                        className="h-full w-full object-cover"
+                      />
+
+                      {image.is_primary && (
+                        <span className="absolute left-3 top-3 rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+                          Main Image
+                        </span>
+                      )}
+
+                    </div>
+
+                    <div className="space-y-2 p-3">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSetPrimaryImage(
+                            image.id
+                          )
+                        }
+                        disabled={
+                          imageUpdatingId !==
+                            null ||
+                          image.is_primary
+                        }
+                        className={`w-full rounded-lg px-3 py-2 text-sm font-medium ${
+                          image.is_primary
+                            ? "bg-black text-white"
+                            : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                        }`}
+                      >
+                        {imageUpdatingId ===
+                        image.id
+                          ? "Updating..."
+                          : image.is_primary
+                            ? "Main Image"
+                            : "Set as Main"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDeleteExistingImage(
+                            image.id
+                          )
+                        }
+                        disabled={
+                          imageUpdatingId !==
+                          null
+                        }
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
+
+                    </div>
+                  </div>
+                )
+              )}
+
+            </div>
+          )}
+        </div>
+
+        {/* PRODUCT INFORMATION FORM */}
+
         <form
           onSubmit={handleSubmit}
-          className="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
+          className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
         >
 
-          {error && (
-            <div className="mb-6 rounded-lg border border-black bg-white p-4 text-sm text-black">
-              {error}
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-6 rounded-lg border border-gray-300 bg-gray-50 p-4 text-sm text-black">
-              {success}
-            </div>
-          )}
+          <h2 className="mb-6 text-lg font-semibold text-gray-900">
+            Product Information
+          </h2>
 
           <div className="space-y-6">
 
-            {/* Name */}
+            {/* NAME */}
+
             <div>
               <label
                 htmlFor="name"
-                className="mb-2 block text-sm font-medium text-black"
+                className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Product Name
+                Product Name *
               </label>
 
               <input
@@ -430,17 +757,18 @@ export default function EditProductPage() {
                   )
                 }
                 disabled={saving}
-                className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
               />
             </div>
 
-            {/* Description */}
+            {/* DESCRIPTION */}
+
             <div>
               <label
                 htmlFor="description"
-                className="mb-2 block text-sm font-medium text-black"
+                className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Description
+                Description *
               </label>
 
               <textarea
@@ -453,17 +781,18 @@ export default function EditProductPage() {
                 }
                 rows={5}
                 disabled={saving}
-                className="w-full resize-none rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
+                className="w-full resize-none rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
               />
             </div>
 
-            {/* Category */}
+            {/* CATEGORY */}
+
             <div>
               <label
                 htmlFor="category"
-                className="mb-2 block text-sm font-medium text-black"
+                className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Category
+                Category *
               </label>
 
               <select
@@ -474,35 +803,47 @@ export default function EditProductPage() {
                     event.target.value
                   )
                 }
-                disabled={saving}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-black outline-none focus:border-black"
+                disabled={
+                  saving ||
+                  loadingCategories
+                }
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
               >
                 <option value="">
-                  Select category
+                  {loadingCategories
+                    ? "Loading categories..."
+                    : "Select category"}
                 </option>
 
                 {categories.map(
                   (category) => (
                     <option
-                      key={category.id}
-                      value={category.id}
+                      key={
+                        category.id
+                      }
+                      value={
+                        category.id
+                      }
                     >
-                      {category.name}
+                      {
+                        category.name
+                      }
                     </option>
                   )
                 )}
               </select>
             </div>
 
-            {/* Price */}
+            {/* PRICE */}
+
             <div className="grid gap-6 sm:grid-cols-2">
 
               <div>
                 <label
                   htmlFor="price"
-                  className="mb-2 block text-sm font-medium text-black"
+                  className="mb-2 block text-sm font-medium text-gray-700"
                 >
-                  Price
+                  Price *
                 </label>
 
                 <input
@@ -517,16 +858,18 @@ export default function EditProductPage() {
                     )
                   }
                   disabled={saving}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
                 />
               </div>
+
+              {/* ORIGINAL PRICE */}
 
               <div>
                 <label
                   htmlFor="originalPrice"
-                  className="mb-2 block text-sm font-medium text-black"
+                  className="mb-2 block text-sm font-medium text-gray-700"
                 >
-                  Original Price
+                  Original Price *
                 </label>
 
                 <input
@@ -541,19 +884,20 @@ export default function EditProductPage() {
                     )
                   }
                   disabled={saving}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
                 />
               </div>
 
             </div>
 
-            {/* Stock */}
+            {/* STOCK */}
+
             <div>
               <label
                 htmlFor="stock"
-                className="mb-2 block text-sm font-medium text-black"
+                className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Stock
+                Stock *
               </label>
 
               <input
@@ -568,33 +912,43 @@ export default function EditProductPage() {
                   )
                 }
                 disabled={saving}
-                className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
               />
             </div>
 
           </div>
 
-          {/* Buttons */}
+          {/* FORM BUTTONS */}
+
           <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
             <Link
               href="/seller/dashboard/products"
-              className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-black hover:border-black"
+              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100"
             >
               Cancel
             </Link>
 
             <button
               type="submit"
-              disabled={saving}
-              className="inline-flex items-center justify-center rounded-md border border-black bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={
+                saving ||
+                loadingCategories
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving
-                ? "Saving..."
-                : "Save Changes"}
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
             </button>
 
           </div>
+
         </form>
       </div>
     </main>

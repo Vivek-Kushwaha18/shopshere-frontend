@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Package } from "lucide-react";
 
-import type { Product } from "@/types/product";
+import type { Product } from "@/services/products";
 
 interface ProductCardProps {
   product: Product;
@@ -13,9 +13,18 @@ export default function ProductCard({
   product,
 }: ProductCardProps) {
   const hasDiscount =
-    product.original_price !== null &&
-    product.original_price !== undefined &&
+    product.original_price != null &&
     product.original_price > product.price;
+
+  const images = product.images ?? [];
+
+  const primaryImage =
+    product.image ||
+    images.find(
+      (image) => image.is_primary
+    )?.image_url ||
+    images[0]?.image_url ||
+    null;
 
   return (
     <Link
@@ -23,12 +32,13 @@ export default function ProductCard({
       className="group block"
     >
       <article className="overflow-hidden rounded-xl border bg-white transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+
         {/* IMAGE */}
 
         <div className="relative aspect-square overflow-hidden bg-gray-100">
-          {product.image_url ? (
+          {primaryImage ? (
             <img
-              src={product.image_url}
+              src={primaryImage}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />

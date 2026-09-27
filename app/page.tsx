@@ -48,7 +48,6 @@ const features = [
 export default function Home() {
   const [products, setProducts] =
     useState<Product[]>([]);
-
   const [loadingProducts, setLoadingProducts] =
     useState(true);
 
@@ -262,7 +261,13 @@ export default function Home() {
                   product.original_price != null &&
                   product.original_price >
                     product.price;
-
+                const primaryImage =
+                  product.image ||
+                  product.images?.find(
+                    (image) => image.is_primary
+                  )?.image_url ||
+                  product.images?.[0]?.image_url ||
+                  null;
                 return (
                   <Link
                     key={product.id}
@@ -275,9 +280,9 @@ export default function Home() {
 
                       <div className="aspect-square overflow-hidden bg-gray-100">
 
-                        {product.image_url ? (
+                        {primaryImage ? (
                           <img
-                            src={product.image_url}
+                            src={primaryImage}
                             alt={product.name}
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />

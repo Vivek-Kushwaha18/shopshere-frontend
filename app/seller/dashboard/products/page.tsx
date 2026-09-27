@@ -9,6 +9,7 @@ import Link from "next/link";
 import Swal from "sweetalert2";
 
 import {
+  ArrowLeft,
   Edit,
   Eye,
   EyeOff,
@@ -153,37 +154,37 @@ export default function ManageProductsPage() {
   }
 
   // =========================================================
-  // PRODUCT IMAGE
+  // GET PRODUCT IMAGE
+  // =========================================================
+  //
+  // Priority:
+  // 1. product.image
+  // 2. primary image from product.images
+  // 3. first image from product.images
+  //
   // =========================================================
 
   function getProductImage(
     product: Product
-  ) {
-    if (
-      product.image_url
-    ) {
-      return product.image_url;
+  ): string | null {
+    if (product.image) {
+      return product.image;
     }
 
-    if (
-      product.images &&
-      product.images.length > 0
-    ) {
-      const primaryImage =
-        product.images.find(
-          (image) =>
-            image.is_primary
-        );
+    const images =
+      product.images ?? [];
 
-      return (
-        primaryImage?.image_url ||
-        product.images[0]
-          ?.image_url ||
-        null
+    const primaryImage =
+      images.find(
+        (image) =>
+          image.is_primary
       );
-    }
 
-    return null;
+    return (
+      primaryImage?.image_url ??
+      images[0]?.image_url ??
+      null
+    );
   }
 
   // =========================================================
@@ -192,8 +193,19 @@ export default function ManageProductsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-
       <div className="mx-auto max-w-7xl">
+
+        {/* =================================================
+            BACK TO DASHBOARD
+        ================================================= */}
+
+        <Link
+          href="/seller/dashboard"
+          className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-black"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
 
         {/* =================================================
             HEADER
@@ -219,7 +231,7 @@ export default function ManageProductsPage() {
               type="button"
               onClick={loadProducts}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-4 w-4 ${
@@ -236,7 +248,7 @@ export default function ManageProductsPage() {
 
             <Link
               href="/seller/dashboard/products/add"
-              className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
             >
               <Plus className="h-4 w-4" />
 
@@ -259,7 +271,9 @@ export default function ManageProductsPage() {
               <p className="mt-3 text-sm text-gray-500">
                 Loading your products...
               </p>
+
             </div>
+
           </div>
         ) : products.length === 0 ? (
 
@@ -286,12 +300,13 @@ export default function ManageProductsPage() {
 
             <Link
               href="/seller/dashboard/products/add"
-              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
             >
               <Plus className="h-4 w-4" />
 
               Add Your First Product
             </Link>
+
           </div>
         ) : (
 
@@ -308,6 +323,7 @@ export default function ManageProductsPage() {
               <div className="flex items-center justify-between">
 
                 <div>
+
                   <h2 className="font-semibold text-gray-900">
                     Your Products
                   </h2>
@@ -319,11 +335,14 @@ export default function ManageProductsPage() {
                       ? "product"
                       : "products"}
                   </p>
+
                 </div>
               </div>
             </div>
 
-            {/* DESKTOP TABLE */}
+            {/* =================================================
+                DESKTOP TABLE
+            ================================================= */}
 
             <div className="hidden overflow-x-auto lg:block">
 
@@ -360,6 +379,7 @@ export default function ManageProductsPage() {
 
                   {products.map(
                     (product) => {
+
                       const image =
                         getProductImage(
                           product
@@ -414,8 +434,21 @@ export default function ManageProductsPage() {
                                   }
                                 </p>
 
+                                {product.images &&
+                                  product.images.length >
+                                    1 && (
+                                    <p className="mt-1 text-xs text-gray-400">
+                                      {
+                                        product.images.length
+                                      }{" "}
+                                      images
+                                    </p>
+                                  )}
+
                               </div>
+
                             </div>
+
                           </td>
 
                           {/* PRICE */}
@@ -431,7 +464,8 @@ export default function ManageProductsPage() {
                               )}
                             </p>
 
-                            {product.original_price &&
+                            {product.original_price !=
+                              null &&
                               product.original_price >
                                 product.price && (
                                 <p className="mt-1 text-xs text-gray-400 line-through">
@@ -443,6 +477,7 @@ export default function ManageProductsPage() {
                                   )}
                                 </p>
                               )}
+
                           </td>
 
                           {/* STOCK */}
@@ -470,13 +505,19 @@ export default function ManageProductsPage() {
 
                             {product.is_active ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+
                                 <Eye className="h-3.5 w-3.5" />
+
                                 Active
+
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+
                                 <EyeOff className="h-3.5 w-3.5" />
+
                                 Inactive
+
                               </span>
                             )}
 
@@ -492,7 +533,7 @@ export default function ManageProductsPage() {
 
                               <Link
                                 href={`/seller/dashboard/products/${product.id}/edit`}
-                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
                               >
                                 <Edit className="h-4 w-4" />
                                 Edit
@@ -511,7 +552,7 @@ export default function ManageProductsPage() {
                                   deletingId ===
                                   product.id
                                 }
-                                className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 {deletingId ===
                                 product.id ? (
@@ -536,12 +577,15 @@ export default function ManageProductsPage() {
               </table>
             </div>
 
-            {/* MOBILE CARDS */}
+            {/* =================================================
+                MOBILE CARDS
+            ================================================= */}
 
             <div className="divide-y divide-gray-200 lg:hidden">
 
               {products.map(
                 (product) => {
+
                   const image =
                     getProductImage(
                       product
@@ -605,21 +649,39 @@ export default function ManageProductsPage() {
                             }
                           </p>
 
+                          {product.images &&
+                            product.images.length >
+                              1 && (
+                              <p className="mt-1 text-xs text-gray-400">
+                                {
+                                  product.images.length
+                                }{" "}
+                                images
+                              </p>
+                            )}
+
                           <div className="mt-2">
 
                             {product.is_active ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+
                                 <Eye className="h-3 w-3" />
+
                                 Active
+
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+
                                 <EyeOff className="h-3 w-3" />
+
                                 Inactive
+
                               </span>
                             )}
 
                           </div>
+
                         </div>
                       </div>
 
@@ -629,7 +691,7 @@ export default function ManageProductsPage() {
 
                         <Link
                           href={`/seller/dashboard/products/${product.id}/edit`}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                         >
                           <Edit className="h-4 w-4" />
                           Edit
@@ -646,8 +708,9 @@ export default function ManageProductsPage() {
                             deletingId ===
                             product.id
                           }
-                          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                         >
+
                           {deletingId ===
                           product.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -659,6 +722,7 @@ export default function ManageProductsPage() {
                         </button>
 
                       </div>
+
                     </div>
                   );
                 }

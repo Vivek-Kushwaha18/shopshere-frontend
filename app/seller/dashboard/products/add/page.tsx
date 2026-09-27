@@ -20,12 +20,14 @@ import {
   X,
 } from "lucide-react";
 
-import { apiFetch } from "@/services/api";
-
 import {
   getCategories,
   type Category,
 } from "@/services/categories";
+
+import {
+  createProduct,
+} from "@/services/products";
 
 export default function AddProductPage() {
   const router = useRouter();
@@ -35,18 +37,25 @@ export default function AddProductPage() {
   // =========================================================
 
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] =
+    useState("");
   const [price, setPrice] = useState("");
-  const [originalPrice, setOriginalPrice] = useState("");
+  const [originalPrice, setOriginalPrice] =
+    useState("");
   const [stock, setStock] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryId, setCategoryId] =
+    useState("");
 
   // =========================================================
   // IMAGE DATA
   // =========================================================
 
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] =
+    useState<File[]>([]);
+
+  const [previewUrls, setPreviewUrls] =
+    useState<string[]>([]);
+
   const [primaryImageIndex, setPrimaryImageIndex] =
     useState(0);
 
@@ -97,7 +106,8 @@ export default function AddProductPage() {
       try {
         setLoadingCategories(true);
 
-        const data = await getCategories();
+        const data =
+          await getCategories();
 
         setCategories(
           data.filter(
@@ -125,6 +135,18 @@ export default function AddProductPage() {
   }, []);
 
   // =========================================================
+  // OPEN FILE PICKER
+  // =========================================================
+
+  const openFilePicker = () => {
+    if (submitting) {
+      return;
+    }
+
+    fileInputRef.current?.click();
+  };
+
+  // =========================================================
   // PROCESS SELECTED FILES
   // =========================================================
 
@@ -146,11 +168,49 @@ export default function AddProductPage() {
       5 * 1024 * 1024;
 
     // =======================================================
-    // VALIDATE FILE TYPES
+    // AVAILABLE SLOTS
+    // =======================================================
+
+    const availableSlots =
+      10 - imageFiles.length;
+
+    if (availableSlots <= 0) {
+      Swal.fire(
+        "Maximum 10 Images",
+        "You can upload a maximum of 10 images.",
+        "warning"
+      );
+
+      return;
+    }
+
+    const filesToAdd =
+      selectedFiles.slice(
+        0,
+        availableSlots
+      );
+
+    // =======================================================
+    // MAXIMUM IMAGE WARNING
+    // =======================================================
+
+    if (
+      filesToAdd.length <
+      selectedFiles.length
+    ) {
+      Swal.fire(
+        "Maximum 10 Images",
+        "Only 10 images can be uploaded for one product.",
+        "warning"
+      );
+    }
+
+    // =======================================================
+    // VALIDATE TYPES
     // =======================================================
 
     const invalidFile =
-      selectedFiles.find(
+      filesToAdd.find(
         (file) =>
           !allowedTypes.includes(file.type)
       );
@@ -166,11 +226,11 @@ export default function AddProductPage() {
     }
 
     // =======================================================
-    // VALIDATE FILE SIZE
+    // VALIDATE SIZE
     // =======================================================
 
     const largeFile =
-      selectedFiles.find(
+      filesToAdd.find(
         (file) =>
           file.size > maxFileSize
       );
@@ -186,62 +246,55 @@ export default function AddProductPage() {
     }
 
     // =======================================================
-    // ADD FILES
+    // PREVENT DUPLICATES
+    // =======================================================
+
+    const newFiles =
+      filesToAdd.filter(
+        (newFile) =>
+          !imageFiles.some(
+            (existingFile) =>
+              existingFile.name ===
+                newFile.name &&
+              existingFile.size ===
+                newFile.size &&
+              existingFile.lastModified ===
+                newFile.lastModified
+          )
+      );
+
+    if (newFiles.length === 0) {
+      Swal.fire(
+        "Images Already Selected",
+        "The selected images are already in your product gallery.",
+        "info"
+      );
+
+      return;
+    }
+
+    // =======================================================
+    // ADD IMAGES
     // =======================================================
 
     setImageFiles(
-      (previousFiles) => {
-        const availableSlots =
-          10 - previousFiles.length;
-
-        if (availableSlots <= 0) {
-          Swal.fire(
-            "Maximum 10 Images",
-            "You can upload a maximum of 10 images.",
-            "warning"
-          );
-
-          return previousFiles;
-        }
-
-        const filesToAdd =
-          selectedFiles.slice(
-            0,
-            availableSlots
-          );
-
-        if (
-          filesToAdd.length <
-          selectedFiles.length
-        ) {
-          Swal.fire(
-            "Maximum 10 Images",
-            "Only 10 images can be uploaded.",
-            "warning"
-          );
-        }
-
-        return [
-          ...previousFiles,
-          ...filesToAdd,
-        ];
-      }
+      (previousFiles) => [
+        ...previousFiles,
+        ...newFiles,
+      ]
     );
 
     // =======================================================
-    // FIRST IMAGE IS MAIN IMAGE
+    // FIRST IMAGE = MAIN IMAGE
     // =======================================================
 
-    setPrimaryImageIndex(
-      (currentIndex) =>
-        imageFiles.length === 0
-          ? 0
-          : currentIndex
-    );
+    if (imageFiles.length === 0) {
+      setPrimaryImageIndex(0);
+    }
   };
 
   // =========================================================
-  // NORMAL INPUT CHANGE
+  // INPUT CHANGE
   // =========================================================
 
   const handleImageChange = (
@@ -256,123 +309,8 @@ export default function AddProductPage() {
       selectedFiles
     );
 
-    // Reset input so the same file
-    // can be selected again later.
     event.target.value = "";
   };
-
-  // =========================================================
-  // OPEN FILE PICKER
-  // =========================================================
-
-  const openFilePicker =
-    async () => {
-      if (submitting) {
-        return;
-      }
-
-      try {
-        /*
-         * Chrome / Chromium modern
-         * multi-file picker.
-         */
-        const picker =
-          (
-            window as Window & {
-              showOpenFilePicker?: (
-                options?: {
-                  multiple?: boolean;
-                  types?: Array<{
-                    description: string;
-                    accept: Record<
-                      string,
-                      string[]
-                    >;
-                  }>;
-                  excludeAcceptAllOption?: boolean;
-                }
-              ) => Promise<
-                Array<{
-                  getFile: () => Promise<File>;
-                }>
-              >;
-            }
-          ).showOpenFilePicker;
-
-        if (
-          typeof picker ===
-          "function"
-        ) {
-          const handles =
-            await picker({
-              multiple: true,
-              excludeAcceptAllOption:
-                true,
-              types: [
-                {
-                  description:
-                    "Product Images",
-                  accept: {
-                    "image/jpeg": [
-                      ".jpg",
-                      ".jpeg",
-                    ],
-                    "image/png": [
-                      ".png",
-                    ],
-                    "image/webp": [
-                      ".webp",
-                    ],
-                    "image/gif": [
-                      ".gif",
-                    ],
-                  },
-                },
-              ],
-            });
-
-          const selectedFiles =
-            await Promise.all(
-              handles.map(
-                (handle) =>
-                  handle.getFile()
-              )
-            );
-
-          handleSelectedFiles(
-            selectedFiles
-          );
-
-          return;
-        }
-
-        /*
-         * Fallback for browsers that do
-         * not support showOpenFilePicker.
-         */
-        fileInputRef.current?.click();
-      } catch (error) {
-        /*
-         * User cancelled the picker.
-         */
-        if (
-          error instanceof DOMException &&
-          error.name === "AbortError"
-        ) {
-          return;
-        }
-
-        console.error(
-          "File picker error:",
-          error
-        );
-
-        /*
-         * Fallback.
-         */
-        fileInputRef.current?.click();
-      }
-    };
 
   // =========================================================
   // REMOVE ONE IMAGE
@@ -387,17 +325,15 @@ export default function AddProductPage() {
           fileIndex !== index
       );
 
-    setImageFiles(updatedFiles);
+    setImageFiles(
+      updatedFiles
+    );
 
-    // No images remaining.
-    if (
-      updatedFiles.length === 0
-    ) {
+    if (updatedFiles.length === 0) {
       setPrimaryImageIndex(0);
       return;
     }
 
-    // Main image was removed.
     if (
       primaryImageIndex === index
     ) {
@@ -405,7 +341,6 @@ export default function AddProductPage() {
       return;
     }
 
-    // Main image shifted left.
     if (
       primaryImageIndex > index
     ) {
@@ -435,10 +370,11 @@ export default function AddProductPage() {
   // SET PRIMARY IMAGE
   // =========================================================
 
-  const handleSetPrimaryImage =
-    (index: number) => {
-      setPrimaryImageIndex(index);
-    };
+  const handleSetPrimaryImage = (
+    index: number
+  ) => {
+    setPrimaryImageIndex(index);
+  };
 
   // =========================================================
   // CREATE PRODUCT
@@ -449,13 +385,15 @@ export default function AddProductPage() {
   ) => {
     event.preventDefault();
 
+    if (submitting) {
+      return;
+    }
+
     // =======================================================
     // IMAGE REQUIRED
     // =======================================================
 
-    if (
-      imageFiles.length === 0
-    ) {
+    if (imageFiles.length === 0) {
       await Swal.fire(
         "Product Image Required",
         "Please select at least one product image.",
@@ -546,6 +484,24 @@ export default function AddProductPage() {
     }
 
     // =======================================================
+    // PRIMARY IMAGE VALIDATION
+    // =======================================================
+
+    if (
+      primaryImageIndex < 0 ||
+      primaryImageIndex >=
+        imageFiles.length
+    ) {
+      await Swal.fire(
+        "Invalid Main Image",
+        "Please select a valid main image.",
+        "warning"
+      );
+
+      return;
+    }
+
+    // =======================================================
     // FORM DATA
     // =======================================================
 
@@ -557,9 +513,7 @@ export default function AddProductPage() {
       name.trim()
     );
 
-    if (
-      description.trim()
-    ) {
+    if (description.trim()) {
       formData.append(
         "description",
         description.trim()
@@ -568,29 +522,21 @@ export default function AddProductPage() {
 
     formData.append(
       "price",
-      String(
-        Number(price)
-      )
+      String(Number(price))
     );
 
-    if (
-      originalPrice !== ""
-    ) {
+    if (originalPrice !== "") {
       formData.append(
         "original_price",
         String(
-          Number(
-            originalPrice
-          )
+          Number(originalPrice)
         )
       );
     }
 
     formData.append(
       "stock",
-      String(
-        Number(stock)
-      )
+      String(Number(stock))
     );
 
     formData.append(
@@ -648,76 +594,15 @@ export default function AddProductPage() {
     try {
       setSubmitting(true);
 
-      const response =
-        await apiFetch(
-          "/api/products/",
-          {
-            method: "POST",
-            body: formData,
-          }
+      const product =
+        await createProduct(
+          formData
         );
 
-      // =====================================================
-      // API ERROR
-      // =====================================================
-
-      if (
-        !response.success
-      ) {
-        const detail =
-          response.data?.detail;
-
-        let errorMessage =
-          "Unable to create product.";
-
-        if (
-          Array.isArray(detail)
-        ) {
-          errorMessage =
-            detail
-              .map(
-                (
-                  item: any
-                ) => {
-                  const location =
-                    Array.isArray(
-                      item?.loc
-                    )
-                      ? item.loc.join(
-                          "."
-                        )
-                      : "";
-
-                  const message =
-                    item?.msg ||
-                    "Validation error";
-
-                  return location
-                    ? `${location}: ${message}`
-                    : message;
-                }
-              )
-              .join("\n");
-        } else if (
-          typeof detail ===
-          "string"
-        ) {
-          errorMessage =
-            detail;
-        } else if (
-          detail
-        ) {
-          errorMessage =
-            detail.message ||
-            JSON.stringify(
-              detail
-            );
-        }
-
-        throw new Error(
-          errorMessage
-        );
-      }
+      console.log(
+        "Created product:",
+        product
+      );
 
       // =====================================================
       // SUCCESS
@@ -727,8 +612,7 @@ export default function AddProductPage() {
         icon: "success",
         title: "Product Created",
         text: "Product created successfully.",
-        confirmButtonText:
-          "OK",
+        confirmButtonText: "OK",
       });
 
       // =====================================================
@@ -746,9 +630,7 @@ export default function AddProductPage() {
       setPreviewUrls([]);
       setPrimaryImageIndex(0);
 
-      if (
-        fileInputRef.current
-      ) {
+      if (fileInputRef.current) {
         fileInputRef.current.value =
           "";
       }
@@ -787,28 +669,29 @@ export default function AddProductPage() {
       <div className="mx-auto max-w-5xl">
 
         {/* =================================================
+            BACK TO DASHBOARD
+        ================================================= */}
+
+        <Link
+          href="/seller/dashboard"
+          className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-black"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Link>
+
+        {/* =================================================
             HEADER
         ================================================= */}
 
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Add New Product
+          </h1>
 
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Add New Product
-            </h1>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Add product information and photos.
-            </p>
-          </div>
-
-          <Link
-            href="/seller/dashboard/products"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Products
-          </Link>
+          <p className="mt-1 text-sm text-gray-500">
+            Add product information and photos.
+          </p>
         </div>
 
         {/* =================================================
@@ -853,8 +736,10 @@ export default function AddProductPage() {
                     )
                   }
                   placeholder="Enter product name"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  disabled={submitting}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
                 />
+
               </div>
 
               {/* DESCRIPTION */}
@@ -878,8 +763,10 @@ export default function AddProductPage() {
                   }
                   placeholder="Enter product description"
                   rows={5}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  disabled={submitting}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
                 />
+
               </div>
 
               {/* PRICE */}
@@ -905,8 +792,10 @@ export default function AddProductPage() {
                     )
                   }
                   placeholder="2999"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  disabled={submitting}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
                 />
+
               </div>
 
               {/* ORIGINAL PRICE */}
@@ -925,17 +814,17 @@ export default function AddProductPage() {
                   type="number"
                   min="0"
                   step="0.01"
-                  value={
-                    originalPrice
-                  }
+                  value={originalPrice}
                   onChange={(event) =>
                     setOriginalPrice(
                       event.target.value
                     )
                   }
                   placeholder="3999"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  disabled={submitting}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
                 />
+
               </div>
 
               {/* STOCK */}
@@ -961,8 +850,10 @@ export default function AddProductPage() {
                     )
                   }
                   placeholder="20"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  disabled={submitting}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
                 />
+
               </div>
 
               {/* CATEGORY */}
@@ -985,10 +876,12 @@ export default function AddProductPage() {
                     )
                   }
                   disabled={
+                    submitting ||
                     loadingCategories
                   }
                   className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black disabled:bg-gray-100"
                 >
+
                   <option value="">
                     {loadingCategories
                       ? "Loading categories..."
@@ -1011,7 +904,9 @@ export default function AddProductPage() {
                       </option>
                     )
                   )}
+
                 </select>
+
               </div>
             </div>
           </div>
@@ -1032,7 +927,7 @@ export default function AddProductPage() {
             </p>
 
             {/* =================================================
-                HIDDEN FILE INPUT
+                HIDDEN INPUT
             ================================================= */}
 
             <input
@@ -1047,7 +942,7 @@ export default function AddProductPage() {
             />
 
             {/* =================================================
-                SELECT PHOTOS BUTTON
+                SELECT PHOTOS
             ================================================= */}
 
             <button
@@ -1056,8 +951,9 @@ export default function AddProductPage() {
                 openFilePicker
               }
               disabled={submitting}
-              className="mt-5 flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center hover:border-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-5 flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center transition hover:border-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
+
               <ImagePlus className="mb-3 h-10 w-10 text-gray-400" />
 
               <span className="text-sm font-semibold text-gray-800">
@@ -1071,6 +967,7 @@ export default function AddProductPage() {
               <span className="mt-3 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white">
                 Choose Photos
               </span>
+
             </button>
 
             {/* =================================================
@@ -1082,8 +979,7 @@ export default function AddProductPage() {
 
                 <span className="text-sm font-medium text-gray-700">
                   {imageFiles.length}{" "}
-                  {imageFiles.length ===
-                  1
+                  {imageFiles.length === 1
                     ? "image"
                     : "images"}{" "}
                   selected
@@ -1101,11 +997,12 @@ export default function AddProductPage() {
                 >
                   Remove all
                 </button>
+
               </div>
             )}
 
             {/* =================================================
-                IMAGE PREVIEWS
+                PREVIEWS
             ================================================= */}
 
             {imageFiles.length > 0 && (
@@ -1117,7 +1014,7 @@ export default function AddProductPage() {
                     index
                   ) => (
                     <div
-                      key={`${file.name}-${file.size}-${index}`}
+                      key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
                       className={`overflow-hidden rounded-xl border ${
                         primaryImageIndex ===
                         index
@@ -1146,7 +1043,7 @@ export default function AddProductPage() {
                           />
                         )}
 
-                        {/* MAIN IMAGE BADGE */}
+                        {/* MAIN IMAGE */}
 
                         {primaryImageIndex ===
                           index && (
@@ -1155,7 +1052,7 @@ export default function AddProductPage() {
                           </span>
                         )}
 
-                        {/* REMOVE ICON */}
+                        {/* REMOVE */}
 
                         <button
                           type="button"
@@ -1167,13 +1064,14 @@ export default function AddProductPage() {
                           disabled={
                             submitting
                           }
-                          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-700 shadow hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-700 shadow transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <X className="h-4 w-4" />
                         </button>
+
                       </div>
 
-                      {/* IMAGE ACTIONS */}
+                      {/* ACTIONS */}
 
                       <div className="space-y-2 p-3">
 
@@ -1183,9 +1081,7 @@ export default function AddProductPage() {
                             file.name
                           }
                         >
-                          {
-                            file.name
-                          }
+                          {file.name}
                         </p>
 
                         {/* SET MAIN */}
@@ -1232,12 +1128,15 @@ export default function AddProductPage() {
                           <Trash2 className="h-4 w-4" />
                           Remove
                         </button>
+
                       </div>
                     </div>
                   )
                 )}
+
               </div>
             )}
+
           </div>
 
           {/* =================================================
@@ -1248,7 +1147,7 @@ export default function AddProductPage() {
 
             <Link
               href="/seller/dashboard/products"
-              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
             >
               Cancel
             </Link>
@@ -1259,7 +1158,7 @@ export default function AddProductPage() {
                 submitting ||
                 loadingCategories
               }
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? (
                 <>
@@ -1278,6 +1177,7 @@ export default function AddProductPage() {
                 })`
               )}
             </button>
+
           </div>
         </form>
       </div>

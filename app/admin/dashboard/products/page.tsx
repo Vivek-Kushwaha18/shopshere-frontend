@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,9 +17,8 @@ import {
 } from "@/services/products";
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>(
-    []
-  );
+  const [products, setProducts] =
+    useState<Product[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -30,6 +28,10 @@ export default function AdminProductsPage() {
 
   const [deletingId, setDeletingId] =
     useState<number | null>(null);
+
+  // =====================================================
+  // LOAD PRODUCTS
+  // =====================================================
 
   useEffect(() => {
     async function loadProducts() {
@@ -60,13 +62,18 @@ export default function AdminProductsPage() {
     loadProducts();
   }, []);
 
+  // =====================================================
+  // DELETE PRODUCT
+  // =====================================================
+
   async function handleDelete(
     productId: number,
     productName: string
   ) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${productName}"?`
-    );
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to delete "${productName}"?`
+      );
 
     if (!confirmed) {
       return;
@@ -82,11 +89,12 @@ export default function AdminProductsPage() {
 
       await deleteProduct(productId);
 
-      setProducts((currentProducts) =>
-        currentProducts.filter(
-          (product) =>
-            product.id !== productId
-        )
+      setProducts(
+        (currentProducts) =>
+          currentProducts.filter(
+            (product) =>
+              product.id !== productId
+          )
       );
     } catch (error) {
       console.error(
@@ -104,6 +112,10 @@ export default function AdminProductsPage() {
     }
   }
 
+  // =====================================================
+  // LOADING
+  // =====================================================
+
   if (loading) {
     return (
       <main className="min-h-screen bg-white">
@@ -118,11 +130,18 @@ export default function AdminProductsPage() {
     );
   }
 
+  // =====================================================
+  // PAGE
+  // =====================================================
+
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-7xl px-4 py-10">
 
-        {/* Back */}
+        {/* =================================================
+            BACK
+        ================================================== */}
+
         <Link
           href="/admin/dashboard"
           className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition hover:text-black"
@@ -131,8 +150,12 @@ export default function AdminProductsPage() {
           Dashboard
         </Link>
 
-        {/* Header */}
+        {/* =================================================
+            HEADER
+        ================================================== */}
+
         <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
           <div>
             <p className="text-sm font-medium text-gray-500">
               ShopSphere Admin
@@ -156,14 +179,20 @@ export default function AdminProductsPage() {
           </Link>
         </div>
 
-        {/* Error */}
+        {/* =================================================
+            ERROR
+        ================================================== */}
+
         {error && (
           <div className="mt-6 rounded-lg border border-black bg-white p-4 text-sm text-black">
             {error}
           </div>
         )}
 
-        {/* Count */}
+        {/* =================================================
+            COUNT
+        ================================================== */}
+
         <div className="mt-6 rounded-lg border border-gray-200 bg-white px-5 py-4">
           <p className="text-sm text-gray-600">
             Total Products{" "}
@@ -173,9 +202,13 @@ export default function AdminProductsPage() {
           </p>
         </div>
 
-        {/* Empty */}
+        {/* =================================================
+            EMPTY
+        ================================================== */}
+
         {products.length === 0 ? (
           <div className="mt-6 rounded-xl border border-gray-200 bg-white p-12 text-center">
+
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-gray-50">
               <Package className="h-8 w-8 text-gray-500" />
             </div>
@@ -198,11 +231,14 @@ export default function AdminProductsPage() {
           </div>
         ) : (
           <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
+
             <div className="overflow-x-auto">
+
               <table className="w-full min-w-[1000px]">
 
                 <thead className="border-b border-gray-200 bg-gray-50">
                   <tr>
+
                     <th className="px-6 py-4 text-left text-sm font-semibold text-black">
                       Product
                     </th>
@@ -226,147 +262,201 @@ export default function AdminProductsPage() {
                     <th className="px-6 py-4 text-right text-sm font-semibold text-black">
                       Actions
                     </th>
+
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-gray-200">
-                  {products.map((product) => {
-                    const hasDiscount =
-                      product.original_price !=
-                        null &&
-                      product.original_price >
-                        product.price;
 
-                    return (
-                      <tr
-                        key={product.id}
-                        className="transition hover:bg-gray-50"
-                      >
-                        {/* Product */}
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-4">
+                  {products.map(
+                    (product) => {
 
-                            <div className="h-14 w-14 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                              {product.image_url ? (
-                                <img
-                                  src={
-                                    product.image_url
-                                  }
-                                  alt={
-                                    product.name
-                                  }
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center">
-                                  <Package className="h-6 w-6 text-gray-400" />
-                                </div>
-                              )}
+                      const hasDiscount =
+                        product.original_price !=
+                          null &&
+                        product.original_price >
+                          product.price;
+
+                      const images =
+                        product.images ?? [];
+
+                      const primaryImage =
+                        product.image ||
+                        images.find(
+                          (image) =>
+                            image.is_primary
+                        )?.image_url ||
+                        images[0]?.image_url ||
+                        null;
+
+                      return (
+                        <tr
+                          key={product.id}
+                          className="transition hover:bg-gray-50"
+                        >
+
+                          {/* =================================================
+                              PRODUCT
+                          ================================================== */}
+
+                          <td className="px-6 py-5">
+
+                            <div className="flex items-center gap-4">
+
+                              <div className="h-14 w-14 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+
+                                {primaryImage ? (
+                                  <img
+                                    src={primaryImage}
+                                    alt={product.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center">
+                                    <Package className="h-6 w-6 text-gray-400" />
+                                  </div>
+                                )}
+
+                              </div>
+
+                              <div>
+
+                                <p className="font-semibold text-black">
+                                  {product.name}
+                                </p>
+
+                                <p className="mt-1 text-xs text-gray-500">
+                                  ID: {product.id}
+                                </p>
+
+                              </div>
+
                             </div>
 
-                            <div>
-                              <p className="font-semibold text-black">
-                                {product.name}
-                              </p>
+                          </td>
 
-                              <p className="mt-1 text-xs text-gray-500">
-                                ID: {product.id}
-                              </p>
-                            </div>
+                          {/* =================================================
+                              SELLER
+                          ================================================== */}
 
-                          </div>
-                        </td>
+                          <td className="px-6 py-5">
 
-                        {/* Seller */}
-                        <td className="px-6 py-5">
-                          <span className="text-sm text-gray-600">
-                            Seller ID:{" "}
-                            {product.seller_id}
-                          </span>
-                        </td>
+                            <span className="text-sm text-gray-600">
+                              Seller ID:{" "}
+                              {product.seller_id}
+                            </span>
 
-                        {/* Price */}
-                        <td className="px-6 py-5">
-                          <p className="font-semibold text-black">
-                            ₹
-                            {product.price.toLocaleString(
-                              "en-IN"
-                            )}
-                          </p>
+                          </td>
 
-                          {hasDiscount && (
-                            <p className="mt-1 text-xs text-gray-400 line-through">
+                          {/* =================================================
+                              PRICE
+                          ================================================== */}
+
+                          <td className="px-6 py-5">
+
+                            <p className="font-semibold text-black">
                               ₹
-                              {product.original_price!.toLocaleString(
+                              {product.price.toLocaleString(
                                 "en-IN"
                               )}
                             </p>
-                          )}
-                        </td>
 
-                        {/* Stock */}
-                        <td className="px-6 py-5">
-                          {product.stock > 0 ? (
-                            <span className="inline-flex rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-black">
-                              {product.stock} in stock
+                            {hasDiscount && (
+                              <p className="mt-1 text-xs text-gray-400 line-through">
+                                ₹
+                                {product.original_price!.toLocaleString(
+                                  "en-IN"
+                                )}
+                              </p>
+                            )}
+
+                          </td>
+
+                          {/* =================================================
+                              STOCK
+                          ================================================== */}
+
+                          <td className="px-6 py-5">
+
+                            {product.stock > 0 ? (
+                              <span className="inline-flex rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-black">
+                                {product.stock} in stock
+                              </span>
+                            ) : (
+                              <span className="inline-flex rounded-full border border-black bg-black px-3 py-1 text-xs font-medium text-white">
+                                Out of stock
+                              </span>
+                            )}
+
+                          </td>
+
+                          {/* =================================================
+                              CATEGORY
+                          ================================================== */}
+
+                          <td className="px-6 py-5">
+
+                            <span className="text-sm text-gray-600">
+                              Category ID:{" "}
+                              {product.category_id}
                             </span>
-                          ) : (
-                            <span className="inline-flex rounded-full border border-black bg-black px-3 py-1 text-xs font-medium text-white">
-                              Out of stock
-                            </span>
-                          )}
-                        </td>
 
-                        {/* Category */}
-                        <td className="px-6 py-5">
-                          <span className="text-sm text-gray-600">
-                            Category ID:{" "}
-                            {product.category_id}
-                          </span>
-                        </td>
+                          </td>
 
-                        {/* Actions */}
-                        <td className="px-6 py-5">
-                          <div className="flex items-center justify-end gap-2">
+                          {/* =================================================
+                              ACTIONS
+                          ================================================== */}
 
-                            <Link
-                              href={`/admin/dashboard/products/${product.id}/edit`}
-                              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-black transition hover:border-black hover:bg-gray-50"
-                            >
-                              <Pencil className="h-4 w-4" />
-                              Edit
-                            </Link>
+                          <td className="px-6 py-5">
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDelete(
-                                  product.id,
-                                  product.name
-                                )
-                              }
-                              disabled={
-                                deletingId ===
+                            <div className="flex items-center justify-end gap-2">
+
+                              {/* EDIT */}
+
+                              <Link
+                                href={`/admin/dashboard/products/${product.id}/edit`}
+                                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-black transition hover:border-black hover:bg-gray-50"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Edit
+                              </Link>
+
+                              {/* DELETE */}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDelete(
+                                    product.id,
+                                    product.name
+                                  )
+                                }
+                                disabled={
+                                  deletingId ===
+                                  product.id
+                                }
+                                className="inline-flex items-center gap-2 rounded-md border border-black bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+
+                                {deletingId ===
                                 product.id
-                              }
-                              className="inline-flex items-center gap-2 rounded-md border border-black bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
+                                  ? "Deleting..."
+                                  : "Delete"}
+                              </button>
 
-                              {deletingId ===
-                              product.id
-                                ? "Deleting..."
-                                : "Delete"}
-                            </button>
+                            </div>
 
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )}
+
                 </tbody>
-
               </table>
+
             </div>
           </div>
         )}

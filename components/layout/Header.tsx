@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -14,9 +14,9 @@ import {
   LogOut,
   Package,
   Heart,
-  Camera,
   ChevronDown,
   LayoutDashboard,
+  ShieldCheck,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import {
   clearAuthSession,
   getStoredUser,
+  type User as AuthUser,
 } from "@/services/auth";
 
 import {
@@ -32,35 +33,36 @@ import {
   type Category,
 } from "@/services/categories";
 
-interface UserData {
-  id: number;
-  full_name: string;
-  email: string;
-  phone?: string | null;
-  role: "customer" | "seller" | "admin";
-  is_active: boolean;
-  is_verified: boolean;
-}
-
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [mobileMenu, setMobileMenu] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] =
+    useState(false);
   const [mobileCategoriesOpen, setMobileCategoriesOpen] =
     useState(false);
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] =
+    useState<Category[]>([]);
+
   const [categoriesLoading, setCategoriesLoading] =
     useState(false);
 
-  const [user, setUser] = useState<UserData | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [search, setSearch] = useState("");
 
-  const profileRef = useRef<HTMLDivElement>(null);
-  const categoriesRef = useRef<HTMLDivElement>(null);
+  const profileRef =
+    useRef<HTMLDivElement>(null);
+
+  const categoriesRef =
+    useRef<HTMLDivElement>(null);
+
+  // =====================================================
+  // ACTIVE ROUTE
+  // =====================================================
 
   function isActive(path: string) {
     if (path === "/") {
@@ -73,6 +75,10 @@ export default function Header() {
     );
   }
 
+  // =====================================================
+  // LOAD AUTH USER
+  // =====================================================
+
   useEffect(() => {
     function loadAuthUser() {
       const accessToken =
@@ -82,7 +88,7 @@ export default function Header() {
 
       if (accessToken && storedUser) {
         setIsLoggedIn(true);
-        setUser(storedUser as UserData);
+        setUser(storedUser);
       } else {
         setIsLoggedIn(false);
         setUser(null);
@@ -108,6 +114,10 @@ export default function Header() {
     };
   }, []);
 
+  // =====================================================
+  // LOAD CATEGORIES
+  // =====================================================
+
   useEffect(() => {
     async function loadCategories() {
       try {
@@ -131,8 +141,14 @@ export default function Header() {
     loadCategories();
   }, []);
 
+  // =====================================================
+  // CLOSE DROPDOWNS WHEN CLICKING OUTSIDE
+  // =====================================================
+
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(
+      event: MouseEvent
+    ) {
       const target = event.target as Node;
 
       if (
@@ -163,18 +179,27 @@ export default function Header() {
     };
   }, []);
 
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
   function handleLogout() {
     clearAuthSession();
 
     setIsLoggedIn(false);
     setUser(null);
+
     setProfileOpen(false);
     setCategoriesOpen(false);
     setMobileCategoriesOpen(false);
     setMobileMenu(false);
 
-    window.location.href = "/";
+    router.push("/");
   }
+
+  // =====================================================
+  // USER INITIALS
+  // =====================================================
 
   function getInitials() {
     const name = user?.full_name?.trim();
@@ -201,28 +226,25 @@ export default function Header() {
     return "U";
   }
 
-  function handleSearch(
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
+  // =====================================================
+  // ROLE LABEL
+  // =====================================================
 
-    const trimmedSearch = search.trim();
-
-    if (!trimmedSearch) {
-      window.location.href = "/products";
-      return;
+  function getRoleLabel() {
+    if (user?.role === "seller") {
+      return "Seller";
     }
 
-    window.location.href =
-      `/products?search=${encodeURIComponent(
-        trimmedSearch
-      )}`;
+    if (user?.role === "admin") {
+      return "Admin";
+    }
+
+    return "Customer";
   }
 
-  function closeMobileMenu() {
-    setMobileMenu(false);
-    setMobileCategoriesOpen(false);
-  }
+  // =====================================================
+  // DASHBOARD URL
+  // =====================================================
 
   function getDashboardUrl() {
     if (user?.role === "seller") {
@@ -236,6 +258,10 @@ export default function Header() {
     return "/";
   }
 
+  // =====================================================
+  // DASHBOARD LABEL
+  // =====================================================
+
   function getDashboardLabel() {
     if (user?.role === "seller") {
       return "Seller Dashboard";
@@ -248,33 +274,73 @@ export default function Header() {
     return "Dashboard";
   }
 
+  // =====================================================
+  // SEARCH
+  // =====================================================
+
+  function handleSearch(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    const trimmedSearch = search.trim();
+
+    if (!trimmedSearch) {
+      router.push("/products");
+      return;
+    }
+
+    router.push(
+      `/products?search=${encodeURIComponent(
+        trimmedSearch
+      )}`
+    );
+  }
+
+  // =====================================================
+  // CLOSE MOBILE MENU
+  // =====================================================
+
+  function closeMobileMenu() {
+    setMobileMenu(false);
+    setMobileCategoriesOpen(false);
+    setCategoriesOpen(false);
+  }
+
   return (
-    <header className="sticky top-0 z-50 border-b bg-white">
+    <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4">
-        {/* LOGO */}
+
+        {/* =================================================
+            LOGO
+        ================================================= */}
 
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-black font-bold text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-black text-lg font-bold text-white">
             S
           </div>
 
-          <div>
+          <div className="hidden sm:block">
             <h1 className="text-xl font-bold leading-none">
               ShopSphere
             </h1>
 
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               Smart Shopping
             </p>
           </div>
         </Link>
 
-        {/* DESKTOP NAVIGATION */}
+        {/* =================================================
+            DESKTOP NAVIGATION
+        ================================================= */}
 
         <nav className="hidden items-center gap-6 md:flex">
+          {/* HOME */}
+
           <Link
             href="/"
             className={`relative pb-1 text-sm font-medium transition-colors ${
@@ -289,6 +355,8 @@ export default function Header() {
               <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-black" />
             )}
           </Link>
+
+          {/* PRODUCTS */}
 
           <Link
             href="/products"
@@ -342,24 +410,25 @@ export default function Header() {
             </button>
 
             {categoriesOpen && (
-              <div className="absolute left-1/2 top-10 z-50 w-64 -translate-x-1/2 rounded-lg border bg-white p-2 shadow-xl">
-                <div className="border-b px-3 py-2">
+              <div className="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 overflow-hidden rounded-xl border bg-white shadow-xl">
+
+                <div className="border-b px-4 py-3">
                   <p className="text-sm font-semibold text-gray-900">
                     Shop by Category
                   </p>
 
                   <p className="mt-1 text-xs text-gray-500">
-                    Select a category
+                    Discover products by category
                   </p>
                 </div>
 
-                <div className="max-h-80 overflow-y-auto py-1">
+                <div className="max-h-80 overflow-y-auto p-2">
                   {categoriesLoading ? (
-                    <div className="px-3 py-4 text-center text-sm text-gray-500">
+                    <div className="px-3 py-6 text-center text-sm text-gray-500">
                       Loading categories...
                     </div>
                   ) : categories.length === 0 ? (
-                    <div className="px-3 py-4 text-center text-sm text-gray-500">
+                    <div className="px-3 py-6 text-center text-sm text-gray-500">
                       No categories available.
                     </div>
                   ) : (
@@ -367,31 +436,21 @@ export default function Header() {
                       <Link
                         key={category.id}
                         href={`/categories/${category.id}`}
-                        onClick={() => {
-                          setCategoriesOpen(false);
-                        }}
-                        className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 hover:text-black"
+                        onClick={() =>
+                          setCategoriesOpen(false)
+                        }
+                        className="group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                       >
-                        <span>{category.name}</span>
+                        <span className="font-medium">
+                          {category.name}
+                        </span>
 
-                        <span className="text-xs text-gray-400">
+                        <span className="text-gray-400 transition-transform group-hover:translate-x-1">
                           →
                         </span>
                       </Link>
                     ))
                   )}
-                </div>
-
-                <div className="border-t pt-1">
-                  <Link
-                    href="/categories"
-                    onClick={() => {
-                      setCategoriesOpen(false);
-                    }}
-                    className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-100"
-                  >
-                    View all categories
-                  </Link>
                 </div>
               </div>
             )}
@@ -415,14 +474,16 @@ export default function Header() {
           </Link>
         </nav>
 
-        {/* SEARCH */}
+        {/* =================================================
+            SEARCH
+        ================================================= */}
 
-        <div className="hidden w-64 lg:block">
+        <div className="hidden w-56 lg:block xl:w-64">
           <form
             onSubmit={handleSearch}
             className="relative"
           >
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
             <Input
               value={search}
@@ -430,28 +491,40 @@ export default function Header() {
                 setSearch(event.target.value)
               }
               placeholder="Search products..."
-              className="pl-9"
+              className="h-9 rounded-lg pl-9"
             />
           </form>
         </div>
 
-        {/* DESKTOP ACTIONS */}
+        {/* =================================================
+            DESKTOP ACTIONS
+        ================================================= */}
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-1 md:flex">
+
+          {/* CART */}
+
           <Button
             variant="ghost"
             size="icon"
             asChild
+            className="rounded-full"
           >
             <Link href="/cart">
               <ShoppingCart className="h-5 w-5" />
+              <span className="sr-only">
+                Shopping cart
+              </span>
             </Link>
           </Button>
 
           {!isLoggedIn ? (
             <>
+              {/* LOGIN */}
+
               <Button
                 variant="ghost"
+                size="sm"
                 asChild
               >
                 <Link href="/login">
@@ -459,7 +532,13 @@ export default function Header() {
                 </Link>
               </Button>
 
-              <Button asChild>
+              {/* SIGN UP */}
+
+              <Button
+                size="sm"
+                asChild
+                className="rounded-lg"
+              >
                 <Link href="/signup">
                   Sign Up
                 </Link>
@@ -468,8 +547,10 @@ export default function Header() {
           ) : (
             <div
               ref={profileRef}
-              className="relative"
+              className="relative ml-1"
             >
+              {/* PROFILE BUTTON */}
+
               <Button
                 type="button"
                 variant="ghost"
@@ -478,127 +559,210 @@ export default function Header() {
                     (previous) => !previous
                   )
                 }
-                className="gap-2"
+                className="h-auto gap-2 rounded-full px-2 py-1.5"
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
               >
-                <User className="h-4 w-4" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
+                  {getInitials()}
+                </span>
 
-                <span className="max-w-[140px] truncate">
+                <span className="hidden max-w-[120px] truncate text-sm font-medium lg:block">
                   {user?.full_name ||
                     user?.email ||
                     "Profile"}
                 </span>
+
+                <ChevronDown
+                  className={`h-4 w-4 text-gray-500 transition-transform ${
+                    profileOpen
+                      ? "rotate-180"
+                      : ""
+                  }`}
+                />
               </Button>
 
               {/* PROFILE DROPDOWN */}
 
               {profileOpen && (
-                <div className="absolute right-0 top-12 z-50 w-72 rounded-lg border bg-white p-2 shadow-lg">
-                  {/* USER INFO */}
+                <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border bg-white shadow-2xl">
 
-                  <div className="flex items-center gap-3 px-3 py-3">
-                    <button
-                      type="button"
-                      className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-gray-100 text-lg font-semibold uppercase"
-                      aria-label="Profile photo"
-                    >
-                      {getInitials()}
+                  {/* USER HEADER */}
 
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition group-hover:opacity-100">
-                        <Camera className="h-5 w-5" />
-                      </span>
-                    </button>
+                  <div className="bg-gray-50 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                        {getInitials()}
+                      </div>
 
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">
-                        {user?.full_name ||
-                          "User"}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-gray-900">
+                          {user?.full_name ||
+                            "User"}
+                        </p>
 
-                      <p className="truncate text-sm text-gray-500">
-                        {user?.email}
-                      </p>
+                        <p className="truncate text-xs text-gray-500">
+                          {user?.email}
+                        </p>
 
-                      <p className="mt-1 text-xs font-medium capitalize text-gray-400">
-                        {user?.role ||
-                          "customer"}
-                      </p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-700">
+                            {getRoleLabel()}
+                          </span>
+
+                          {user?.is_verified && (
+                            <span className="flex items-center gap-1 text-[10px] font-medium text-green-600">
+                              <ShieldCheck className="h-3 w-3" />
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="my-1 border-t" />
+                  <div className="p-2">
 
-                  {/* DASHBOARD - SELLER / ADMIN ONLY */}
+                    {/* PROFILE */}
 
-                  {(user?.role === "seller" ||
-                    user?.role === "admin") && (
                     <Link
-                      href={getDashboardUrl()}
+                      href="/profile"
                       onClick={() =>
                         setProfileOpen(false)
                       }
-                      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-black hover:bg-gray-100"
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+                        isActive("/profile")
+                          ? "bg-gray-100 font-semibold text-black"
+                          : "text-gray-700 hover:bg-gray-100 hover:text-black"
+                      }`}
                     >
-                      <LayoutDashboard className="h-4 w-4" />
+                      <User className="h-4 w-4" />
 
-                      {getDashboardLabel()}
+                      <div>
+                        <p className="font-medium">
+                          My Profile
+                        </p>
+
+                        <p className="text-xs text-gray-400">
+                          Manage your account
+                        </p>
+                      </div>
                     </Link>
-                  )}
 
-                  {/* ORDERS */}
+                    {/* DASHBOARD */}
 
-                  <Link
-                    href="/orders"
-                    onClick={() =>
-                      setProfileOpen(false)
-                    }
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100"
-                  >
-                    <Package className="h-4 w-4" />
-                    My Orders
-                  </Link>
+                    {(user?.role === "seller" ||
+                      user?.role === "admin") && (
+                      <Link
+                        href={getDashboardUrl()}
+                        onClick={() =>
+                          setProfileOpen(false)
+                        }
+                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
+                      >
+                        <LayoutDashboard className="h-4 w-4" />
 
-                  {/* WISHLIST */}
+                        <div>
+                          <p className="font-medium">
+                            {getDashboardLabel()}
+                          </p>
 
-                  <Link
-                    href="/wishlist"
-                    onClick={() =>
-                      setProfileOpen(false)
-                    }
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-gray-100"
-                  >
-                    <Heart className="h-4 w-4" />
-                    Wishlist
-                  </Link>
+                          <p className="text-xs text-gray-400">
+                            Manage your workspace
+                          </p>
+                        </div>
+                      </Link>
+                    )}
 
-                  <div className="my-1 border-t" />
+                    {/* ORDERS */}
 
-                  {/* LOGOUT */}
+                    <Link
+                      href="/orders"
+                      onClick={() =>
+                        setProfileOpen(false)
+                      }
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
+                    >
+                      <Package className="h-4 w-4" />
 
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Logout
-                  </button>
+                      <div>
+                        <p className="font-medium">
+                          My Orders
+                        </p>
+
+                        <p className="text-xs text-gray-400">
+                          Track your purchases
+                        </p>
+                      </div>
+                    </Link>
+
+                    {/* WISHLIST */}
+
+                    <Link
+                      href="/wishlist"
+                      onClick={() =>
+                        setProfileOpen(false)
+                      }
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
+                    >
+                      <Heart className="h-4 w-4" />
+
+                      <div>
+                        <p className="font-medium">
+                          Wishlist
+                        </p>
+
+                        <p className="text-xs text-gray-400">
+                          Saved products
+                        </p>
+                      </div>
+                    </Link>
+
+                    <div className="my-2 border-t" />
+
+                    {/* LOGOUT */}
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition hover:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+
+                      <div className="text-left">
+                        <p className="font-medium">
+                          Logout
+                        </p>
+
+                        <p className="text-xs text-red-400">
+                          Sign out of your account
+                        </p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* MOBILE BUTTON */}
+        {/* =================================================
+            MOBILE MENU BUTTON
+        ================================================= */}
 
         <button
           type="button"
-          className="md:hidden"
+          className="rounded-lg p-2 transition hover:bg-gray-100 md:hidden"
           onClick={() =>
             setMobileMenu(
               (previous) => !previous
             )
           }
-          aria-label="Toggle menu"
+          aria-label={
+            mobileMenu
+              ? "Close menu"
+              : "Open menu"
+          }
         >
           {mobileMenu ? (
             <X className="h-6 w-6" />
@@ -608,225 +772,292 @@ export default function Header() {
         </button>
       </div>
 
-      {/* MOBILE MENU */}
+      {/* ===================================================
+          MOBILE MENU
+      =================================================== */}
 
       {mobileMenu && (
-        <div className="border-t bg-white px-4 py-4 md:hidden">
-          <nav className="flex flex-col gap-4">
-            <Link
-              href="/"
-              onClick={closeMobileMenu}
-              className={`text-sm font-medium ${
-                isActive("/")
-                  ? "text-black"
-                  : "text-gray-600"
-              }`}
+        <div className="border-t bg-white md:hidden">
+          <div className="mx-auto max-w-7xl px-4 py-4">
+
+            {/* MOBILE SEARCH */}
+
+            <form
+              onSubmit={(event) => {
+                handleSearch(event);
+                closeMobileMenu();
+              }}
+              className="relative mb-5"
             >
-              Home
-            </Link>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
-            <Link
-              href="/products"
-              onClick={closeMobileMenu}
-              className={`text-sm font-medium ${
-                isActive("/products")
-                  ? "text-black"
-                  : "text-gray-600"
-              }`}
-            >
-              Products
-            </Link>
-
-            {/* MOBILE CATEGORIES */}
-
-            <div>
-              <button
-                type="button"
-                onClick={() =>
-                  setMobileCategoriesOpen(
-                    (previous) => !previous
-                  )
+              <Input
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
                 }
-                className={`flex w-full items-center justify-between text-left text-sm font-medium ${
-                  isActive("/categories")
-                    ? "text-black"
-                    : "text-gray-600"
+                placeholder="Search products..."
+                className="h-10 pl-9"
+              />
+            </form>
+
+            <nav className="flex flex-col gap-1">
+
+              {/* HOME */}
+
+              <Link
+                href="/"
+                onClick={closeMobileMenu}
+                className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive("/")
+                    ? "bg-gray-100 text-black"
+                    : "text-gray-700 hover:bg-gray-100"
                 }`}
               >
-                <span>
-                  Categories
-                </span>
+                Home
+              </Link>
 
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${
-                    mobileCategoriesOpen
-                      ? "rotate-180"
-                      : ""
-                  }`}
-                />
-              </button>
+              {/* PRODUCTS */}
 
-              {mobileCategoriesOpen && (
-                <div className="mt-3 rounded-lg border bg-gray-50 p-2">
-                  {categoriesLoading ? (
-                    <p className="px-3 py-2 text-sm text-gray-500">
-                      Loading categories...
-                    </p>
-                  ) : categories.length === 0 ? (
-                    <p className="px-3 py-2 text-sm text-gray-500">
-                      No categories available.
-                    </p>
-                  ) : (
-                    categories.map((category) => (
-                      <Link
-                        key={category.id}
-                        href={`/categories/${category.id}`}
-                        onClick={closeMobileMenu}
-                        className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm hover:bg-white"
-                      >
-                        <span>
-                          {category.name}
-                        </span>
+              <Link
+                href="/products"
+                onClick={closeMobileMenu}
+                className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive("/products")
+                    ? "bg-gray-100 text-black"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                Products
+              </Link>
 
-                        <span className="text-xs text-gray-400">
-                          →
-                        </span>
-                      </Link>
-                    ))
-                  )}
+              {/* CATEGORIES */}
 
-                  <div className="mt-1 border-t pt-1">
-                    <Link
-                      href="/categories"
-                      onClick={closeMobileMenu}
-                      className="block rounded-md px-3 py-2.5 text-sm font-medium hover:bg-white"
-                    >
-                      View all categories
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Link
-              href="/ai-assistant"
-              onClick={closeMobileMenu}
-              className={`text-sm font-medium ${
-                isActive("/ai-assistant")
-                  ? "text-black"
-                  : "text-gray-600"
-              }`}
-            >
-              AI Assistant
-            </Link>
-
-            <Link
-              href="/cart"
-              onClick={closeMobileMenu}
-              className="flex items-center gap-2 text-sm font-medium"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Cart
-            </Link>
-
-            {!isLoggedIn ? (
-              <>
-                <Link
-                  href="/login"
-                  onClick={closeMobileMenu}
-                  className="text-sm font-medium"
-                >
-                  Login
-                </Link>
-
-                <Link
-                  href="/signup"
-                  onClick={closeMobileMenu}
-                  className="text-sm font-medium"
-                >
-                  Sign Up
-                </Link>
-              </>
-            ) : (
-              <>
-                {/* MOBILE USER */}
-
-                <div className="border-t pt-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      className="group relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-gray-100 text-lg font-semibold uppercase"
-                      aria-label="Profile photo"
-                    >
-                      {getInitials()}
-
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition group-hover:opacity-100">
-                        <Camera className="h-5 w-5" />
-                      </span>
-                    </button>
-
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">
-                        {user?.full_name ||
-                          "User"}
-                      </p>
-
-                      <p className="truncate text-sm text-gray-500">
-                        {user?.email}
-                      </p>
-
-                      <p className="mt-1 text-xs font-medium capitalize text-gray-400">
-                        {user?.role ||
-                          "customer"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* DASHBOARD - SELLER / ADMIN ONLY */}
-
-                {(user?.role === "seller" ||
-                  user?.role === "admin") && (
-                  <Link
-                    href={getDashboardUrl()}
-                    onClick={closeMobileMenu}
-                    className="flex items-center gap-2 text-sm font-medium text-black"
-                  >
-                    <LayoutDashboard className="h-4 w-4" />
-
-                    {getDashboardLabel()}
-                  </Link>
-                )}
-
-                <Link
-                  href="/orders"
-                  onClick={closeMobileMenu}
-                  className="flex items-center gap-2 text-sm font-medium"
-                >
-                  <Package className="h-4 w-4" />
-                  My Orders
-                </Link>
-
-                <Link
-                  href="/wishlist"
-                  onClick={closeMobileMenu}
-                  className="flex items-center gap-2 text-sm font-medium"
-                >
-                  <Heart className="h-4 w-4" />
-                  Wishlist
-                </Link>
-
+              <div>
                 <button
                   type="button"
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 text-left text-sm font-medium text-red-600"
+                  onClick={() =>
+                    setMobileCategoriesOpen(
+                      (previous) => !previous
+                    )
+                  }
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
+                    isActive("/categories")
+                      ? "bg-gray-100 text-black"
+                      : "text-gray-700 hover:bg-gray-100"
+                  }`}
                 >
-                  <LogOut className="h-4 w-4" />
-                  Logout
+                  <span>
+                    Categories
+                  </span>
+
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      mobileCategoriesOpen
+                        ? "rotate-180"
+                        : ""
+                    }`}
+                  />
                 </button>
-              </>
-            )}
-          </nav>
+
+                {mobileCategoriesOpen && (
+                  <div className="mt-1 rounded-lg bg-gray-50 p-2">
+
+                    {categoriesLoading ? (
+                      <p className="px-3 py-3 text-sm text-gray-500">
+                        Loading categories...
+                      </p>
+                    ) : categories.length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-gray-500">
+                        No categories available.
+                      </p>
+                    ) : (
+                      categories.map(
+                        (category) => (
+                          <Link
+                            key={category.id}
+                            href={`/categories/${category.id}`}
+                            onClick={
+                              closeMobileMenu
+                            }
+                            className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-white"
+                          >
+                            <span>
+                              {category.name}
+                            </span>
+
+                            <span className="text-xs text-gray-400">
+                              →
+                            </span>
+                          </Link>
+                        )
+                      )
+                    )}
+
+                    <div className="mt-1 border-t pt-1">
+                      <Link
+                        href="/categories"
+                        onClick={
+                          closeMobileMenu
+                        }
+                        className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-gray-900 transition hover:bg-white"
+                      >
+                        View all categories
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* AI ASSISTANT */}
+
+              <Link
+                href="/ai-assistant"
+                onClick={closeMobileMenu}
+                className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  isActive("/ai-assistant")
+                    ? "bg-gray-100 text-black"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                AI Assistant
+              </Link>
+
+              {/* CART */}
+
+              <Link
+                href="/cart"
+                onClick={closeMobileMenu}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Cart
+              </Link>
+
+              {!isLoggedIn ? (
+                <>
+                  {/* LOGIN */}
+
+                  <Link
+                    href="/login"
+                    onClick={closeMobileMenu}
+                    className="rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                  >
+                    Login
+                  </Link>
+
+                  {/* SIGN UP */}
+
+                  <Link
+                    href="/signup"
+                    onClick={closeMobileMenu}
+                    className="rounded-lg bg-black px-3 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              ) : (
+                <>
+                  {/* MOBILE USER */}
+
+                  <div className="my-2 border-t pt-4">
+                    <div className="mb-3 flex items-center gap-3 px-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+                        {getInitials()}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-gray-900">
+                          {user?.full_name ||
+                            "User"}
+                        </p>
+
+                        <p className="truncate text-xs text-gray-500">
+                          {user?.email}
+                        </p>
+
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                            {getRoleLabel()}
+                          </span>
+
+                          {user?.is_verified && (
+                            <span className="text-[10px] font-medium text-green-600">
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PROFILE */}
+
+                  <Link
+                    href="/profile"
+                    onClick={closeMobileMenu}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      isActive("/profile")
+                        ? "bg-gray-100 text-black"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <User className="h-4 w-4" />
+                    My Profile
+                  </Link>
+
+                  {/* DASHBOARD */}
+
+                  {(user?.role === "seller" ||
+                    user?.role === "admin") && (
+                    <Link
+                      href={getDashboardUrl()}
+                      onClick={closeMobileMenu}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                      {getDashboardLabel()}
+                    </Link>
+                  )}
+
+                  {/* ORDERS */}
+
+                  <Link
+                    href="/orders"
+                    onClick={closeMobileMenu}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                  >
+                    <Package className="h-4 w-4" />
+                    My Orders
+                  </Link>
+
+                  {/* WISHLIST */}
+
+                  <Link
+                    href="/wishlist"
+                    onClick={closeMobileMenu}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                  >
+                    <Heart className="h-4 w-4" />
+                    Wishlist
+                  </Link>
+
+                  <div className="my-2 border-t" />
+
+                  {/* LOGOUT */}
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </button>
+                </>
+              )}
+            </nav>
+          </div>
         </div>
       )}
     </header>

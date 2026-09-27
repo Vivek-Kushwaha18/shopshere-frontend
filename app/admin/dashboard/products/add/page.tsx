@@ -20,7 +20,9 @@ import {
   type Category,
 } from "@/services/categories";
 
-import { getAccessToken } from "@/services/auth";
+import {
+  createProduct,
+} from "@/services/products";
 
 export default function AdminAddProductPage() {
   const router = useRouter();
@@ -92,7 +94,8 @@ export default function AdminAddProductPage() {
         setCategoriesLoading(true);
         setError("");
 
-        const result = await getCategories();
+        const result =
+          await getCategories();
 
         setCategories(
           result.filter(
@@ -125,7 +128,8 @@ export default function AdminAddProductPage() {
 
   useEffect(() => {
     const urls = selectedImages.map(
-      (file) => URL.createObjectURL(file)
+      (file) =>
+        URL.createObjectURL(file)
     );
 
     setImagePreviews(urls);
@@ -142,6 +146,10 @@ export default function AdminAddProductPage() {
   // =========================================================
 
   function openFilePicker() {
+    if (loading) {
+      return;
+    }
+
     fileInputRef.current?.click();
   }
 
@@ -156,6 +164,10 @@ export default function AdminAddProductPage() {
       event.target.files || []
     );
 
+    // Reset input immediately so the same
+    // file can be selected again later.
+    event.target.value = "";
+
     if (files.length === 0) {
       return;
     }
@@ -163,22 +175,40 @@ export default function AdminAddProductPage() {
     setError("");
     setSuccess("");
 
-    // -------------------------------------------------------
-    // MAXIMUM 10 IMAGES
-    // -------------------------------------------------------
+    // =======================================================
+    // MAXIMUM TOTAL IMAGES
+    // =======================================================
 
-    if (files.length > 10) {
+    const availableSlots =
+      10 - selectedImages.length;
+
+    if (availableSlots <= 0) {
       setError(
-        "You can select a maximum of 10 images."
+        "You can upload a maximum of 10 images."
       );
 
-      event.target.value = "";
       return;
     }
 
-    // -------------------------------------------------------
+    const filesToAdd =
+      files.slice(0, availableSlots);
+
+    // =======================================================
+    // IF MORE THAN 10 SELECTED
+    // =======================================================
+
+    if (
+      filesToAdd.length <
+      files.length
+    ) {
+      setError(
+        "Only 10 images can be selected for one product."
+      );
+    }
+
+    // =======================================================
     // ALLOWED TYPES
-    // -------------------------------------------------------
+    // =======================================================
 
     const allowedTypes = [
       "image/jpeg",
@@ -187,50 +217,86 @@ export default function AdminAddProductPage() {
       "image/gif",
     ];
 
-    const invalidFile = files.find(
-      (file) =>
-        !allowedTypes.includes(file.type)
-    );
+    const invalidFile =
+      filesToAdd.find(
+        (file) =>
+          !allowedTypes.includes(
+            file.type
+          )
+      );
 
     if (invalidFile) {
       setError(
         `Invalid image: ${invalidFile.name}. Please select JPG, PNG, WEBP, or GIF images.`
       );
 
-      event.target.value = "";
       return;
     }
 
-    // -------------------------------------------------------
+    // =======================================================
     // MAXIMUM 5 MB PER IMAGE
-    // -------------------------------------------------------
+    // =======================================================
 
-    const maxSize = 5 * 1024 * 1024;
+    const maxSize =
+      5 * 1024 * 1024;
 
-    const largeFile = files.find(
-      (file) => file.size > maxSize
-    );
+    const largeFile =
+      filesToAdd.find(
+        (file) =>
+          file.size > maxSize
+      );
 
     if (largeFile) {
       setError(
         `${largeFile.name} is larger than 5 MB.`
       );
 
-      event.target.value = "";
       return;
     }
 
-    // -------------------------------------------------------
-    // SAVE FILES
-    // -------------------------------------------------------
+    // =======================================================
+    // PREVENT DUPLICATE FILES
+    // =======================================================
 
-    setSelectedImages(files);
+    const newFiles =
+      filesToAdd.filter(
+        (newFile) =>
+          !selectedImages.some(
+            (existingFile) =>
+              existingFile.name ===
+                newFile.name &&
+              existingFile.size ===
+                newFile.size &&
+              existingFile.lastModified ===
+                newFile.lastModified
+          )
+      );
 
-    // First selected image becomes main
-    setPrimaryImageIndex(0);
+    if (newFiles.length === 0) {
+      setError(
+        "The selected images are already added."
+      );
 
-    // Allow selecting the same files again
-    event.target.value = "";
+      return;
+    }
+
+    // =======================================================
+    // ADD FILES
+    // =======================================================
+
+    setSelectedImages(
+      (currentImages) => [
+        ...currentImages,
+        ...newFiles,
+      ]
+    );
+
+    // Keep current main image.
+    // First image automatically becomes
+    // main when there are no existing images.
+    if (selectedImages.length === 0) {
+      setPrimaryImageIndex(0);
+    }
   }
 
   // =========================================================
@@ -244,7 +310,9 @@ export default function AdminAddProductPage() {
           imageIndex !== index
       );
 
-    setSelectedImages(updatedImages);
+    setSelectedImages(
+      updatedImages
+    );
 
     // No images left
     if (updatedImages.length === 0) {
@@ -253,13 +321,17 @@ export default function AdminAddProductPage() {
     }
 
     // Removed primary image
-    if (primaryImageIndex === index) {
+    if (
+      primaryImageIndex === index
+    ) {
       setPrimaryImageIndex(0);
       return;
     }
 
     // Primary image was after removed image
-    if (primaryImageIndex > index) {
+    if (
+      primaryImageIndex > index
+    ) {
       setPrimaryImageIndex(
         primaryImageIndex - 1
       );
@@ -304,69 +376,94 @@ export default function AdminAddProductPage() {
     setSuccess("");
 
     // =======================================================
-    // IF NO IMAGE:
-    // OPEN FILE PICKER
+    // IMAGE REQUIRED
     // =======================================================
 
     if (selectedImages.length === 0) {
+      setError(
+        "Please select at least one product image."
+      );
+
       fileInputRef.current?.click();
+
       return;
     }
 
     // =======================================================
-    // VALIDATION
+    // PRODUCT NAME
     // =======================================================
 
     if (!name.trim()) {
       setError(
         "Product name is required."
       );
+
       return;
     }
+
+    // =======================================================
+    // DESCRIPTION
+    // =======================================================
 
     if (!description.trim()) {
       setError(
         "Product description is required."
       );
+
       return;
     }
 
-    if (!price) {
+    // =======================================================
+    // PRICE
+    // =======================================================
+
+    if (!price.trim()) {
       setError(
         "Price is required."
       );
+
       return;
     }
 
-    if (!originalPrice) {
+    // =======================================================
+    // ORIGINAL PRICE
+    // =======================================================
+
+    if (!originalPrice.trim()) {
       setError(
         "Original price is required."
       );
+
       return;
     }
 
-    if (!stock) {
+    // =======================================================
+    // STOCK
+    // =======================================================
+
+    if (!stock.trim()) {
       setError(
         "Stock is required."
       );
+
       return;
     }
+
+    // =======================================================
+    // CATEGORY
+    // =======================================================
 
     if (!categoryId) {
       setError(
         "Please select a category."
       );
+
       return;
     }
 
     // =======================================================
-    // IMAGE VALIDATION
+    // MAIN IMAGE VALIDATION
     // =======================================================
-
-    if (selectedImages.length === 0) {
-      fileInputRef.current?.click();
-      return;
-    }
 
     if (
       primaryImageIndex < 0 ||
@@ -376,6 +473,7 @@ export default function AdminAddProductPage() {
       setError(
         "Please select a valid main image."
       );
+
       return;
     }
 
@@ -383,20 +481,25 @@ export default function AdminAddProductPage() {
     // NUMBER VALIDATION
     // =======================================================
 
-    const priceNumber = Number(price);
+    const priceNumber =
+      Number(price);
 
     const originalPriceNumber =
       Number(originalPrice);
 
-    const stockNumber = Number(stock);
+    const stockNumber =
+      Number(stock);
 
     const categoryIdNumber =
       Number(categoryId);
 
-    if (!Number.isFinite(priceNumber)) {
+    if (
+      !Number.isFinite(priceNumber)
+    ) {
       setError(
         "Please enter a valid price."
       );
+
       return;
     }
 
@@ -408,13 +511,19 @@ export default function AdminAddProductPage() {
       setError(
         "Please enter a valid original price."
       );
+
       return;
     }
 
-    if (!Number.isInteger(stockNumber)) {
+    if (
+      !Number.isInteger(
+        stockNumber
+      )
+    ) {
       setError(
         "Stock must be a whole number."
       );
+
       return;
     }
 
@@ -426,6 +535,7 @@ export default function AdminAddProductPage() {
       setError(
         "Please select a valid category."
       );
+
       return;
     }
 
@@ -433,13 +543,17 @@ export default function AdminAddProductPage() {
       setError(
         "Price cannot be negative."
       );
+
       return;
     }
 
-    if (originalPriceNumber < 0) {
+    if (
+      originalPriceNumber < 0
+    ) {
       setError(
         "Original price cannot be negative."
       );
+
       return;
     }
 
@@ -447,132 +561,87 @@ export default function AdminAddProductPage() {
       setError(
         "Stock cannot be negative."
       );
+
       return;
     }
 
     // =======================================================
-    // ACCESS TOKEN
+    // FORM DATA
     // =======================================================
 
-    const token = getAccessToken();
+    const formData =
+      new FormData();
 
-    if (!token) {
-      setError(
-        "You are not logged in. Please login again."
-      );
-      return;
-    }
+    formData.append(
+      "name",
+      name.trim()
+    );
 
-    setLoading(true);
+    formData.append(
+      "description",
+      description.trim()
+    );
+
+    formData.append(
+      "price",
+      String(priceNumber)
+    );
+
+    formData.append(
+      "original_price",
+      String(
+        originalPriceNumber
+      )
+    );
+
+    formData.append(
+      "stock",
+      String(stockNumber)
+    );
+
+    formData.append(
+      "category_id",
+      String(categoryIdNumber)
+    );
+
+    // =======================================================
+    // ADD ALL IMAGES
+    // IMPORTANT:
+    // SAME FIELD NAME = "file"
+    // =======================================================
+
+    selectedImages.forEach(
+      (image) => {
+        formData.append(
+          "file",
+          image
+        );
+      }
+    );
+
+    // =======================================================
+    // PRIMARY IMAGE
+    // =======================================================
+
+    formData.append(
+      "primary_image_index",
+      String(primaryImageIndex)
+    );
+
+    // =======================================================
+    // CREATE PRODUCT
+    // =======================================================
 
     try {
-      const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL ||
-        "http://localhost:8000";
-
-      // =====================================================
-      // FORM DATA
-      // =====================================================
-
-      const formData = new FormData();
-
-      formData.append(
-        "name",
-        name.trim()
-      );
-
-      formData.append(
-        "description",
-        description.trim()
-      );
-
-      formData.append(
-        "price",
-        String(priceNumber)
-      );
-
-      formData.append(
-        "original_price",
-        String(
-          originalPriceNumber
-        )
-      );
-
-      formData.append(
-        "stock",
-        String(stockNumber)
-      );
-
-      formData.append(
-        "category_id",
-        String(categoryIdNumber)
-      );
-
-      // =====================================================
-      // ADD ONE OR MULTIPLE IMAGES
-      // IMPORTANT: SAME FIELD NAME "file"
-      // =====================================================
-
-      selectedImages.forEach(
-        (image) => {
-          formData.append(
-            "file",
-            image
-          );
-        }
-      );
-
-      // =====================================================
-      // MAIN IMAGE INDEX
-      // =====================================================
-
-      formData.append(
-        "primary_image_index",
-        String(primaryImageIndex)
-      );
+      setLoading(true);
 
       setSuccess(
         "Creating product..."
       );
 
-      // =====================================================
-      // ONE CREATE API REQUEST
-      // =====================================================
-
-      const response = await fetch(
-        `${apiUrl}/api/products/`,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-
-          body: formData,
-        }
+      await createProduct(
+        formData
       );
-
-      const text =
-        await response.text();
-
-      let data: any = {};
-
-      try {
-        data = text
-          ? JSON.parse(text)
-          : {};
-      } catch {
-        data = {
-          detail: text,
-        };
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data?.detail ||
-            `Unable to create product. Status: ${response.status}`
-        );
-      }
 
       // =====================================================
       // SUCCESS
@@ -582,7 +651,10 @@ export default function AdminAddProductPage() {
         "Product created successfully."
       );
 
-      // Reset form
+      // =====================================================
+      // RESET FORM
+      // =====================================================
+
       setName("");
       setDescription("");
       setPrice("");
@@ -596,6 +668,10 @@ export default function AdminAddProductPage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+
+      // =====================================================
+      // REDIRECT
+      // =====================================================
 
       setTimeout(() => {
         router.push(
@@ -620,6 +696,10 @@ export default function AdminAddProductPage() {
     }
   }
 
+  // =========================================================
+  // UI
+  // =========================================================
+
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-5xl px-4 py-10">
@@ -637,7 +717,9 @@ export default function AdminAddProductPage() {
         </Link>
 
         <div className="mt-8">
+
           <div className="flex items-center gap-3">
+
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white">
               <Plus className="h-5 w-5 text-black" />
             </div>
@@ -655,7 +737,9 @@ export default function AdminAddProductPage() {
                 Create a new product for ShopSphere.
               </p>
             </div>
+
           </div>
+
         </div>
 
         {/* =================================================
@@ -666,6 +750,7 @@ export default function AdminAddProductPage() {
           onSubmit={handleSubmit}
           className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
         >
+
           {/* ERROR */}
 
           {error && (
@@ -838,6 +923,7 @@ export default function AdminAddProductPage() {
                   className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
                 />
               </div>
+
             </div>
 
             {/* =================================================
@@ -874,16 +960,17 @@ export default function AdminAddProductPage() {
             ================================================= */}
 
             <div>
+
               <label className="mb-2 block text-sm font-medium text-black">
                 Product Images
               </label>
 
               <p className="mb-4 text-xs text-gray-500">
-                Select one or multiple images. Maximum 10
-                images, 5 MB per image.
+                Select one or multiple images.
+                Maximum 10 images, 5 MB per image.
               </p>
 
-              {/* Hidden input */}
+              {/* HIDDEN INPUT */}
 
               <input
                 ref={fileInputRef}
@@ -894,7 +981,7 @@ export default function AdminAddProductPage() {
                 className="hidden"
               />
 
-              {/* Choose Photos */}
+              {/* CHOOSE PHOTOS */}
 
               <button
                 type="button"
@@ -902,6 +989,7 @@ export default function AdminAddProductPage() {
                 disabled={loading}
                 className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center transition hover:border-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               >
+
                 <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gray-300 bg-white">
                   <ImagePlus className="h-7 w-7 text-black" />
                 </div>
@@ -917,6 +1005,7 @@ export default function AdminAddProductPage() {
                 <span className="mt-3 rounded-md bg-black px-4 py-2 text-sm font-medium text-white">
                   Choose Photos
                 </span>
+
               </button>
 
               {/* =================================================
@@ -925,6 +1014,7 @@ export default function AdminAddProductPage() {
 
               {selectedImages.length > 0 && (
                 <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
+
                   <span className="text-sm font-medium text-black">
                     {selectedImages.length}{" "}
                     {selectedImages.length === 1
@@ -937,10 +1027,11 @@ export default function AdminAddProductPage() {
                     type="button"
                     onClick={removeAllImages}
                     disabled={loading}
-                    className="text-sm font-medium text-red-600 hover:text-red-700"
+                    className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
                   >
                     Remove all
                   </button>
+
                 </div>
               )}
 
@@ -950,37 +1041,35 @@ export default function AdminAddProductPage() {
 
               {selectedImages.length > 0 && (
                 <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
                   {selectedImages.map(
                     (image, index) => (
                       <div
-                        key={`${image.name}-${index}`}
+                        key={`${image.name}-${image.size}-${image.lastModified}-${index}`}
                         className={`overflow-hidden rounded-xl border ${
-                          primaryImageIndex ===
-                          index
+                          primaryImageIndex === index
                             ? "border-black ring-2 ring-black"
                             : "border-gray-200"
                         }`}
                       >
-                        {/* Image */}
+
+                        {/* IMAGE */}
 
                         <div className="relative h-56 bg-gray-100">
-                          {imagePreviews[
-                            index
-                          ] && (
+
+                          {imagePreviews[index] && (
                             <img
                               src={
                                 imagePreviews[
                                   index
                                 ]
                               }
-                              alt={
-                                image.name
-                              }
+                              alt={image.name}
                               className="h-full w-full object-contain"
                             />
                           )}
 
-                          {/* Main badge */}
+                          {/* MAIN IMAGE BADGE */}
 
                           {primaryImageIndex ===
                             index && (
@@ -989,7 +1078,7 @@ export default function AdminAddProductPage() {
                             </span>
                           )}
 
-                          {/* Remove */}
+                          {/* REMOVE */}
 
                           <button
                             type="button"
@@ -1003,22 +1092,21 @@ export default function AdminAddProductPage() {
                           >
                             <X className="h-4 w-4" />
                           </button>
+
                         </div>
 
-                        {/* Image details */}
+                        {/* IMAGE DETAILS */}
 
                         <div className="space-y-2 p-4">
 
                           <p
                             className="truncate text-xs text-gray-500"
-                            title={
-                              image.name
-                            }
+                            title={image.name}
                           >
                             {image.name}
                           </p>
 
-                          {/* Set Main */}
+                          {/* SET MAIN */}
 
                           <button
                             type="button"
@@ -1045,7 +1133,7 @@ export default function AdminAddProductPage() {
                               : "Set as Main"}
                           </button>
 
-                          {/* Remove */}
+                          {/* REMOVE */}
 
                           <button
                             type="button"
@@ -1060,12 +1148,15 @@ export default function AdminAddProductPage() {
                             <Trash2 className="h-4 w-4" />
                             Remove
                           </button>
+
                         </div>
                       </div>
                     )
                   )}
+
                 </div>
               )}
+
             </div>
           </div>
 
@@ -1096,6 +1187,7 @@ export default function AdminAddProductPage() {
                   ? "Select Photos"
                   : "Create Product"}
             </button>
+
           </div>
         </form>
       </div>
