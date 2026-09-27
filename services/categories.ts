@@ -22,7 +22,45 @@ const ADMIN_INACTIVE_CATEGORIES_KEY =
 
 
 // =====================================================
-// LOCAL STORAGE HELPERS
+// ERROR HELPER
+// =====================================================
+
+function getErrorMessage(
+  response: {
+    status?: number;
+    data?: any;
+  },
+  fallback: string
+): string {
+  const detail = response.data?.detail;
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : item?.msg || "Validation error"
+      )
+      .join(", ");
+  }
+
+  return `${fallback}${
+    response.status
+      ? ` Status: ${response.status}`
+      : ""
+  }`;
+}
+
+
+// =====================================================
+// LOCAL STORAGE
+//
+// Used only because the current backend does not expose
+// an admin endpoint returning inactive categories.
 // =====================================================
 
 function getStoredInactiveCategories(): Category[] {
@@ -31,22 +69,27 @@ function getStoredInactiveCategories(): Category[] {
   }
 
   try {
-    const stored =
-      localStorage.getItem(
-        ADMIN_INACTIVE_CATEGORIES_KEY
-      );
+    const stored = localStorage.getItem(
+      ADMIN_INACTIVE_CATEGORIES_KEY
+    );
 
     if (!stored) {
       return [];
     }
 
-    const parsed = JSON.parse(stored);
+    const parsed: unknown = JSON.parse(stored);
 
     if (!Array.isArray(parsed)) {
       return [];
     }
 
-    return parsed as Category[];
+    return parsed.filter(
+      (item): item is Category =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.id === "number" &&
+        typeof item.name === "string"
+    );
   } catch {
     return [];
   }
@@ -55,7 +98,7 @@ function getStoredInactiveCategories(): Category[] {
 
 function saveStoredInactiveCategories(
   categories: Category[]
-) {
+): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -69,49 +112,47 @@ function saveStoredInactiveCategories(
 
 function addStoredInactiveCategory(
   category: Category
-) {
+): void {
   const current =
     getStoredInactiveCategories();
 
-  const filtered =
-    current.filter(
-      (item) =>
-        item.id !== category.id
-    );
+  const updated = current.filter(
+    (item) => item.id !== category.id
+  );
 
-  saveStoredInactiveCategories([
-    ...filtered,
-    {
-      ...category,
-      is_active: false,
-    },
-  ]);
+  updated.push({
+    ...category,
+    is_active: false,
+  });
+
+  saveStoredInactiveCategories(updated);
 }
 
 
 function removeStoredInactiveCategory(
   categoryId: number
-) {
+): void {
   const current =
     getStoredInactiveCategories();
 
-  const filtered =
-    current.filter(
-      (item) =>
-        item.id !== categoryId
-    );
-
   saveStoredInactiveCategories(
-    filtered
+    current.filter(
+      (item) => item.id !== categoryId
+    )
   );
 }
 
 
 // =====================================================
 // GET ACTIVE CATEGORIES
-// PUBLIC
 //
-// Customers should only see active categories.
+// PUBLIC
+// Customer
+// Seller
+// Admin
+//
+// Backend:
+// GET /categories/
 // =====================================================
 
 export async function getCategories(): Promise<Category[]> {
@@ -121,8 +162,10 @@ export async function getCategories(): Promise<Category[]> {
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to fetch categories."
+      )
     );
   }
 
@@ -139,8 +182,12 @@ export async function getCategories(): Promise<Category[]> {
 // =====================================================
 // GET ADMIN CATEGORIES
 //
-// Existing backend endpoint is used.
-// Inactive categories are restored from local storage.
+// Returns active categories from backend and inactive
+// categories saved locally by the admin actions.
+//
+// IMPORTANT:
+// Inactive categories are browser-local until the backend
+// provides an admin/all-categories endpoint.
 // =====================================================
 
 export async function getAdminCategories(): Promise<Category[]> {
@@ -166,20 +213,23 @@ export async function getAdminCategories(): Promise<Category[]> {
     validInactiveCategories
   );
 
-  const allCategories = [
+  return [
     ...activeCategories,
     ...validInactiveCategories,
-  ];
-
-  return allCategories.sort(
-    (a, b) =>
-      a.name.localeCompare(b.name)
+  ].sort((a, b) =>
+    a.name.localeCompare(b.name)
   );
 }
 
 
 // =====================================================
 // GET SINGLE CATEGORY
+//
+// Backend:
+// GET /categories/{category_id}
+//
+// NOTE:
+// Backend returns only active categories here.
 // =====================================================
 
 export async function getCategory(
@@ -191,8 +241,10 @@ export async function getCategory(
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to fetch category."
+      )
     );
   }
 
@@ -202,23 +254,40 @@ export async function getCategory(
 
 // =====================================================
 // CREATE CATEGORY - ADMIN
+//
+// Backend:
+// POST /categories/
 // =====================================================
 
 export async function createCategory(
   categoryData: CategoryCreateData
 ): Promise<Category> {
+  const cleanedData: CategoryCreateData = {
+    name: categoryData.name.trim(),
+    description:
+      categoryData.description?.trim() || null,
+  };
+
+  if (!cleanedData.name) {
+    throw new Error(
+      "Category name cannot be empty."
+    );
+  }
+
   const response = await apiFetch(
     "/categories/",
     {
       method: "POST",
-      body: JSON.stringify(categoryData),
+      body: JSON.stringify(cleanedData),
     }
   );
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to create category."
+      )
     );
   }
 
@@ -235,45 +304,63 @@ export async function createCategory(
 
 // =====================================================
 // UPDATE CATEGORY - ADMIN
+//
+// Backend:
+// PUT /categories/{category_id}
 // =====================================================
 
 export async function updateCategory(
   categoryId: number,
   categoryData: CategoryUpdateData
 ): Promise<Category> {
+  const cleanedData: CategoryUpdateData = {
+    name: categoryData.name.trim(),
+    description:
+      categoryData.description?.trim() || null,
+  };
+
+  if (!cleanedData.name) {
+    throw new Error(
+      "Category name cannot be empty."
+    );
+  }
+
   const response = await apiFetch(
     `/categories/${categoryId}`,
     {
       method: "PUT",
-      body: JSON.stringify(categoryData),
+      body: JSON.stringify(cleanedData),
     }
   );
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to update category."
+      )
     );
   }
 
   const category =
     response.data as Category;
 
-  const storedInactive =
-    getStoredInactiveCategories();
-
   const existingInactive =
-    storedInactive.find(
-      (item) =>
-        item.id === categoryId
+    getStoredInactiveCategories().some(
+      (item) => item.id === categoryId
     );
 
   if (
-    existingInactive &&
+    existingInactive ||
     category.is_active === false
   ) {
-    addStoredInactiveCategory(
-      category
+    addStoredInactiveCategory({
+      ...category,
+      is_active: false,
+    });
+  } else {
+    removeStoredInactiveCategory(
+      categoryId
     );
   }
 
@@ -283,6 +370,9 @@ export async function updateCategory(
 
 // =====================================================
 // ACTIVATE CATEGORY - ADMIN
+//
+// Backend:
+// PATCH /categories/{category_id}/activate
 // =====================================================
 
 export async function activateCategory(
@@ -297,27 +387,31 @@ export async function activateCategory(
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to activate category."
+      )
     );
   }
 
-  const category =
-    response.data as Category;
+  const category = {
+    ...(response.data as Category),
+    is_active: true,
+  };
 
   removeStoredInactiveCategory(
     categoryId
   );
 
-  return {
-    ...category,
-    is_active: true,
-  };
+  return category;
 }
 
 
 // =====================================================
 // DEACTIVATE CATEGORY - ADMIN
+//
+// Backend:
+// PATCH /categories/{category_id}/deactivate
 // =====================================================
 
 export async function deactivateCategory(
@@ -332,29 +426,31 @@ export async function deactivateCategory(
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to deactivate category."
+      )
     );
   }
 
-  const category =
-    response.data as Category;
-
-  const inactiveCategory: Category = {
-    ...category,
+  const category = {
+    ...(response.data as Category),
     is_active: false,
   };
 
   addStoredInactiveCategory(
-    inactiveCategory
+    category
   );
 
-  return inactiveCategory;
+  return category;
 }
 
 
 // =====================================================
 // DELETE CATEGORY - ADMIN
+//
+// Backend:
+// DELETE /categories/{category_id}
 // =====================================================
 
 export async function deleteCategory(
@@ -369,8 +465,10 @@ export async function deleteCategory(
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
+      getErrorMessage(
+        response,
         "Unable to delete category."
+      )
     );
   }
 

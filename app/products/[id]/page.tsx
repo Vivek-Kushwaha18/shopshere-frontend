@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Package,
 } from "lucide-react";
 
@@ -17,9 +19,7 @@ import {
 export default function ProductDetailsPage() {
   const params = useParams();
 
-  const productId = Number(
-    params.id
-  );
+  const productId = Number(params.id);
 
   const [product, setProduct] =
     useState<Product | null>(null);
@@ -32,6 +32,17 @@ export default function ProductDetailsPage() {
 
   const [error, setError] =
     useState("");
+
+  // =====================================================
+  // SELECTED IMAGE
+  // =====================================================
+
+  const [selectedImageIndex, setSelectedImageIndex] =
+    useState(0);
+
+  // =====================================================
+  // LOAD PRODUCT
+  // =====================================================
 
   useEffect(() => {
     async function loadProduct() {
@@ -53,7 +64,33 @@ export default function ProductDetailsPage() {
 
         setProduct(productData);
 
-        // Load products from the same category
+        // =================================================
+        // PRODUCT IMAGES
+        // =================================================
+
+        const productImages =
+          productData.images ?? [];
+
+        // =================================================
+        // FIND PRIMARY IMAGE
+        // =================================================
+
+        const primaryImageIndex =
+          productImages.findIndex(
+            (image) =>
+              image.is_primary
+          );
+
+        setSelectedImageIndex(
+          primaryImageIndex >= 0
+            ? primaryImageIndex
+            : 0
+        );
+
+        // =================================================
+        // LOAD PRODUCTS FROM SAME CATEGORY
+        // =================================================
+
         const categoryProducts =
           await getProductsByCategory(
             productData.category_id
@@ -128,14 +165,64 @@ export default function ProductDetailsPage() {
     );
   }
 
+  // =====================================================
+  // PRODUCT IMAGES
+  // =====================================================
+
+  const images = product.images ?? [];
+
+  const currentImage =
+    images[selectedImageIndex]?.image_url ??
+    null;
+
+  // =====================================================
+  // DISCOUNT
+  // =====================================================
+
   const hasDiscount =
     product.original_price != null &&
     product.original_price > product.price;
 
+  // =====================================================
+  // NEXT IMAGE
+  // =====================================================
+
+  const handleNextImage = () => {
+    if (images.length <= 1) {
+      return;
+    }
+
+    setSelectedImageIndex(
+      (currentIndex) =>
+        currentIndex === images.length - 1
+          ? 0
+          : currentIndex + 1
+    );
+  };
+
+  // =====================================================
+  // PREVIOUS IMAGE
+  // =====================================================
+
+  const handlePreviousImage = () => {
+    if (images.length <= 1) {
+      return;
+    }
+
+    setSelectedImageIndex(
+      (currentIndex) =>
+        currentIndex === 0
+          ? images.length - 1
+          : currentIndex - 1
+    );
+  };
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
 
-      {/* BACK */}
+      {/* =================================================
+          BACK
+      ================================================== */}
 
       <Link
         href="/products"
@@ -151,27 +238,120 @@ export default function ProductDetailsPage() {
 
       <section className="grid gap-10 md:grid-cols-2">
 
-        {/* PRODUCT IMAGE */}
-
-        <div className="overflow-hidden rounded-xl border bg-gray-100">
-          <div className="aspect-square">
-            {product.image_url ? (
-              <img
-                src={product.image_url}
-                alt={product.name}
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <Package className="h-20 w-20 text-gray-300" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* PRODUCT INFORMATION */}
+        {/* =================================================
+            PRODUCT IMAGE SLIDER
+        ================================================== */}
 
         <div>
+
+          {/* =================================================
+              MAIN IMAGE
+          ================================================== */}
+
+          <div className="relative overflow-hidden rounded-xl border bg-gray-100">
+
+            <div className="aspect-square">
+              {currentImage ? (
+                <img
+                  src={currentImage}
+                  alt={product.name}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <Package className="h-20 w-20 text-gray-300" />
+                </div>
+              )}
+            </div>
+
+            {/* =================================================
+                PREVIOUS BUTTON
+            ================================================== */}
+
+            {images.length > 1 && (
+              <button
+                type="button"
+                onClick={handlePreviousImage}
+                className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-800 shadow-md transition hover:bg-white"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            )}
+
+            {/* =================================================
+                NEXT BUTTON
+            ================================================== */}
+
+            {images.length > 1 && (
+              <button
+                type="button"
+                onClick={handleNextImage}
+                className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-800 shadow-md transition hover:bg-white"
+                aria-label="Next image"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            )}
+
+          </div>
+
+          {/* =================================================
+              IMAGE THUMBNAILS
+          ================================================== */}
+
+          {images.length > 1 && (
+            <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
+
+              {images.map(
+                (image, index) => (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedImageIndex(
+                        index
+                      )
+                    }
+                    className={`aspect-square overflow-hidden rounded-lg border-2 bg-gray-100 ${
+                      selectedImageIndex === index
+                        ? "border-black"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <img
+                      src={image.image_url}
+                      alt={`${product.name} ${
+                        index + 1
+                      }`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                )
+              )}
+
+            </div>
+          )}
+
+          {/* =================================================
+              IMAGE COUNT
+          ================================================== */}
+
+          {images.length > 1 && (
+            <p className="mt-3 text-center text-sm text-gray-500">
+              Image {selectedImageIndex + 1} of{" "}
+              {images.length}
+            </p>
+          )}
+
+        </div>
+
+        {/* =================================================
+            PRODUCT INFORMATION
+        ================================================== */}
+
+        <div>
+
           <p className="text-sm text-gray-500">
             Product
           </p>
@@ -180,9 +360,12 @@ export default function ProductDetailsPage() {
             {product.name}
           </h1>
 
-          {/* PRICE */}
+          {/* =================================================
+              PRICE
+          ================================================== */}
 
           <div className="mt-6 flex items-center gap-3">
+
             <span className="text-3xl font-bold text-gray-900">
               ₹
               {product.price.toLocaleString(
@@ -198,9 +381,12 @@ export default function ProductDetailsPage() {
                 )}
               </span>
             )}
+
           </div>
 
-          {/* STOCK */}
+          {/* =================================================
+              STOCK
+          ================================================== */}
 
           <div className="mt-5">
             {product.stock > 0 ? (
@@ -214,9 +400,12 @@ export default function ProductDetailsPage() {
             )}
           </div>
 
-          {/* DESCRIPTION */}
+          {/* =================================================
+              DESCRIPTION
+          ================================================== */}
 
           <div className="mt-8">
+
             <h2 className="text-lg font-semibold">
               Product Description
             </h2>
@@ -225,16 +414,21 @@ export default function ProductDetailsPage() {
               {product.description ||
                 "No description available."}
             </p>
+
           </div>
 
-          {/* PRODUCT DETAILS */}
+          {/* =================================================
+              PRODUCT DETAILS
+          ================================================== */}
 
           <div className="mt-8 border-t pt-6">
+
             <h2 className="text-lg font-semibold">
               Product Information
             </h2>
 
             <div className="mt-4 space-y-3 text-sm">
+
               <div className="flex justify-between gap-4">
                 <span className="text-gray-500">
                   Product ID
@@ -274,10 +468,11 @@ export default function ProductDetailsPage() {
                   {product.stock}
                 </span>
               </div>
+
             </div>
           </div>
-        </div>
 
+        </div>
       </section>
 
       {/* =================================================
@@ -288,6 +483,7 @@ export default function ProductDetailsPage() {
         <section className="mt-16 border-t pt-10">
 
           <div className="mb-6">
+
             <h2 className="text-2xl font-bold text-gray-900">
               More Products From This Category
             </h2>
@@ -295,65 +491,85 @@ export default function ProductDetailsPage() {
             <p className="mt-2 text-sm text-gray-500">
               Explore other products in the same category.
             </p>
+
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {relatedProducts.map((item) => (
-              <Link
-                key={item.id}
-                href={`/products/${item.id}`}
-                className="group"
-              >
-                <article className="overflow-hidden rounded-xl border bg-white transition hover:-translate-y-1 hover:shadow-lg">
 
-                  {/* IMAGE */}
+            {relatedProducts.map(
+              (item) => {
+                const relatedImages =
+                  item.images ?? [];
 
-                  <div className="aspect-square overflow-hidden bg-gray-100">
-                    {item.image_url ? (
-                      <img
-                        src={item.image_url}
-                        alt={item.name}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <Package className="h-12 w-12 text-gray-300" />
+                const relatedImage =
+                  relatedImages.find(
+                    (image) =>
+                      image.is_primary
+                  )?.image_url ||
+                  relatedImages[0]?.image_url ||
+                  null;
+
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/products/${item.id}`}
+                    className="group"
+                  >
+                    <article className="overflow-hidden rounded-xl border bg-white transition hover:-translate-y-1 hover:shadow-lg">
+
+                      {/* IMAGE */}
+
+                      <div className="aspect-square overflow-hidden bg-gray-100">
+
+                        {relatedImage ? (
+                          <img
+                            src={relatedImage}
+                            alt={item.name}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            <Package className="h-12 w-12 text-gray-300" />
+                          </div>
+                        )}
+
                       </div>
-                    )}
-                  </div>
 
-                  {/* DETAILS */}
+                      {/* DETAILS */}
 
-                  <div className="p-4">
-                    <h3 className="line-clamp-2 min-h-[48px] font-semibold text-gray-900">
-                      {item.name}
-                    </h3>
+                      <div className="p-4">
 
-                    <p className="mt-3 text-lg font-bold">
-                      ₹
-                      {item.price.toLocaleString(
-                        "en-IN"
-                      )}
-                    </p>
+                        <h3 className="line-clamp-2 min-h-[48px] font-semibold text-gray-900">
+                          {item.name}
+                        </h3>
 
-                    <p className="mt-2 text-sm">
-                      {item.stock > 0 ? (
-                        <span className="text-green-600">
-                          In stock
-                        </span>
-                      ) : (
-                        <span className="text-red-600">
-                          Out of stock
-                        </span>
-                      )}
-                    </p>
-                  </div>
+                        <p className="mt-3 text-lg font-bold">
+                          ₹
+                          {item.price.toLocaleString(
+                            "en-IN"
+                          )}
+                        </p>
 
-                </article>
-              </Link>
-            ))}
+                        <p className="mt-2 text-sm">
+                          {item.stock > 0 ? (
+                            <span className="text-green-600">
+                              In stock
+                            </span>
+                          ) : (
+                            <span className="text-red-600">
+                              Out of stock
+                            </span>
+                          )}
+                        </p>
+
+                      </div>
+                    </article>
+                  </Link>
+                );
+              }
+            )}
+
           </div>
-
         </section>
       )}
 

@@ -1,6 +1,11 @@
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://127.0.0.1:8000";
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1")
+    ? "http://127.0.0.1:8000"
+    : process.env.NEXT_PUBLIC_API_URL ||
+      "http://127.0.0.1:8000";
+
 
 function clearAuth() {
   if (typeof window === "undefined") {
@@ -17,6 +22,7 @@ function clearAuth() {
   );
 }
 
+
 export async function apiFetch(
   endpoint: string,
   options: RequestInit = {}
@@ -26,6 +32,7 @@ export async function apiFetch(
       ? localStorage.getItem("access_token")
       : null;
 
+
   async function makeRequest(
     accessToken: string | null
   ) {
@@ -33,23 +40,26 @@ export async function apiFetch(
       options.headers || {}
     );
 
-    /*
-     * Check whether the request body is FormData.
-     */
+
+    // =====================================================
+    // CHECK FOR FORMDATA
+    // =====================================================
+
     const isFormData =
       typeof FormData !== "undefined" &&
       options.body instanceof FormData;
 
-    /*
-     * IMPORTANT:
-     *
-     * FormData must NOT have:
-     * Content-Type: application/json
-     *
-     * The browser automatically creates:
-     * multipart/form-data; boundary=...
-     */
+
+    // =====================================================
+    // CONTENT TYPE
+    // =====================================================
+
     if (isFormData) {
+      /*
+       * Do not set Content-Type manually for FormData.
+       * The browser automatically creates the
+       * multipart/form-data boundary.
+       */
       headers.delete("Content-Type");
     } else if (
       options.body &&
@@ -61,9 +71,11 @@ export async function apiFetch(
       );
     }
 
-    /*
-     * Add access token.
-     */
+
+    // =====================================================
+    // AUTHORIZATION
+    // =====================================================
+
     if (accessToken) {
       headers.set(
         "Authorization",
@@ -71,21 +83,30 @@ export async function apiFetch(
       );
     }
 
-    /*
-     * Make sure endpoint starts with /
-     */
+
+    // =====================================================
+    // NORMALIZE ENDPOINT
+    // =====================================================
+
     const normalizedEndpoint =
       endpoint.startsWith("/")
         ? endpoint
         : `/${endpoint}`;
 
+
+    // =====================================================
+    // BUILD URL
+    // =====================================================
+
     const url =
       `${API_URL}${normalizedEndpoint}`;
+
 
     console.log(
       "API REQUEST:",
       url
     );
+
 
     try {
       return await fetch(url, {
@@ -103,17 +124,22 @@ export async function apiFetch(
     }
   }
 
+
   try {
-    // ==========================================================
+    // =====================================================
     // FIRST REQUEST
-    // ==========================================================
+    // =====================================================
 
     let response =
       await makeRequest(token);
 
-    // ==========================================================
-    // ENDPOINTS THAT SHOULD NOT AUTO-REFRESH
-    // ==========================================================
+
+    // =====================================================
+    // AUTH ENDPOINTS
+    //
+    // These endpoints should not automatically
+    // refresh the access token.
+    // =====================================================
 
     const authEndpointsWithoutRefresh = [
       "/auth/signup",
@@ -125,15 +151,21 @@ export async function apiFetch(
       "/auth/refresh",
     ];
 
+
+    const normalizedAuthEndpoint =
+      endpoint.split("?")[0];
+
+
     const shouldTryRefresh =
       response.status === 401 &&
       !authEndpointsWithoutRefresh.includes(
-        endpoint
+        normalizedAuthEndpoint
       );
 
-    // ==========================================================
+
+    // =====================================================
     // ACCESS TOKEN EXPIRED
-    // ==========================================================
+    // =====================================================
 
     if (shouldTryRefresh) {
       const refreshToken =
@@ -143,9 +175,10 @@ export async function apiFetch(
             )
           : null;
 
-      // ========================================================
+
+      // ===================================================
       // NO REFRESH TOKEN
-      // ========================================================
+      // ===================================================
 
       if (!refreshToken) {
         clearAuth();
@@ -160,9 +193,10 @@ export async function apiFetch(
         };
       }
 
-      // ========================================================
+
+      // ===================================================
       // REFRESH TOKEN REQUEST
-      // ========================================================
+      // ===================================================
 
       const refreshResponse =
         await fetch(
@@ -180,10 +214,13 @@ export async function apiFetch(
           }
         );
 
+
       const refreshText =
         await refreshResponse.text();
 
+
       let refreshData: any = {};
+
 
       try {
         refreshData = refreshText
@@ -193,9 +230,10 @@ export async function apiFetch(
         refreshData = {};
       }
 
-      // ========================================================
+
+      // ===================================================
       // REFRESH SUCCESSFUL
-      // ========================================================
+      // ===================================================
 
       if (
         refreshResponse.ok &&
@@ -205,20 +243,24 @@ export async function apiFetch(
         token =
           refreshData.access_token;
 
+
         localStorage.setItem(
           "access_token",
           refreshData.access_token
         );
+
 
         localStorage.setItem(
           "refresh_token",
           refreshData.refresh_token
         );
 
+
         localStorage.setItem(
           "isLoggedIn",
           "true"
         );
+
 
         if (refreshData.user) {
           localStorage.setItem(
@@ -229,20 +271,22 @@ export async function apiFetch(
           );
         }
 
+
         window.dispatchEvent(
           new Event("auth-change")
         );
 
-        // ======================================================
+
+        // ===============================================
         // RETRY ORIGINAL REQUEST
-        // ======================================================
+        // ===============================================
 
         response =
           await makeRequest(token);
       } else {
-        // ========================================================
+        // ===============================================
         // REFRESH FAILED
-        // ========================================================
+        // ===============================================
 
         clearAuth();
 
@@ -257,14 +301,17 @@ export async function apiFetch(
       }
     }
 
-    // ==========================================================
+
+    // =====================================================
     // READ RESPONSE
-    // ==========================================================
+    // =====================================================
 
     const text =
       await response.text();
 
+
     let data: any = {};
+
 
     try {
       data = text
@@ -278,11 +325,21 @@ export async function apiFetch(
       };
     }
 
+
+    // =====================================================
+    // DEBUG
+    // =====================================================
+
     console.log(
       "API RESPONSE:",
       response.status,
       data
     );
+
+
+    // =====================================================
+    // RETURN RESULT
+    // =====================================================
 
     return {
       success: response.ok,
@@ -294,6 +351,7 @@ export async function apiFetch(
       "API FETCH ERROR:",
       error
     );
+
 
     return {
       success: false,
@@ -307,5 +365,6 @@ export async function apiFetch(
     };
   }
 }
+
 
 export { API_URL };
