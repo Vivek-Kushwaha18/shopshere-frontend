@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Minus,
   Package,
+  Plus,
+  ShoppingCart,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -16,8 +21,11 @@ import {
   type Product,
 } from "@/services/products";
 
+import { addToCart } from "@/services/cart";
+
 export default function ProductDetailsPage() {
   const params = useParams();
+  const router = useRouter();
 
   const productId = Number(params.id);
 
@@ -33,12 +41,23 @@ export default function ProductDetailsPage() {
   const [error, setError] =
     useState("");
 
-  // =====================================================
-  // SELECTED IMAGE
-  // =====================================================
-
   const [selectedImageIndex, setSelectedImageIndex] =
     useState(0);
+
+  const [quantity, setQuantity] =
+    useState(1);
+
+  const [addingToCart, setAddingToCart] =
+    useState(false);
+
+  const [buyingNow, setBuyingNow] =
+    useState(false);
+
+  const [cartMessage, setCartMessage] =
+    useState("");
+
+  const [cartError, setCartError] =
+    useState("");
 
   // =====================================================
   // LOAD PRODUCT
@@ -63,6 +82,9 @@ export default function ProductDetailsPage() {
           await getProduct(productId);
 
         setProduct(productData);
+        setQuantity(1);
+        setCartMessage("");
+        setCartError("");
 
         // =================================================
         // PRODUCT IMAGES
@@ -70,10 +92,6 @@ export default function ProductDetailsPage() {
 
         const productImages =
           productData.images ?? [];
-
-        // =================================================
-        // FIND PRIMARY IMAGE
-        // =================================================
 
         const primaryImageIndex =
           productImages.findIndex(
@@ -88,7 +106,7 @@ export default function ProductDetailsPage() {
         );
 
         // =================================================
-        // LOAD PRODUCTS FROM SAME CATEGORY
+        // RELATED PRODUCTS
         // =================================================
 
         const categoryProducts =
@@ -122,6 +140,195 @@ export default function ProductDetailsPage() {
   }, [productId]);
 
   // =====================================================
+  // DECREASE QUANTITY
+  // =====================================================
+
+  const handleDecreaseQuantity = () => {
+    setQuantity((currentQuantity) =>
+      Math.max(
+        1,
+        currentQuantity - 1
+      )
+    );
+  };
+
+  // =====================================================
+  // INCREASE QUANTITY
+  // =====================================================
+
+  const handleIncreaseQuantity = () => {
+    if (!product) {
+      return;
+    }
+
+    setQuantity((currentQuantity) =>
+      Math.min(
+        product.stock,
+        currentQuantity + 1
+      )
+    );
+  };
+
+  // =====================================================
+  // ADD TO CART
+  // =====================================================
+
+  const handleAddToCart = async () => {
+    if (!product) {
+      return;
+    }
+
+    if (product.stock <= 0) {
+      setCartError(
+        "This product is out of stock."
+      );
+      return;
+    }
+
+    if (quantity > product.stock) {
+      setCartError(
+        `Only ${product.stock} items are available.`
+      );
+      return;
+    }
+
+    try {
+      setAddingToCart(true);
+      setCartMessage("");
+      setCartError("");
+
+      const response =
+        await addToCart(
+          product.id,
+          quantity
+        );
+
+      if (!response.success) {
+        const message =
+          response.data?.detail ||
+          "Unable to add product to cart.";
+
+        throw new Error(message);
+      }
+
+      setCartMessage(
+        `${quantity} ${
+          quantity === 1
+            ? "item"
+            : "items"
+        } added to cart.`
+      );
+    } catch (error) {
+      console.error(
+        "Add to cart error:",
+        error
+      );
+
+      setCartError(
+        error instanceof Error
+          ? error.message
+          : "Unable to add product to cart."
+      );
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  // =====================================================
+  // BUY NOW
+  // =====================================================
+
+  const handleBuyNow = async () => {
+    if (!product) {
+      return;
+    }
+
+    if (product.stock <= 0) {
+      setCartError(
+        "This product is out of stock."
+      );
+      return;
+    }
+
+    if (quantity > product.stock) {
+      setCartError(
+        `Only ${product.stock} items are available.`
+      );
+      return;
+    }
+
+    try {
+      setBuyingNow(true);
+      setCartMessage("");
+      setCartError("");
+
+      const response =
+        await addToCart(
+          product.id,
+          quantity
+        );
+
+      if (!response.success) {
+        const message =
+          response.data?.detail ||
+          "Unable to proceed.";
+
+        throw new Error(message);
+      }
+
+      router.push("/cart");
+    } catch (error) {
+      console.error(
+        "Buy now error:",
+        error
+      );
+
+      setCartError(
+        error instanceof Error
+          ? error.message
+          : "Unable to proceed to cart."
+      );
+
+      setBuyingNow(false);
+    }
+  };
+
+  // =====================================================
+  // NEXT IMAGE
+  // =====================================================
+
+  const handleNextImage = () => {
+    if (images.length <= 1) {
+      return;
+    }
+
+    setSelectedImageIndex(
+      (currentIndex) =>
+        currentIndex ===
+        images.length - 1
+          ? 0
+          : currentIndex + 1
+    );
+  };
+
+  // =====================================================
+  // PREVIOUS IMAGE
+  // =====================================================
+
+  const handlePreviousImage = () => {
+    if (images.length <= 1) {
+      return;
+    }
+
+    setSelectedImageIndex(
+      (currentIndex) =>
+        currentIndex === 0
+          ? images.length - 1
+          : currentIndex - 1
+    );
+  };
+
+  // =====================================================
   // LOADING
   // =====================================================
 
@@ -145,6 +352,7 @@ export default function ProductDetailsPage() {
     return (
       <main className="mx-auto max-w-7xl px-4 py-10">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
+
           <h1 className="text-xl font-semibold">
             Unable to load product
           </h1>
@@ -160,6 +368,7 @@ export default function ProductDetailsPage() {
             <ArrowLeft className="h-4 w-4" />
             Back to Products
           </Link>
+
         </div>
       </main>
     );
@@ -181,48 +390,13 @@ export default function ProductDetailsPage() {
 
   const hasDiscount =
     product.original_price != null &&
-    product.original_price > product.price;
-
-  // =====================================================
-  // NEXT IMAGE
-  // =====================================================
-
-  const handleNextImage = () => {
-    if (images.length <= 1) {
-      return;
-    }
-
-    setSelectedImageIndex(
-      (currentIndex) =>
-        currentIndex === images.length - 1
-          ? 0
-          : currentIndex + 1
-    );
-  };
-
-  // =====================================================
-  // PREVIOUS IMAGE
-  // =====================================================
-
-  const handlePreviousImage = () => {
-    if (images.length <= 1) {
-      return;
-    }
-
-    setSelectedImageIndex(
-      (currentIndex) =>
-        currentIndex === 0
-          ? images.length - 1
-          : currentIndex - 1
-    );
-  };
+    product.original_price >
+      product.price;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
 
-      {/* =================================================
-          BACK
-      ================================================== */}
+      {/* BACK */}
 
       <Link
         href="/products"
@@ -233,24 +407,21 @@ export default function ProductDetailsPage() {
       </Link>
 
       {/* =================================================
-          PRODUCT INFORMATION
+          PRODUCT
       ================================================== */}
 
       <section className="grid gap-10 md:grid-cols-2">
 
         {/* =================================================
-            PRODUCT IMAGE SLIDER
+            IMAGES
         ================================================== */}
 
         <div>
 
-          {/* =================================================
-              MAIN IMAGE
-          ================================================== */}
-
           <div className="relative overflow-hidden rounded-xl border bg-gray-100">
 
             <div className="aspect-square">
+
               {currentImage ? (
                 <img
                   src={currentImage}
@@ -262,32 +433,29 @@ export default function ProductDetailsPage() {
                   <Package className="h-20 w-20 text-gray-300" />
                 </div>
               )}
-            </div>
 
-            {/* =================================================
-                PREVIOUS BUTTON
-            ================================================== */}
+            </div>
 
             {images.length > 1 && (
               <button
                 type="button"
-                onClick={handlePreviousImage}
-                className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-800 shadow-md transition hover:bg-white"
+                onClick={
+                  handlePreviousImage
+                }
+                className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-800 shadow-md hover:bg-white"
                 aria-label="Previous image"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
             )}
 
-            {/* =================================================
-                NEXT BUTTON
-            ================================================== */}
-
             {images.length > 1 && (
               <button
                 type="button"
-                onClick={handleNextImage}
-                className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-800 shadow-md transition hover:bg-white"
+                onClick={
+                  handleNextImage
+                }
+                className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-800 shadow-md hover:bg-white"
                 aria-label="Next image"
               >
                 <ChevronRight className="h-5 w-5" />
@@ -296,9 +464,7 @@ export default function ProductDetailsPage() {
 
           </div>
 
-          {/* =================================================
-              IMAGE THUMBNAILS
-          ================================================== */}
+          {/* THUMBNAILS */}
 
           {images.length > 1 && (
             <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
@@ -314,7 +480,8 @@ export default function ProductDetailsPage() {
                       )
                     }
                     className={`aspect-square overflow-hidden rounded-lg border-2 bg-gray-100 ${
-                      selectedImageIndex === index
+                      selectedImageIndex ===
+                      index
                         ? "border-black"
                         : "border-gray-200"
                     }`}
@@ -333,13 +500,10 @@ export default function ProductDetailsPage() {
             </div>
           )}
 
-          {/* =================================================
-              IMAGE COUNT
-          ================================================== */}
-
           {images.length > 1 && (
             <p className="mt-3 text-center text-sm text-gray-500">
-              Image {selectedImageIndex + 1} of{" "}
+              Image{" "}
+              {selectedImageIndex + 1} of{" "}
               {images.length}
             </p>
           )}
@@ -347,7 +511,7 @@ export default function ProductDetailsPage() {
         </div>
 
         {/* =================================================
-            PRODUCT INFORMATION
+            DETAILS
         ================================================== */}
 
         <div>
@@ -360,9 +524,7 @@ export default function ProductDetailsPage() {
             {product.name}
           </h1>
 
-          {/* =================================================
-              PRICE
-          ================================================== */}
+          {/* PRICE */}
 
           <div className="mt-6 flex items-center gap-3">
 
@@ -384,11 +546,10 @@ export default function ProductDetailsPage() {
 
           </div>
 
-          {/* =================================================
-              STOCK
-          ================================================== */}
+          {/* STOCK */}
 
           <div className="mt-5">
+
             {product.stock > 0 ? (
               <p className="font-medium text-green-600">
                 In stock
@@ -398,11 +559,134 @@ export default function ProductDetailsPage() {
                 Out of stock
               </p>
             )}
+
           </div>
 
           {/* =================================================
-              DESCRIPTION
+              QUANTITY
           ================================================== */}
+
+          {product.stock > 0 && (
+            <div className="mt-6">
+
+              <p className="mb-2 text-sm font-medium text-gray-700">
+                Quantity
+              </p>
+
+              <div className="flex w-fit items-center rounded-lg border">
+
+                <button
+                  type="button"
+                  onClick={
+                    handleDecreaseQuantity
+                  }
+                  disabled={
+                    quantity <= 1 ||
+                    addingToCart ||
+                    buyingNow
+                  }
+                  className="flex h-10 w-10 items-center justify-center rounded-l-lg hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+
+                <span className="flex h-10 min-w-12 items-center justify-center border-x px-3 font-medium">
+                  {quantity}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={
+                    handleIncreaseQuantity
+                  }
+                  disabled={
+                    quantity >=
+                      product.stock ||
+                    addingToCart ||
+                    buyingNow
+                  }
+                  className="flex h-10 w-10 items-center justify-center rounded-r-lg hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+
+              </div>
+
+              <p className="mt-2 text-xs text-gray-500">
+                Maximum{" "}
+                {product.stock} available
+              </p>
+
+            </div>
+          )}
+
+          {/* =================================================
+              SUCCESS MESSAGE
+          ================================================== */}
+
+          {cartMessage && (
+            <div className="mt-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {cartMessage}
+            </div>
+          )}
+
+          {/* =================================================
+              ERROR MESSAGE
+          ================================================== */}
+
+          {cartError && (
+            <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {cartError}
+            </div>
+          )}
+
+          {/* =================================================
+              ACTION BUTTONS
+          ================================================== */}
+
+          {product.stock > 0 && (
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+
+              <button
+                type="button"
+                onClick={
+                  handleAddToCart
+                }
+                disabled={
+                  addingToCart ||
+                  buyingNow
+                }
+                className="flex items-center justify-center gap-2 rounded-lg border border-black bg-white px-5 py-3 font-semibold text-black transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ShoppingCart className="h-5 w-5" />
+
+                {addingToCart
+                  ? "Adding..."
+                  : "Add to Cart"}
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleBuyNow
+                }
+                disabled={
+                  addingToCart ||
+                  buyingNow
+                }
+                className="flex items-center justify-center gap-2 rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Zap className="h-5 w-5" />
+
+                {buyingNow
+                  ? "Processing..."
+                  : "Buy Now"}
+              </button>
+
+            </div>
+          )}
+
+          {/* DESCRIPTION */}
 
           <div className="mt-8">
 
@@ -417,9 +701,7 @@ export default function ProductDetailsPage() {
 
           </div>
 
-          {/* =================================================
-              PRODUCT DETAILS
-          ================================================== */}
+          {/* PRODUCT INFORMATION */}
 
           <div className="mt-8 border-t pt-6">
 
@@ -476,7 +758,7 @@ export default function ProductDetailsPage() {
       </section>
 
       {/* =================================================
-          SAME CATEGORY PRODUCTS
+          RELATED PRODUCTS
       ================================================== */}
 
       {relatedProducts.length > 0 && (
@@ -517,8 +799,6 @@ export default function ProductDetailsPage() {
                   >
                     <article className="overflow-hidden rounded-xl border bg-white transition hover:-translate-y-1 hover:shadow-lg">
 
-                      {/* IMAGE */}
-
                       <div className="aspect-square overflow-hidden bg-gray-100">
 
                         {relatedImage ? (
@@ -535,8 +815,6 @@ export default function ProductDetailsPage() {
 
                       </div>
 
-                      {/* DETAILS */}
-
                       <div className="p-4">
 
                         <h3 className="line-clamp-2 min-h-[48px] font-semibold text-gray-900">
@@ -551,6 +829,7 @@ export default function ProductDetailsPage() {
                         </p>
 
                         <p className="mt-2 text-sm">
+
                           {item.stock > 0 ? (
                             <span className="text-green-600">
                               In stock
@@ -560,9 +839,11 @@ export default function ProductDetailsPage() {
                               Out of stock
                             </span>
                           )}
+
                         </p>
 
                       </div>
+
                     </article>
                   </Link>
                 );

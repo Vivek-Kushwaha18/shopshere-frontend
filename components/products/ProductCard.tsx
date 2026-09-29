@@ -21,7 +21,8 @@ export default function ProductCard({
   const primaryImage =
     product.image ||
     images.find(
-      (image) => image.is_primary
+      (image) =>
+        image.is_primary
     )?.image_url ||
     images[0]?.image_url ||
     null;
@@ -33,9 +34,8 @@ export default function ProductCard({
     >
       <article className="overflow-hidden rounded-xl border bg-white transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
 
-        {/* IMAGE */}
-
         <div className="relative aspect-square overflow-hidden bg-gray-100">
+
           {primaryImage ? (
             <img
               src={primaryImage}
@@ -53,16 +53,17 @@ export default function ProductCard({
               Sale
             </span>
           )}
+
         </div>
 
-        {/* CONTENT */}
-
         <div className="p-4">
+
           <h2 className="line-clamp-2 min-h-[48px] text-base font-semibold text-gray-900">
             {product.name}
           </h2>
 
           <div className="mt-3 flex items-center gap-2">
+
             <span className="text-lg font-bold text-gray-900">
               ₹
               {product.price.toLocaleString(
@@ -78,9 +79,11 @@ export default function ProductCard({
                 )}
               </span>
             )}
+
           </div>
 
           <p className="mt-2 text-sm">
+
             {product.stock > 0 ? (
               <span className="text-green-600">
                 In stock
@@ -90,8 +93,11 @@ export default function ProductCard({
                 Out of stock
               </span>
             )}
+
           </p>
+
         </div>
+
       </article>
     </Link>
   );
