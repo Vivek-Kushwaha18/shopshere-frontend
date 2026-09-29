@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   Package,
   FolderTree,
+  Users,
   ArrowRight,
 } from "lucide-react";
 
@@ -61,7 +62,7 @@ export default function AdminDashboardPage() {
           </h1>
 
           <p className="mt-2 text-gray-600">
-            Manage products and categories across ShopSphere.
+            Manage products, categories and users across ShopSphere.
           </p>
         </div>
 
@@ -73,7 +74,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Dashboard Cards */}
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {/* Products */}
           <Link
             href="/admin/dashboard/products"
@@ -134,6 +135,38 @@ export default function AdminDashboardPage() {
 
               <p className="text-sm text-gray-500">
                 Active categories
+              </p>
+            </div>
+          </Link>
+
+          {/* Users */}
+          <Link
+            href="/admin/dashboard/users"
+            className="group"
+          >
+            <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                  <Users className="h-6 w-6 text-gray-700" />
+                </div>
+
+                <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
+              </div>
+
+              <h2 className="mt-5 text-xl font-semibold text-gray-900">
+                Users
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-600">
+                View and manage customers, sellers and admins.
+              </p>
+
+              <div className="mt-5 text-2xl font-bold text-gray-900">
+                Manage
+              </div>
+
+              <p className="text-sm text-gray-500">
+                User management
               </p>
             </div>
           </Link>

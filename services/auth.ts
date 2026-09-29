@@ -1,5 +1,11 @@
 import { apiFetch } from "./api";
 
+export type UserGender =
+  | "male"
+  | "female"
+  | "other"
+  | "prefer_not_to_say";
+
 export interface SignupData {
   full_name: string;
   email: string;
@@ -18,6 +24,7 @@ export interface User {
   full_name: string;
   email: string;
   phone: string | null;
+  gender: UserGender | null;
   role: "customer" | "seller" | "admin";
   is_active: boolean;
   is_verified: boolean;
@@ -46,22 +53,17 @@ export function signup(data: SignupData) {
    SEND VERIFICATION CODE
 ========================= */
 
-export function sendVerificationCode(
-  email: string
-) {
+export function sendVerificationCode(email: string) {
   const normalizedEmail = String(email)
     .trim()
     .toLowerCase();
 
-  return apiFetch(
-    "/auth/send-verification-code",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        email: normalizedEmail,
-      }),
-    }
-  );
+  return apiFetch("/auth/send-verification-code", {
+    method: "POST",
+    body: JSON.stringify({
+      email: normalizedEmail,
+    }),
+  });
 }
 
 /* =========================
@@ -76,8 +78,7 @@ export function verifyEmail(data: {
     .trim()
     .toLowerCase();
 
-  const normalizedCode = String(data.code)
-    .trim();
+  const normalizedCode = String(data.code).trim();
 
   return apiFetch("/auth/verify-email", {
     method: "POST",
@@ -132,18 +133,6 @@ export function forgotPassword(
         email: string;
       }
 ) {
-  /*
-   * Supports both:
-   *
-   * forgotPassword("user@gmail.com")
-   *
-   * and
-   *
-   * forgotPassword({
-   *   email: "user@gmail.com"
-   * })
-   */
-
   const email =
     typeof emailOrData === "string"
       ? emailOrData
@@ -153,15 +142,12 @@ export function forgotPassword(
     .trim()
     .toLowerCase();
 
-  return apiFetch(
-    "/auth/forgot-password",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        email: normalizedEmail,
-      }),
-    }
-  );
+  return apiFetch("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({
+      email: normalizedEmail,
+    }),
+  });
 }
 
 /* =========================
@@ -177,6 +163,67 @@ export function resetPassword(data: {
     body: JSON.stringify({
       token: data.token,
       new_password: data.new_password,
+    }),
+  });
+}
+
+/* =========================
+   GET MY PROFILE
+========================= */
+
+export function getMyProfile() {
+  return apiFetch("/auth/me");
+}
+
+/* =========================
+   UPDATE MY PROFILE
+========================= */
+
+export function updateMyProfile(data: {
+  full_name: string;
+  phone?: string | null;
+  gender?: UserGender | null;
+}) {
+  return apiFetch("/auth/update-profile", {
+    method: "PUT",
+    body: JSON.stringify({
+      full_name: data.full_name.trim(),
+      phone: data.phone
+        ? data.phone.trim()
+        : null,
+      gender: data.gender || null,
+    }),
+  });
+}
+
+/* =========================
+   CHANGE EMAIL
+========================= */
+
+export function changeEmail(newEmail: string) {
+  const normalizedEmail = String(newEmail)
+    .trim()
+    .toLowerCase();
+
+  return apiFetch("/auth/change-email", {
+    method: "POST",
+    body: JSON.stringify({
+      new_email: normalizedEmail,
+    }),
+  });
+}
+
+/* =========================
+   VERIFY EMAIL CHANGE
+========================= */
+
+export function verifyEmailChange(code: string) {
+  const normalizedCode = String(code).trim();
+
+  return apiFetch("/auth/verify-email-change", {
+    method: "POST",
+    body: JSON.stringify({
+      code: normalizedCode,
     }),
   });
 }
