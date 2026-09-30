@@ -7,12 +7,15 @@ import {
   useState,
 } from "react";
 
-import { useSearchParams } from "next/navigation";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+
 import Link from "next/link";
 
 import { Package } from "lucide-react";
 
-import ProductSearch from "@/components/products/ProductSearch";
 import ProductFilters from "@/components/products/ProductFilters";
 import ProductGrid from "@/components/products/ProductGrid";
 
@@ -27,6 +30,7 @@ import {
 } from "@/services/products";
 
 function ProductsContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   // =====================================================
@@ -124,7 +128,7 @@ function ProductsContent() {
   }, [urlCategoryId]);
 
   // =====================================================
-  // LOAD PRODUCTS + CATEGORIES
+  // LOAD REAL PRODUCTS + CATEGORIES
   // =====================================================
 
   useEffect(() => {
@@ -177,16 +181,16 @@ function ProductsContent() {
       search.trim().toLowerCase();
 
     return products.filter((product) => {
+
       // =================================================
       // SEARCH
       // =================================================
 
       const productName =
-        product.name.toLowerCase();
+        product.name?.toLowerCase() || "";
 
       const productDescription =
-        product.description
-          ?.toLowerCase() || "";
+        product.description?.toLowerCase() || "";
 
       const matchesSearch =
         !normalizedSearch ||
@@ -221,6 +225,10 @@ function ProductsContent() {
       const matchesMaxPrice =
         maxPrice === undefined ||
         product.price <= maxPrice;
+
+      // =================================================
+      // FINAL RESULT
+      // =================================================
 
       return (
         matchesSearch &&
@@ -258,23 +266,50 @@ function ProductsContent() {
     setSelectedCategory(null);
     setMinPrice(undefined);
     setMaxPrice(undefined);
+
+    const params =
+      new URLSearchParams(
+        searchParams.toString()
+      );
+
+    params.delete("category");
+
+    router.push(
+      params.toString()
+        ? `/products?${params.toString()}`
+        : "/products"
+    );
   };
 
   // =====================================================
-  // LOADING
+  // CATEGORY CHANGE
   // =====================================================
 
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-7xl px-4 py-10">
-        <div className="flex min-h-[300px] items-center justify-center">
-          <p className="text-gray-500">
-            Loading products...
-          </p>
-        </div>
-      </main>
+  const handleCategoryChange = (
+    categoryId: number | null
+  ) => {
+    setSelectedCategory(categoryId);
+
+    const params =
+      new URLSearchParams(
+        searchParams.toString()
+      );
+
+    if (categoryId !== null) {
+      params.set(
+        "category",
+        String(categoryId)
+      );
+    } else {
+      params.delete("category");
+    }
+
+    router.push(
+      params.toString()
+        ? `/products?${params.toString()}`
+        : "/products"
     );
-  }
+  };
 
   // =====================================================
   // ERROR
@@ -304,51 +339,6 @@ function ProductsContent() {
     <main className="mx-auto max-w-7xl px-4 py-10">
 
       {/* =================================================
-          HEADER
-      ================================================= */}
-
-      <section className="mb-8">
-        <p className="text-sm font-medium text-gray-500">
-          ShopSphere
-        </p>
-
-        <h1 className="mt-1 text-3xl font-bold text-gray-900">
-          {selectedCategoryName
-            ? selectedCategoryName
-            : search
-              ? "Search Results"
-              : "All Products"}
-        </h1>
-
-        <p className="mt-2 text-gray-500">
-          {selectedCategoryName
-            ? `Explore products from ${selectedCategoryName}.`
-            : search
-              ? `Showing products matching "${search}".`
-              : "Explore all products available on ShopSphere."}
-        </p>
-
-        <p className="mt-2 text-sm text-gray-500">
-          {filteredProducts.length}{" "}
-          {filteredProducts.length === 1
-            ? "product"
-            : "products"}
-        </p>
-      </section>
-
-      {/* =================================================
-          SEARCH
-      ================================================= */}
-
-      <div className="mb-8">
-        <ProductSearch
-          onSearch={(value) => {
-            setSearch(value);
-          }}
-        />
-      </div>
-
-      {/* =================================================
           FILTERS + PRODUCTS
       ================================================= */}
 
@@ -367,7 +357,7 @@ function ProductsContent() {
             minPrice={minPrice}
             maxPrice={maxPrice}
             onCategoryChange={
-              setSelectedCategory
+              handleCategoryChange
             }
             onPriceChange={(
               min,
@@ -393,19 +383,23 @@ function ProductsContent() {
               <Package className="mx-auto h-12 w-12 text-gray-300" />
 
               <h2 className="mt-4 text-xl font-semibold text-gray-900">
+
                 {selectedCategoryName
                   ? `No products found in ${selectedCategoryName}`
                   : search
                     ? "No matching products found"
                     : "No products found"}
+
               </h2>
 
               <p className="mt-2 text-sm text-gray-500">
+
                 {selectedCategoryName
                   ? `There are currently no products available in ${selectedCategoryName}.`
                   : search
                     ? `No products matched "${search}".`
                     : "There are currently no products available."}
+
               </p>
 
               {(search ||
@@ -425,6 +419,7 @@ function ProductsContent() {
             />
           )}
         </div>
+
       </div>
     </main>
   );
@@ -436,17 +431,7 @@ function ProductsContent() {
 
 export default function ProductsPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="mx-auto max-w-7xl px-4 py-10">
-          <div className="flex min-h-[300px] items-center justify-center">
-            <p className="text-gray-500">
-              Loading products...
-            </p>
-          </div>
-        </main>
-      }
-    >
+    <Suspense fallback={null}>
       <ProductsContent />
     </Suspense>
   );

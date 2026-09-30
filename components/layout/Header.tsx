@@ -33,6 +33,11 @@ import {
   type Category,
 } from "@/services/categories";
 
+import {
+  getProducts,
+  type Product,
+} from "@/services/products";
+
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
@@ -52,12 +57,22 @@ export default function Header() {
     useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
+
   const [search, setSearch] = useState("");
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [searchSuggestions, setSearchSuggestions] =
+    useState<Product[]>([]);
+  const [searchFocused, setSearchFocused] =
+    useState(false);
 
   const profileRef =
     useRef<HTMLDivElement>(null);
 
   const categoriesRef =
+    useRef<HTMLDivElement>(null);
+
+  const searchRef =
     useRef<HTMLDivElement>(null);
 
   // =====================================================
@@ -142,6 +157,29 @@ export default function Header() {
   }, []);
 
   // =====================================================
+  // LOAD PRODUCTS FOR LIVE SEARCH
+  // =====================================================
+
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        const result = await getProducts();
+
+        setProducts(result);
+      } catch (error) {
+        console.error(
+          "Header products loading error:",
+          error
+        );
+
+        setProducts([]);
+      }
+    }
+
+    loadProducts();
+  }, []);
+
+  // =====================================================
   // CLOSE DROPDOWNS WHEN CLICKING OUTSIDE
   // =====================================================
 
@@ -163,6 +201,13 @@ export default function Header() {
         !categoriesRef.current.contains(target)
       ) {
         setCategoriesOpen(false);
+      }
+
+      if (
+        searchRef.current &&
+        !searchRef.current.contains(target)
+      ) {
+        setSearchFocused(false);
       }
     }
 
@@ -275,7 +320,231 @@ export default function Header() {
   }
 
   // =====================================================
-  // SEARCH
+  // LEVENSHTEIN DISTANCE
+  // =====================================================
+
+  function levenshteinDistance(
+    first: string,
+    second: string
+  ) {
+    const matrix = Array.from(
+      {
+        length: second.length + 1,
+      },
+      () =>
+        Array(first.length + 1).fill(0)
+    );
+
+    for (
+      let index = 0;
+      index <= first.length;
+      index++
+    ) {
+      matrix[0][index] = index;
+    }
+
+    for (
+      let index = 0;
+      index <= second.length;
+      index++
+    ) {
+      matrix[index][0] = index;
+    }
+
+    for (
+      let row = 1;
+      row <= second.length;
+      row++
+    ) {
+      for (
+        let column = 1;
+        column <= first.length;
+        column++
+      ) {
+        if (
+          second[row - 1].toLowerCase() ===
+          first[column - 1].toLowerCase()
+        ) {
+          matrix[row][column] =
+            matrix[row - 1][column - 1];
+        } else {
+          matrix[row][column] =
+            Math.min(
+              matrix[row - 1][column] + 1,
+              matrix[row][column - 1] + 1,
+              matrix[row - 1][column - 1] + 1
+            );
+        }
+      }
+    }
+
+    return matrix[second.length][first.length];
+  }
+
+  // =====================================================
+  // GET SEARCH SUGGESTIONS
+  // =====================================================
+
+  function getSearchSuggestions(
+    value: string
+  ) {
+    const searchValue =
+      value.trim().toLowerCase();
+
+    if (!searchValue) {
+      return [];
+    }
+
+    const suggestions = products
+      .map((product) => {
+        const productName =
+          product.name?.toLowerCase() || "";
+
+        const productDescription =
+          product.description?.toLowerCase() || "";
+
+        let score = 0;
+
+        // Exact match
+        if (
+          productName === searchValue
+        ) {
+          score += 100;
+        }
+
+        // Starts with search
+        if (
+          productName.startsWith(searchValue)
+        ) {
+          score += 80;
+        }
+
+        // Contains search
+        if (
+          productName.includes(searchValue)
+        ) {
+          score += 60;
+        }
+
+        // Description match
+        if (
+          productDescription.includes(
+            searchValue
+          )
+        ) {
+          score += 30;
+        }
+
+        // Spelling match
+        const distance =
+          levenshteinDistance(
+            searchValue,
+            productName
+          );
+
+        if (
+          distance <=
+          Math.max(
+            2,
+            Math.floor(
+              productName.length * 0.3
+            )
+          )
+        ) {
+          score += 40 - distance * 5;
+        }
+
+        return {
+          product,
+          score,
+        };
+      })
+      .filter(
+        (item) => item.score > 0
+      )
+      .sort(
+        (first, second) =>
+          second.score - first.score
+      )
+      .slice(0, 6)
+      .map(
+        (item) => item.product
+      );
+
+    return suggestions;
+  }
+
+  // =====================================================
+  // SEARCH CHANGE
+  // =====================================================
+
+  function handleSearchChange(
+    value: string
+  ) {
+    setSearch(value);
+
+    if (!value.trim()) {
+      setSearchSuggestions([]);
+      setSearchFocused(false);
+
+      // IMPORTANT:
+      // Do not navigate while typing.
+      return;
+    }
+
+    const suggestions =
+      getSearchSuggestions(value);
+
+    setSearchSuggestions(
+      suggestions
+    );
+
+    setSearchFocused(true);
+
+    // IMPORTANT:
+    // Do not router.push() here.
+    // Navigation happens only when Enter is pressed.
+  }
+
+  // =====================================================
+  // SEARCH FOCUS
+  // =====================================================
+
+  function handleSearchFocus() {
+    if (!search.trim()) {
+      return;
+    }
+
+    const suggestions =
+      getSearchSuggestions(search);
+
+    setSearchSuggestions(
+      suggestions
+    );
+
+    setSearchFocused(true);
+  }
+
+  // =====================================================
+  // SUGGESTION CLICK
+  // =====================================================
+
+  function handleSuggestionClick(
+    product: Product
+  ) {
+    setSearch(product.name);
+
+    setSearchSuggestions([]);
+
+    setSearchFocused(false);
+
+    router.push(
+      `/products/${product.id}`
+    );
+  }
+
+  // =====================================================
+  // SEARCH SUBMIT
   // =====================================================
 
   function handleSearch(
@@ -283,18 +552,23 @@ export default function Header() {
   ) {
     event.preventDefault();
 
-    const trimmedSearch = search.trim();
+    const trimmedSearch =
+      search.trim();
 
     if (!trimmedSearch) {
       router.push("/products");
       return;
     }
 
+    // Navigation happens ONLY when
+    // the user submits the form / presses Enter.
     router.push(
       `/products?search=${encodeURIComponent(
         trimmedSearch
       )}`
     );
+
+    setSearchFocused(false);
   }
 
   // =====================================================
@@ -339,6 +613,7 @@ export default function Header() {
         ================================================= */}
 
         <nav className="hidden items-center gap-6 md:flex">
+
           {/* HOME */}
 
           <Link
@@ -383,7 +658,8 @@ export default function Header() {
               type="button"
               onClick={() =>
                 setCategoriesOpen(
-                  (previous) => !previous
+                  (previous) =>
+                    !previous
                 )
               }
               className={`relative flex items-center gap-1 pb-1 text-sm font-medium transition-colors ${
@@ -391,7 +667,9 @@ export default function Header() {
                   ? "text-black"
                   : "text-gray-600 hover:text-black"
               }`}
-              aria-expanded={categoriesOpen}
+              aria-expanded={
+                categoriesOpen
+              }
               aria-haspopup="menu"
             >
               Categories
@@ -404,7 +682,9 @@ export default function Header() {
                 }`}
               />
 
-              {isActive("/categories") && (
+              {isActive(
+                "/categories"
+              ) && (
                 <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-black" />
               )}
             </button>
@@ -427,29 +707,38 @@ export default function Header() {
                     <div className="px-3 py-6 text-center text-sm text-gray-500">
                       Loading categories...
                     </div>
-                  ) : categories.length === 0 ? (
+                  ) : categories.length ===
+                    0 ? (
                     <div className="px-3 py-6 text-center text-sm text-gray-500">
                       No categories available.
                     </div>
                   ) : (
-                    categories.map((category) => (
-                      <Link
-                        key={category.id}
-                        href={`/categories/${category.id}`}
-                        onClick={() =>
-                          setCategoriesOpen(false)
-                        }
-                        className="group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
-                      >
-                        <span className="font-medium">
-                          {category.name}
-                        </span>
+                    categories.map(
+                      (category) => (
+                        <Link
+                          key={
+                            category.id
+                          }
+                          href={`/categories/${category.id}`}
+                          onClick={() =>
+                            setCategoriesOpen(
+                              false
+                            )
+                          }
+                          className="group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
+                        >
+                          <span className="font-medium">
+                            {
+                              category.name
+                            }
+                          </span>
 
-                        <span className="text-gray-400 transition-transform group-hover:translate-x-1">
-                          →
-                        </span>
-                      </Link>
-                    ))
+                          <span className="text-gray-400 transition-transform group-hover:translate-x-1">
+                            →
+                          </span>
+                        </Link>
+                      )
+                    )
                   )}
                 </div>
               </div>
@@ -461,24 +750,31 @@ export default function Header() {
           <Link
             href="/ai-assistant"
             className={`relative pb-1 text-sm font-medium transition-colors ${
-              isActive("/ai-assistant")
+              isActive(
+                "/ai-assistant"
+              )
                 ? "text-black"
                 : "text-gray-600 hover:text-black"
             }`}
           >
             AI Assistant
 
-            {isActive("/ai-assistant") && (
+            {isActive(
+              "/ai-assistant"
+            ) && (
               <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-black" />
             )}
           </Link>
         </nav>
 
         {/* =================================================
-            SEARCH
+            DESKTOP SEARCH
         ================================================= */}
 
-        <div className="hidden w-56 lg:block xl:w-64">
+        <div
+          ref={searchRef}
+          className="relative hidden w-56 lg:block xl:w-64"
+        >
           <form
             onSubmit={handleSearch}
             className="relative"
@@ -488,12 +784,74 @@ export default function Header() {
             <Input
               value={search}
               onChange={(event) =>
-                setSearch(event.target.value)
+                handleSearchChange(
+                  event.target.value
+                )
+              }
+              onFocus={
+                handleSearchFocus
               }
               placeholder="Search products..."
               className="h-9 rounded-lg pl-9"
             />
           </form>
+
+          {/* SEARCH SUGGESTIONS */}
+
+          {searchFocused &&
+            searchSuggestions.length >
+              0 && (
+              <div className="absolute left-0 right-0 top-11 z-50 overflow-hidden rounded-xl border bg-white shadow-xl">
+
+                {searchSuggestions.map(
+                  (product) => (
+                    <button
+                      key={
+                        product.id
+                      }
+                      type="button"
+                      onClick={() =>
+                        handleSuggestionClick(
+                          product
+                        )
+                      }
+                      className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-gray-100"
+                    >
+                      {product.image ? (
+                        <img
+                          src={
+                            product.image
+                          }
+                          alt={
+                            product.name
+                          }
+                          className="h-10 w-10 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
+                          <Search className="h-4 w-4 text-gray-400" />
+                        </div>
+                      )}
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {
+                            product.name
+                          }
+                        </p>
+
+                        <p className="truncate text-xs text-gray-500">
+                          ₹
+                          {
+                            product.price
+                          }
+                        </p>
+                      </div>
+                    </button>
+                  )
+                )}
+              </div>
+            )}
         </div>
 
         {/* =================================================
@@ -512,6 +870,7 @@ export default function Header() {
           >
             <Link href="/cart">
               <ShoppingCart className="h-5 w-5" />
+
               <span className="sr-only">
                 Shopping cart
               </span>
@@ -549,6 +908,7 @@ export default function Header() {
               ref={profileRef}
               className="relative ml-1"
             >
+
               {/* PROFILE BUTTON */}
 
               <Button
@@ -556,11 +916,14 @@ export default function Header() {
                 variant="ghost"
                 onClick={() =>
                   setProfileOpen(
-                    (previous) => !previous
+                    (previous) =>
+                      !previous
                   )
                 }
                 className="h-auto gap-2 rounded-full px-2 py-1.5"
-                aria-expanded={profileOpen}
+                aria-expanded={
+                  profileOpen
+                }
                 aria-haspopup="menu"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
@@ -628,10 +991,14 @@ export default function Header() {
                     <Link
                       href="/profile"
                       onClick={() =>
-                        setProfileOpen(false)
+                        setProfileOpen(
+                          false
+                        )
                       }
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                        isActive("/profile")
+                        isActive(
+                          "/profile"
+                        )
                           ? "bg-gray-100 font-semibold text-black"
                           : "text-gray-700 hover:bg-gray-100 hover:text-black"
                       }`}
@@ -651,12 +1018,16 @@ export default function Header() {
 
                     {/* DASHBOARD */}
 
-                    {(user?.role === "seller" ||
-                      user?.role === "admin") && (
+                    {(user?.role ===
+                      "seller" ||
+                      user?.role ===
+                        "admin") && (
                       <Link
                         href={getDashboardUrl()}
                         onClick={() =>
-                          setProfileOpen(false)
+                          setProfileOpen(
+                            false
+                          )
                         }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                       >
@@ -679,7 +1050,9 @@ export default function Header() {
                     <Link
                       href="/orders"
                       onClick={() =>
-                        setProfileOpen(false)
+                        setProfileOpen(
+                          false
+                        )
                       }
                       className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                     >
@@ -701,7 +1074,9 @@ export default function Header() {
                     <Link
                       href="/wishlist"
                       onClick={() =>
-                        setProfileOpen(false)
+                        setProfileOpen(
+                          false
+                        )
                       }
                       className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                     >
@@ -724,7 +1099,9 @@ export default function Header() {
 
                     <button
                       type="button"
-                      onClick={handleLogout}
+                      onClick={
+                        handleLogout
+                      }
                       className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition hover:bg-red-50"
                     >
                       <LogOut className="h-4 w-4" />
@@ -755,7 +1132,8 @@ export default function Header() {
           className="rounded-lg p-2 transition hover:bg-gray-100 md:hidden"
           onClick={() =>
             setMobileMenu(
-              (previous) => !previous
+              (previous) =>
+                !previous
             )
           }
           aria-label={
@@ -782,24 +1160,93 @@ export default function Header() {
 
             {/* MOBILE SEARCH */}
 
-            <form
-              onSubmit={(event) => {
-                handleSearch(event);
-                closeMobileMenu();
-              }}
+            <div
+              ref={searchRef}
               className="relative mb-5"
             >
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <form
+                onSubmit={(event) => {
+                  handleSearch(event);
+                  closeMobileMenu();
+                }}
+                className="relative"
+              >
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
-              <Input
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
-                placeholder="Search products..."
-                className="h-10 pl-9"
-              />
-            </form>
+                <Input
+                  value={search}
+                  onChange={(event) =>
+                    handleSearchChange(
+                      event.target.value
+                    )
+                  }
+                  onFocus={
+                    handleSearchFocus
+                  }
+                  placeholder="Search products..."
+                  className="h-10 pl-9"
+                />
+              </form>
+
+              {/* MOBILE SEARCH SUGGESTIONS */}
+
+              {searchFocused &&
+                searchSuggestions.length >
+                  0 && (
+                  <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-xl border bg-white shadow-xl">
+
+                    {searchSuggestions.map(
+                      (product) => (
+                        <button
+                          key={
+                            product.id
+                          }
+                          type="button"
+                          onClick={() => {
+                            handleSuggestionClick(
+                              product
+                            );
+
+                            closeMobileMenu();
+                          }}
+                          className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-gray-100"
+                        >
+                          {product.image ? (
+                            <img
+                              src={
+                                product.image
+                              }
+                              alt={
+                                product.name
+                              }
+                              className="h-10 w-10 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
+                              <Search className="h-4 w-4 text-gray-400" />
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-gray-900">
+                              {
+                                product.name
+                              }
+                            </p>
+
+                            <p className="truncate text-xs text-gray-500">
+                              ₹
+                              {
+                                product.price
+                              }
+                            </p>
+                          </div>
+                        </button>
+                      )
+                    )}
+                  </div>
+                )}
+            </div>
 
             <nav className="flex flex-col gap-1">
 
@@ -807,7 +1254,9 @@ export default function Header() {
 
               <Link
                 href="/"
-                onClick={closeMobileMenu}
+                onClick={
+                  closeMobileMenu
+                }
                 className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                   isActive("/")
                     ? "bg-gray-100 text-black"
@@ -821,9 +1270,13 @@ export default function Header() {
 
               <Link
                 href="/products"
-                onClick={closeMobileMenu}
+                onClick={
+                  closeMobileMenu
+                }
                 className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                  isActive("/products")
+                  isActive(
+                    "/products"
+                  )
                     ? "bg-gray-100 text-black"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
@@ -838,11 +1291,14 @@ export default function Header() {
                   type="button"
                   onClick={() =>
                     setMobileCategoriesOpen(
-                      (previous) => !previous
+                      (previous) =>
+                        !previous
                     )
                   }
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
-                    isActive("/categories")
+                    isActive(
+                      "/categories"
+                    )
                       ? "bg-gray-100 text-black"
                       : "text-gray-700 hover:bg-gray-100"
                   }`}
@@ -867,7 +1323,8 @@ export default function Header() {
                       <p className="px-3 py-3 text-sm text-gray-500">
                         Loading categories...
                       </p>
-                    ) : categories.length === 0 ? (
+                    ) : categories.length ===
+                      0 ? (
                       <p className="px-3 py-3 text-sm text-gray-500">
                         No categories available.
                       </p>
@@ -875,7 +1332,9 @@ export default function Header() {
                       categories.map(
                         (category) => (
                           <Link
-                            key={category.id}
+                            key={
+                              category.id
+                            }
                             href={`/categories/${category.id}`}
                             onClick={
                               closeMobileMenu
@@ -883,7 +1342,9 @@ export default function Header() {
                             className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-white"
                           >
                             <span>
-                              {category.name}
+                              {
+                                category.name
+                              }
                             </span>
 
                             <span className="text-xs text-gray-400">
@@ -913,9 +1374,13 @@ export default function Header() {
 
               <Link
                 href="/ai-assistant"
-                onClick={closeMobileMenu}
+                onClick={
+                  closeMobileMenu
+                }
                 className={`rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                  isActive("/ai-assistant")
+                  isActive(
+                    "/ai-assistant"
+                  )
                     ? "bg-gray-100 text-black"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
@@ -927,7 +1392,9 @@ export default function Header() {
 
               <Link
                 href="/cart"
-                onClick={closeMobileMenu}
+                onClick={
+                  closeMobileMenu
+                }
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
               >
                 <ShoppingCart className="h-4 w-4" />
@@ -940,7 +1407,9 @@ export default function Header() {
 
                   <Link
                     href="/login"
-                    onClick={closeMobileMenu}
+                    onClick={
+                      closeMobileMenu
+                    }
                     className="rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     Login
@@ -950,7 +1419,9 @@ export default function Header() {
 
                   <Link
                     href="/signup"
-                    onClick={closeMobileMenu}
+                    onClick={
+                      closeMobileMenu
+                    }
                     className="rounded-lg bg-black px-3 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
                   >
                     Sign Up
@@ -995,9 +1466,13 @@ export default function Header() {
 
                   <Link
                     href="/profile"
-                    onClick={closeMobileMenu}
+                    onClick={
+                      closeMobileMenu
+                    }
                     className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                      isActive("/profile")
+                      isActive(
+                        "/profile"
+                      )
                         ? "bg-gray-100 text-black"
                         : "text-gray-700 hover:bg-gray-100"
                     }`}
@@ -1008,11 +1483,15 @@ export default function Header() {
 
                   {/* DASHBOARD */}
 
-                  {(user?.role === "seller" ||
-                    user?.role === "admin") && (
+                  {(user?.role ===
+                    "seller" ||
+                    user?.role ===
+                      "admin") && (
                     <Link
                       href={getDashboardUrl()}
-                      onClick={closeMobileMenu}
+                      onClick={
+                        closeMobileMenu
+                      }
                       className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                     >
                       <LayoutDashboard className="h-4 w-4" />
@@ -1024,7 +1503,9 @@ export default function Header() {
 
                   <Link
                     href="/orders"
-                    onClick={closeMobileMenu}
+                    onClick={
+                      closeMobileMenu
+                    }
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <Package className="h-4 w-4" />
@@ -1035,7 +1516,9 @@ export default function Header() {
 
                   <Link
                     href="/wishlist"
-                    onClick={closeMobileMenu}
+                    onClick={
+                      closeMobileMenu
+                    }
                     className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                   >
                     <Heart className="h-4 w-4" />
@@ -1048,7 +1531,9 @@ export default function Header() {
 
                   <button
                     type="button"
-                    onClick={handleLogout}
+                    onClick={
+                      handleLogout
+                    }
                     className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50"
                   >
                     <LogOut className="h-4 w-4" />

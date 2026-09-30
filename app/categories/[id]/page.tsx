@@ -122,6 +122,10 @@ export default function CategoryProductsPage() {
     );
   }
 
+  // =====================================================
+  // UI
+  // =====================================================
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
 
@@ -136,35 +140,6 @@ export default function CategoryProductsPage() {
         <ArrowLeft className="h-4 w-4" />
         All Products
       </Link>
-
-      {/* =================================================
-          CATEGORY HEADER
-      ================================================== */}
-
-      <section className="mb-8">
-
-        <p className="text-sm font-medium text-gray-500">
-          Category
-        </p>
-
-        <h1 className="mt-1 text-3xl font-bold text-gray-900">
-          Category Products
-        </h1>
-
-        <p className="mt-2 text-sm text-gray-500">
-          Showing products from category ID{" "}
-          {categoryId}
-        </p>
-
-        <p className="mt-1 text-sm text-gray-500">
-          {products.length}{" "}
-          {products.length === 1
-            ? "product"
-            : "products"}{" "}
-          found
-        </p>
-
-      </section>
 
       {/* =================================================
           NO PRODUCTS
