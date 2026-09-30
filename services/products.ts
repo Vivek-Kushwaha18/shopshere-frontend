@@ -110,31 +110,70 @@ function normalizeProduct(
 }
 
 // =====================================================
+// PRODUCT CACHE
+// Keeps products available during navigation
+// =====================================================
+
+let productsCache: Product[] | null =
+  null;
+
+let productsRequest:
+  Promise<Product[]> | null = null;
+
+// =====================================================
 // GET ALL PRODUCTS
 // =====================================================
 
 export async function getProducts(): Promise<Product[]> {
-  const response =
-    await apiFetch(
-      "/api/products/"
-    );
-
-  if (!response.success) {
-    throw new Error(
-      response.data?.detail ||
-        "Unable to fetch products."
-    );
+  // Return cached products immediately
+  // if they have already been loaded.
+  if (productsCache !== null) {
+    return productsCache;
   }
 
-  if (!Array.isArray(response.data)) {
-    throw new Error(
-      "Invalid products response."
-    );
+  // If another request is already running,
+  // use the same request instead of creating
+  // another API request.
+  if (productsRequest !== null) {
+    return productsRequest;
   }
 
-  return response.data.map(
-    normalizeProduct
-  );
+  productsRequest = (async () => {
+    try {
+      const response =
+        await apiFetch(
+          "/api/products/"
+        );
+
+      if (!response.success) {
+        throw new Error(
+          response.data?.detail ||
+            "Unable to fetch products."
+        );
+      }
+
+      if (!Array.isArray(response.data)) {
+        throw new Error(
+          "Invalid products response."
+        );
+      }
+
+      const products =
+        response.data.map(
+          normalizeProduct
+        );
+
+      // Save successful API response
+      productsCache = products;
+
+      return products;
+    } finally {
+      // Allow a new request if needed
+      productsRequest = null;
+    }
+  })();
+
+  return productsRequest;
 }
 
 // =====================================================
@@ -259,6 +298,10 @@ export async function createProduct(
     );
   }
 
+  // New product means the old cache
+  // may no longer be complete.
+  productsCache = null;
+
   return normalizeProduct(
     response.data
   );
@@ -334,6 +377,10 @@ export async function updateProduct(
     );
   }
 
+  // Product changed, so refresh the
+  // product list next time it is requested.
+  productsCache = null;
+
   return normalizeProduct(
     response.data
   );
@@ -365,6 +412,9 @@ export async function updateProductStock(
     );
   }
 
+  // Stock changed, invalidate cache.
+  productsCache = null;
+
   return normalizeProduct(
     response.data
   );
@@ -391,6 +441,9 @@ export async function activateProduct(
         "Unable to activate product."
     );
   }
+
+  // Product status changed.
+  productsCache = null;
 
   return normalizeProduct(
     response.data
@@ -419,6 +472,9 @@ export async function deactivateProduct(
     );
   }
 
+  // Product status changed.
+  productsCache = null;
+
   return normalizeProduct(
     response.data
   );
@@ -445,6 +501,9 @@ export async function deleteProduct(
         "Unable to delete product."
     );
   }
+
+  // Product list changed.
+  productsCache = null;
 }
 
 // =====================================================
@@ -469,6 +528,9 @@ export async function setPrimaryProductImage(
         "Unable to change primary image."
     );
   }
+
+  // Image changed.
+  productsCache = null;
 
   return normalizeProduct(
     response.data
@@ -499,6 +561,9 @@ export async function replaceProductImages(
     );
   }
 
+  // Images changed.
+  productsCache = null;
+
   return normalizeProduct(
     response.data
   );
@@ -526,4 +591,7 @@ export async function deleteProductImage(
         "Unable to delete product image."
     );
   }
+
+  // Images changed.
+  productsCache = null;
 }
