@@ -20,16 +20,15 @@ import {
 } from "@/services/products";
 
 export default function Home() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] =
-    useState(true);
+  const [products, setProducts] =
+    useState<Product[]>([]);
+
   const [productsError, setProductsError] =
     useState("");
 
   useEffect(() => {
     async function loadProducts() {
       try {
-        setLoadingProducts(true);
         setProductsError("");
 
         const result = await getProducts();
@@ -46,8 +45,6 @@ export default function Home() {
             ? error.message
             : "Unable to load products."
         );
-      } finally {
-        setLoadingProducts(false);
       }
     }
 
@@ -73,42 +70,28 @@ export default function Home() {
         </div>
 
         {/* =================================================
-            LOADING
-        ================================================== */}
-
-        {loadingProducts && (
-          <div className="flex min-h-[250px] items-center justify-center">
-            <p className="text-sm text-muted-foreground">
-              Loading products...
-            </p>
-          </div>
-        )}
-
-        {/* =================================================
             ERROR
         ================================================== */}
 
-        {!loadingProducts &&
-          productsError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
+        {productsError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
 
-              <h2 className="font-semibold">
-                Unable to load products
-              </h2>
+            <h2 className="font-semibold">
+              Unable to load products
+            </h2>
 
-              <p className="mt-2 text-sm">
-                {productsError}
-              </p>
+            <p className="mt-2 text-sm">
+              {productsError}
+            </p>
 
-            </div>
-          )}
+          </div>
+        )}
 
         {/* =================================================
             EMPTY PRODUCTS
         ================================================== */}
 
-        {!loadingProducts &&
-          !productsError &&
+        {!productsError &&
           products.length === 0 && (
             <div className="rounded-xl border p-10 text-center">
 
@@ -129,8 +112,7 @@ export default function Home() {
             PRODUCTS
         ================================================== */}
 
-        {!loadingProducts &&
-          !productsError &&
+        {!productsError &&
           products.length > 0 && (
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
