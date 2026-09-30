@@ -67,7 +67,7 @@ export default function AddProductPage() {
   // =========================================================
 
   const [categories, setCategories] =
-    useState<Category[]>([]);
+    useState<Category[] | null>(null);
 
   const [loadingCategories, setLoadingCategories] =
     useState(true);
@@ -102,12 +102,16 @@ export default function AddProductPage() {
   // =========================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadCategories() {
       try {
-        setLoadingCategories(true);
-
         const data =
           await getCategories();
+
+        if (!isMounted) {
+          return;
+        }
 
         setCategories(
           data.filter(
@@ -115,23 +119,34 @@ export default function AddProductPage() {
               category.is_active !== false
           )
         );
+
+        setLoadingCategories(false);
       } catch (error) {
         console.error(
           "Failed to load categories:",
           error
         );
 
+        if (!isMounted) {
+          return;
+        }
+
+        setCategories([]);
+        setLoadingCategories(false);
+
         await Swal.fire(
           "Error",
           "Unable to load categories.",
           "error"
         );
-      } finally {
-        setLoadingCategories(false);
       }
     }
 
     loadCategories();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // =========================================================
@@ -888,7 +903,7 @@ export default function AddProductPage() {
                       : "Select category"}
                   </option>
 
-                  {categories.map(
+                  {categories?.map(
                     (category) => (
                       <option
                         key={

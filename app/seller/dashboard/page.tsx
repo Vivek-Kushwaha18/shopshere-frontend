@@ -17,12 +17,60 @@ import {
 
 import { getStoredUser } from "@/services/auth";
 
+// =====================================================
+// SELLER DASHBOARD CACHE
+// =====================================================
+
+let sellerProductsCache: Product[] | null = null;
+
+let sellerProductsRequest: Promise<Product[]> | null = null;
+
+async function getCachedSellerProducts() {
+  // Return cached products immediately
+  if (sellerProductsCache !== null) {
+    return sellerProductsCache;
+  }
+
+  // Reuse existing request if one is already running
+  if (sellerProductsRequest) {
+    return sellerProductsRequest;
+  }
+
+  sellerProductsRequest = getMyProducts()
+    .then((result) => {
+      sellerProductsCache = result;
+
+      return result;
+    })
+    .finally(() => {
+      sellerProductsRequest = null;
+    });
+
+  return sellerProductsRequest;
+}
+
+// =====================================================
+// INVALIDATE SELLER DASHBOARD CACHE
+// =====================================================
+
+export function clearSellerDashboardCache() {
+  sellerProductsCache = null;
+}
+
 export default function SellerDashboardPage() {
+  // =====================================================
+  // INITIAL STATE
+  // =====================================================
+
   const [products, setProducts] =
-    useState<Product[]>([]);
+    useState<Product[] | null>(
+      sellerProductsCache
+    );
 
   const [loading, setLoading] =
-    useState(true);
+    useState(
+      sellerProductsCache === null
+    );
 
   const [error, setError] =
     useState("");
@@ -35,9 +83,10 @@ export default function SellerDashboardPage() {
   // =====================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadDashboard() {
       try {
-        setLoading(true);
         setError("");
 
         // -------------------------------------------------
@@ -46,35 +95,52 @@ export default function SellerDashboardPage() {
 
         const user = getStoredUser();
 
-        if (user?.full_name) {
+        if (
+          isMounted &&
+          user?.full_name
+        ) {
           setSellerName(user.full_name);
         }
 
         // -------------------------------------------------
-        // GET SELLER'S PRODUCTS
+        // USE CACHE OR GET SELLER PRODUCTS
         // -------------------------------------------------
 
         const result =
-          await getMyProducts();
+          await getCachedSellerProducts();
+
+        if (!isMounted) {
+          return;
+        }
 
         setProducts(result);
+        setLoading(false);
       } catch (error) {
         console.error(
           "Seller dashboard error:",
           error
         );
 
+        if (!isMounted) {
+          return;
+        }
+
         setError(
           error instanceof Error
             ? error.message
             : "Unable to load seller dashboard."
         );
-      } finally {
+
+        setProducts([]);
         setLoading(false);
       }
     }
 
     loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // =====================================================
@@ -82,37 +148,17 @@ export default function SellerDashboardPage() {
   // =====================================================
 
   const totalProducts =
-    products.length;
+    products?.length ?? 0;
 
   const inStockProducts =
-    products.filter(
+    products?.filter(
       (product) => product.stock > 0
-    ).length;
+    ).length ?? 0;
 
   const outOfStockProducts =
-    products.filter(
+    products?.filter(
       (product) => product.stock <= 0
-    ).length;
-
-  // =====================================================
-  // LOADING
-  // =====================================================
-
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-7xl px-4 py-10">
-        <div className="flex min-h-[400px] items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-black" />
-
-            <p className="mt-4 text-sm text-gray-500">
-              Loading seller dashboard...
-            </p>
-          </div>
-        </div>
-      </main>
-    );
-  }
+    ).length ?? 0;
 
   // =====================================================
   // ERROR
@@ -132,9 +178,10 @@ export default function SellerDashboardPage() {
 
           <button
             type="button"
-            onClick={() =>
-              window.location.reload()
-            }
+            onClick={() => {
+              clearSellerDashboardCache();
+              window.location.reload();
+            }}
             className="mt-5 rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
           >
             Try Again
@@ -142,6 +189,17 @@ export default function SellerDashboardPage() {
         </div>
       </main>
     );
+  }
+
+  // =====================================================
+  // WAIT ONLY FOR FIRST REQUEST
+  // =====================================================
+
+  if (
+    loading ||
+    products === null
+  ) {
+    return null;
   }
 
   return (

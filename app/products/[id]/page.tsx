@@ -64,22 +64,32 @@ export default function ProductDetailsPage() {
   // =====================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadProduct() {
       if (
         !Number.isInteger(productId) ||
         productId <= 0
       ) {
+        if (!isMounted) {
+          return;
+        }
+
         setError("Invalid product.");
         setLoading(false);
+
         return;
       }
 
       try {
-        setLoading(true);
         setError("");
 
         const productData =
           await getProduct(productId);
+
+        if (!isMounted) {
+          return;
+        }
 
         setProduct(productData);
         setQuantity(1);
@@ -114,6 +124,10 @@ export default function ProductDetailsPage() {
             productData.category_id
           );
 
+        if (!isMounted) {
+          return;
+        }
+
         setRelatedProducts(
           categoryProducts.filter(
             (item) =>
@@ -126,18 +140,92 @@ export default function ProductDetailsPage() {
           error
         );
 
+        if (!isMounted) {
+          return;
+        }
+
         setError(
           error instanceof Error
             ? error.message
             : "Unable to load product."
         );
       } finally {
+        if (!isMounted) {
+          return;
+        }
+
         setLoading(false);
       }
     }
 
     loadProduct();
+
+    return () => {
+      isMounted = false;
+    };
   }, [productId]);
+
+  // =====================================================
+  // WAIT FOR INITIAL DATA
+  // =====================================================
+
+  if (loading || product === null) {
+    return null;
+  }
+
+  // =====================================================
+  // ERROR
+  // =====================================================
+
+  if (error) {
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-10">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
+
+          <h1 className="text-xl font-semibold">
+            Unable to load product
+          </h1>
+
+          <p className="mt-2">
+            {error}
+          </p>
+
+          <Link
+            href="/products"
+            className="mt-5 inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Products
+          </Link>
+
+        </div>
+      </main>
+    );
+  }
+
+  // =====================================================
+  // PRODUCT IMAGES
+  // =====================================================
+
+  const images =
+    product.images ?? [];
+
+  // =====================================================
+  // CURRENT IMAGE
+  // =====================================================
+
+  const currentImage =
+    images[selectedImageIndex]?.image_url ??
+    null;
+
+  // =====================================================
+  // DISCOUNT
+  // =====================================================
+
+  const hasDiscount =
+    product.original_price != null &&
+    product.original_price >
+      product.price;
 
   // =====================================================
   // DECREASE QUANTITY
@@ -157,10 +245,6 @@ export default function ProductDetailsPage() {
   // =====================================================
 
   const handleIncreaseQuantity = () => {
-    if (!product) {
-      return;
-    }
-
     setQuantity((currentQuantity) =>
       Math.min(
         product.stock,
@@ -174,10 +258,6 @@ export default function ProductDetailsPage() {
   // =====================================================
 
   const handleAddToCart = async () => {
-    if (!product) {
-      return;
-    }
-
     if (product.stock <= 0) {
       setCartError(
         "This product is out of stock."
@@ -239,10 +319,6 @@ export default function ProductDetailsPage() {
   // =====================================================
 
   const handleBuyNow = async () => {
-    if (!product) {
-      return;
-    }
-
     if (product.stock <= 0) {
       setCartError(
         "This product is out of stock."
@@ -327,71 +403,6 @@ export default function ProductDetailsPage() {
           : currentIndex - 1
     );
   };
-
-  // =====================================================
-  // LOADING
-  // =====================================================
-
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-7xl px-4 py-10">
-        <div className="flex min-h-[400px] items-center justify-center">
-          <p className="text-gray-500">
-            Loading product...
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  // =====================================================
-  // ERROR
-  // =====================================================
-
-  if (error || !product) {
-    return (
-      <main className="mx-auto max-w-7xl px-4 py-10">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
-
-          <h1 className="text-xl font-semibold">
-            Unable to load product
-          </h1>
-
-          <p className="mt-2">
-            {error || "Product not found."}
-          </p>
-
-          <Link
-            href="/products"
-            className="mt-5 inline-flex items-center gap-2 rounded-md border bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Products
-          </Link>
-
-        </div>
-      </main>
-    );
-  }
-
-  // =====================================================
-  // PRODUCT IMAGES
-  // =====================================================
-
-  const images = product.images ?? [];
-
-  const currentImage =
-    images[selectedImageIndex]?.image_url ??
-    null;
-
-  // =====================================================
-  // DISCOUNT
-  // =====================================================
-
-  const hasDiscount =
-    product.original_price != null &&
-    product.original_price >
-      product.price;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
@@ -620,9 +631,7 @@ export default function ProductDetailsPage() {
             </div>
           )}
 
-          {/* =================================================
-              SUCCESS MESSAGE
-          ================================================== */}
+          {/* SUCCESS MESSAGE */}
 
           {cartMessage && (
             <div className="mt-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
@@ -630,9 +639,7 @@ export default function ProductDetailsPage() {
             </div>
           )}
 
-          {/* =================================================
-              ERROR MESSAGE
-          ================================================== */}
+          {/* ERROR MESSAGE */}
 
           {cartError && (
             <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -640,9 +647,7 @@ export default function ProductDetailsPage() {
             </div>
           )}
 
-          {/* =================================================
-              ACTION BUTTONS
-          ================================================== */}
+          {/* ACTION BUTTONS */}
 
           {product.stock > 0 && (
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -752,6 +757,7 @@ export default function ProductDetailsPage() {
               </div>
 
             </div>
+
           </div>
 
         </div>
@@ -851,6 +857,7 @@ export default function ProductDetailsPage() {
             )}
 
           </div>
+
         </section>
       )}
 

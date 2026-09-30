@@ -26,20 +26,68 @@ import {
   type Product,
 } from "@/services/products";
 
+// =========================================================
+// PRODUCTS CACHE
+// =========================================================
+
+let sellerProductsCache: Product[] | null = null;
+
+let sellerProductsRequest: Promise<Product[]> | null = null;
+
+async function getCachedSellerProducts() {
+  // Return cached products immediately
+  if (sellerProductsCache !== null) {
+    return sellerProductsCache;
+  }
+
+  // Reuse existing request
+  if (sellerProductsRequest) {
+    return sellerProductsRequest;
+  }
+
+  sellerProductsRequest = getMyProducts()
+    .then((data) => {
+      sellerProductsCache = data;
+
+      return data;
+    })
+    .finally(() => {
+      sellerProductsRequest = null;
+    });
+
+  return sellerProductsRequest;
+}
+
+// =========================================================
+// CLEAR CACHE
+// =========================================================
+
+export function clearSellerProductsCache() {
+  sellerProductsCache = null;
+}
+
+// =========================================================
+// PAGE
+// =========================================================
+
 export default function ManageProductsPage() {
   // =========================================================
   // PRODUCTS
   // =========================================================
 
   const [products, setProducts] =
-    useState<Product[]>([]);
+    useState<Product[] | null>(
+      sellerProductsCache
+    );
 
   // =========================================================
   // LOADING
   // =========================================================
 
   const [loading, setLoading] =
-    useState(true);
+    useState(
+      sellerProductsCache === null
+    );
 
   const [deletingId, setDeletingId] =
     useState<number | null>(null);
@@ -48,12 +96,21 @@ export default function ManageProductsPage() {
   // LOAD PRODUCTS
   // =========================================================
 
-  async function loadProducts() {
+  async function loadProducts(
+    forceRefresh = false
+  ) {
     try {
-      setLoading(true);
+      if (forceRefresh) {
+        sellerProductsCache = null;
+      }
+
+      setLoading(
+        forceRefresh &&
+          sellerProductsCache === null
+      );
 
       const data =
-        await getMyProducts();
+        await getCachedSellerProducts();
 
       setProducts(data);
     } catch (error) {
@@ -69,6 +126,8 @@ export default function ManageProductsPage() {
           : "Unable to load products.",
         "error"
       );
+
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -79,7 +138,47 @@ export default function ManageProductsPage() {
   // =========================================================
 
   useEffect(() => {
-    loadProducts();
+    let isMounted = true;
+
+    async function loadInitialProducts() {
+      try {
+        const data =
+          await getCachedSellerProducts();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProducts(data);
+        setLoading(false);
+      } catch (error) {
+        console.error(
+          "Failed to load products:",
+          error
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        await Swal.fire(
+          "Error",
+          error instanceof Error
+            ? error.message
+            : "Unable to load products.",
+          "error"
+        );
+
+        setProducts([]);
+        setLoading(false);
+      }
+    }
+
+    loadInitialProducts();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // =========================================================
@@ -90,7 +189,7 @@ export default function ManageProductsPage() {
     productId: number
   ) {
     const product =
-      products.find(
+      products?.find(
         (item) =>
           item.id === productId
       );
@@ -123,11 +222,22 @@ export default function ManageProductsPage() {
       );
 
       setProducts(
-        (previousProducts) =>
-          previousProducts.filter(
-            (item) =>
-              item.id !== productId
-          )
+        (previousProducts) => {
+          if (!previousProducts) {
+            return [];
+          }
+
+          const updatedProducts =
+            previousProducts.filter(
+              (item) =>
+                item.id !== productId
+            );
+
+          sellerProductsCache =
+            updatedProducts;
+
+          return updatedProducts;
+        }
       );
 
       await Swal.fire(
@@ -156,13 +266,6 @@ export default function ManageProductsPage() {
   // =========================================================
   // GET PRODUCT IMAGE
   // =========================================================
-  //
-  // Priority:
-  // 1. product.image
-  // 2. primary image from product.images
-  // 3. first image from product.images
-  //
-  // =========================================================
 
   function getProductImage(
     product: Product
@@ -185,6 +288,17 @@ export default function ManageProductsPage() {
       images[0]?.image_url ??
       null
     );
+  }
+
+  // =========================================================
+  // WAIT ONLY FOR FIRST REQUEST
+  // =========================================================
+
+  if (
+    loading ||
+    products === null
+  ) {
+    return null;
   }
 
   // =========================================================
@@ -229,7 +343,9 @@ export default function ManageProductsPage() {
 
             <button
               type="button"
-              onClick={loadProducts}
+              onClick={() =>
+                loadProducts(true)
+              }
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
             >
@@ -258,28 +374,10 @@ export default function ManageProductsPage() {
         </div>
 
         {/* =================================================
-            LOADING
+            NO PRODUCTS
         ================================================= */}
 
-        {loading ? (
-          <div className="flex min-h-[400px] items-center justify-center rounded-xl border border-gray-200 bg-white">
-
-            <div className="text-center">
-
-              <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-500" />
-
-              <p className="mt-3 text-sm text-gray-500">
-                Loading your products...
-              </p>
-
-            </div>
-
-          </div>
-        ) : products.length === 0 ? (
-
-          /* =================================================
-             NO PRODUCTS
-          ================================================= */
+        {products.length === 0 ? (
 
           <div className="rounded-xl border border-gray-200 bg-white p-10 text-center shadow-sm">
 
@@ -308,6 +406,7 @@ export default function ManageProductsPage() {
             </Link>
 
           </div>
+
         ) : (
 
           /* =================================================
@@ -393,8 +492,6 @@ export default function ManageProductsPage() {
                           className="hover:bg-gray-50"
                         >
 
-                          {/* PRODUCT */}
-
                           <td className="px-6 py-4">
 
                             <div className="flex items-center gap-4">
@@ -451,8 +548,6 @@ export default function ManageProductsPage() {
 
                           </td>
 
-                          {/* PRICE */}
-
                           <td className="px-6 py-4">
 
                             <p className="font-semibold text-gray-900">
@@ -480,8 +575,6 @@ export default function ManageProductsPage() {
 
                           </td>
 
-                          {/* STOCK */}
-
                           <td className="px-6 py-4">
 
                             <span
@@ -498,8 +591,6 @@ export default function ManageProductsPage() {
                             </span>
 
                           </td>
-
-                          {/* STATUS */}
 
                           <td className="px-6 py-4">
 
@@ -523,13 +614,9 @@ export default function ManageProductsPage() {
 
                           </td>
 
-                          {/* ACTIONS */}
-
                           <td className="px-6 py-4">
 
                             <div className="flex items-center justify-end gap-2">
-
-                              {/* EDIT */}
 
                               <Link
                                 href={`/seller/dashboard/products/${product.id}/edit`}
@@ -538,8 +625,6 @@ export default function ManageProductsPage() {
                                 <Edit className="h-4 w-4" />
                                 Edit
                               </Link>
-
-                              {/* DELETE */}
 
                               <button
                                 type="button"
@@ -601,8 +686,6 @@ export default function ManageProductsPage() {
 
                       <div className="flex gap-4">
 
-                        {/* IMAGE */}
-
                         <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
 
                           {image ? (
@@ -622,8 +705,6 @@ export default function ManageProductsPage() {
                           )}
 
                         </div>
-
-                        {/* INFO */}
 
                         <div className="min-w-0 flex-1">
 
@@ -684,8 +765,6 @@ export default function ManageProductsPage() {
 
                         </div>
                       </div>
-
-                      {/* MOBILE ACTIONS */}
 
                       <div className="mt-4 flex gap-2">
 

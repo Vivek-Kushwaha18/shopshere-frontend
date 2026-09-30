@@ -36,7 +36,40 @@ export default function CartPage() {
   }
 
   useEffect(() => {
-    loadCart();
+    let isMounted = true;
+
+    async function loadInitialCart() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await getCart();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCart(response);
+      } catch (error) {
+        console.error("Failed to load cart:", error);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setError("Unable to load your cart.");
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInitialCart();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   async function handleUpdateQuantity(
@@ -82,21 +115,9 @@ export default function CartPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <main className="min-h-screen p-6">
-        <div className="mx-auto max-w-6xl">
-          <h1 className="text-2xl font-bold">
-            Your Cart
-          </h1>
-
-          <p className="mt-6 text-gray-500">
-            Loading cart...
-          </p>
-        </div>
-      </main>
-    );
-  }
+  // =====================================================
+  // ERROR
+  // =====================================================
 
   if (error) {
     return (
@@ -122,34 +143,17 @@ export default function CartPage() {
     );
   }
 
-  if (cart === null) {
-    return (
-      <main className="min-h-screen p-6">
-        <div className="mx-auto max-w-6xl">
-          <h1 className="text-2xl font-bold">
-            Your Cart
-          </h1>
+  // =====================================================
+  // WAIT FOR CART API
+  // =====================================================
 
-          <div className="mt-10 rounded-lg border p-10 text-center">
-            <h2 className="text-xl font-semibold">
-              Your cart is empty
-            </h2>
-
-            <p className="mt-2 text-gray-500">
-              Add some products to your cart.
-            </p>
-
-            <Link
-              href="/products"
-              className="mt-6 inline-block rounded-md bg-black px-5 py-3 text-white hover:bg-gray-800"
-            >
-              Continue Shopping
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
+  if (loading || cart === null) {
+    return null;
   }
+
+  // =====================================================
+  // EMPTY CART
+  // =====================================================
 
   if (cart.items.length === 0) {
     return (
@@ -179,6 +183,10 @@ export default function CartPage() {
       </main>
     );
   }
+
+  // =====================================================
+  // CART
+  // =====================================================
 
   return (
     <main className="min-h-screen p-6">

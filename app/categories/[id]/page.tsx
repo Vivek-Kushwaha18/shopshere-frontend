@@ -21,8 +21,11 @@ export default function CategoryProductsPage() {
 
   const categoryId = Number(params.id);
 
+  // null = products are still loading
+  // [] = API loaded but category has no products
+  // array = products loaded
   const [products, setProducts] =
-    useState<Product[]>([]);
+    useState<Product[] | null>(null);
 
   const [loading, setLoading] =
     useState(true);
@@ -35,12 +38,17 @@ export default function CategoryProductsPage() {
   // =====================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadCategoryProducts() {
       if (
         !Number.isInteger(categoryId) ||
         categoryId <= 0
       ) {
+        if (!isMounted) return;
+
         setError("Invalid category.");
+        setProducts([]);
         setLoading(false);
         return;
       }
@@ -54,12 +62,16 @@ export default function CategoryProductsPage() {
             categoryId
           );
 
+        if (!isMounted) return;
+
         setProducts(result);
       } catch (error) {
         console.error(
           "Category products loading error:",
           error
         );
+
+        if (!isMounted) return;
 
         setProducts([]);
 
@@ -69,28 +81,18 @@ export default function CategoryProductsPage() {
             : "Unable to load category products."
         );
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadCategoryProducts();
+
+    return () => {
+      isMounted = false;
+    };
   }, [categoryId]);
-
-  // =====================================================
-  // LOADING
-  // =====================================================
-
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-7xl px-4 py-10">
-        <div className="flex min-h-[300px] items-center justify-center">
-          <p className="text-gray-500">
-            Loading products...
-          </p>
-        </div>
-      </main>
-    );
-  }
 
   // =====================================================
   // ERROR
@@ -100,7 +102,6 @@ export default function CategoryProductsPage() {
     return (
       <main className="mx-auto max-w-7xl px-4 py-10">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-
           <h1 className="text-xl font-semibold text-red-700">
             Unable to load category products
           </h1>
@@ -116,7 +117,6 @@ export default function CategoryProductsPage() {
             <ArrowLeft className="h-4 w-4" />
             All Products
           </Link>
-
         </div>
       </main>
     );
@@ -142,12 +142,11 @@ export default function CategoryProductsPage() {
       </Link>
 
       {/* =================================================
-          NO PRODUCTS
+          PRODUCTS AREA
       ================================================== */}
 
-      {products.length === 0 ? (
+      {loading || products === null ? null : products.length === 0 ? (
         <div className="rounded-xl border bg-white p-12 text-center">
-
           <Package className="mx-auto h-12 w-12 text-gray-300" />
 
           <h2 className="mt-4 text-xl font-semibold text-gray-900">
@@ -157,13 +156,8 @@ export default function CategoryProductsPage() {
           <p className="mt-2 text-sm text-gray-500">
             There are currently no products in this category.
           </p>
-
         </div>
       ) : (
-        /* =================================================
-           PRODUCTS
-        ================================================== */
-
         <ProductGrid
           products={products}
         />

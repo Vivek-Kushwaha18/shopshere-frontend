@@ -20,6 +20,31 @@ export interface CategoryUpdateData {
 const ADMIN_INACTIVE_CATEGORIES_KEY =
   "shopsphere_admin_inactive_categories";
 
+// =====================================================
+// CATEGORY CACHE
+//
+// Used to avoid fetching the same active categories
+// repeatedly when navigating between pages.
+// =====================================================
+
+let categoriesCache: Category[] | null = null;
+
+let categoriesRequest: Promise<Category[]> | null =
+  null;
+
+
+// =====================================================
+// CLEAR CATEGORY CACHE
+//
+// Call this after category create/update/activate/
+// deactivate/delete when the cached category list
+// needs to be refreshed.
+// =====================================================
+
+export function clearCategoriesCache(): void {
+  categoriesCache = null;
+}
+
 
 // =====================================================
 // ERROR HELPER
@@ -153,29 +178,51 @@ function removeStoredInactiveCategory(
 //
 // Backend:
 // GET /categories/
+//
+// Uses cache so navigation between pages does not
+// repeatedly fetch the same categories.
 // =====================================================
 
 export async function getCategories(): Promise<Category[]> {
-  const response = await apiFetch(
+  if (categoriesCache !== null) {
+    return categoriesCache;
+  }
+
+  if (categoriesRequest !== null) {
+    return categoriesRequest;
+  }
+
+  categoriesRequest = apiFetch(
     "/categories/"
-  );
+  )
+    .then((response) => {
+      if (!response.success) {
+        throw new Error(
+          getErrorMessage(
+            response,
+            "Unable to fetch categories."
+          )
+        );
+      }
 
-  if (!response.success) {
-    throw new Error(
-      getErrorMessage(
-        response,
-        "Unable to fetch categories."
-      )
-    );
-  }
+      if (!Array.isArray(response.data)) {
+        throw new Error(
+          "Invalid categories response."
+        );
+      }
 
-  if (!Array.isArray(response.data)) {
-    throw new Error(
-      "Invalid categories response."
-    );
-  }
+      const categories =
+        response.data as Category[];
 
-  return response.data as Category[];
+      categoriesCache = categories;
+
+      return categories;
+    })
+    .finally(() => {
+      categoriesRequest = null;
+    });
+
+  return categoriesRequest;
 }
 
 
@@ -298,6 +345,8 @@ export async function createCategory(
     category.id
   );
 
+  clearCategoriesCache();
+
   return category;
 }
 
@@ -364,6 +413,8 @@ export async function updateCategory(
     );
   }
 
+  clearCategoriesCache();
+
   return category;
 }
 
@@ -402,6 +453,8 @@ export async function activateCategory(
   removeStoredInactiveCategory(
     categoryId
   );
+
+  clearCategoriesCache();
 
   return category;
 }
@@ -442,6 +495,8 @@ export async function deactivateCategory(
     category
   );
 
+  clearCategoriesCache();
+
   return category;
 }
 
@@ -475,4 +530,6 @@ export async function deleteCategory(
   removeStoredInactiveCategory(
     categoryId
   );
+
+  clearCategoriesCache();
 }

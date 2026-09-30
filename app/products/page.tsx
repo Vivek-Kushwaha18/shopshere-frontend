@@ -61,13 +61,16 @@ function ProductsContent() {
 
   // =====================================================
   // PRODUCT DATA
+  // null = products are still loading
+  // [] = products loaded but there are no products
   // =====================================================
 
   const [products, setProducts] =
-    useState<Product[]>([]);
+    useState<Product[] | null>(null);
 
   // =====================================================
   // CATEGORY DATA
+  // null = categories are still loading
   // =====================================================
 
   const [categories, setCategories] =
@@ -132,6 +135,8 @@ function ProductsContent() {
   // =====================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadData() {
       try {
         setLoading(true);
@@ -145,6 +150,10 @@ function ProductsContent() {
           getCategories(),
         ]);
 
+        if (!isMounted) {
+          return;
+        }
+
         setProducts(productData);
 
         setCategories(
@@ -154,6 +163,10 @@ function ProductsContent() {
           )
         );
       } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
         console.error(
           "Products loading error:",
           error
@@ -164,12 +177,23 @@ function ProductsContent() {
             ? error.message
             : "Unable to load products."
         );
+
+        // Mark products as finished loading.
+        // This prevents the page from staying
+        // in the initial null state after an error.
+        setProducts([]);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // =====================================================
@@ -177,6 +201,12 @@ function ProductsContent() {
   // =====================================================
 
   const filteredProducts = useMemo(() => {
+    // While products are loading, there should
+    // be no filtered result to display.
+    if (products === null) {
+      return [];
+    }
+
     const normalizedSearch =
       search.trim().toLowerCase();
 
@@ -319,6 +349,7 @@ function ProductsContent() {
     return (
       <main className="mx-auto max-w-7xl px-4 py-10">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-700">
+
           <h1 className="text-xl font-semibold">
             Unable to load products
           </h1>
@@ -326,6 +357,7 @@ function ProductsContent() {
           <p className="mt-2 text-sm">
             {error}
           </p>
+
         </div>
       </main>
     );
@@ -377,50 +409,67 @@ function ProductsContent() {
         ================================================= */}
 
         <div>
-          {filteredProducts.length === 0 ? (
-            <div className="rounded-xl border bg-white p-12 text-center">
 
-              <Package className="mx-auto h-12 w-12 text-gray-300" />
+          {/* =================================================
+              WAITING FOR API
+              Do not show "No products found".
+              Keep this area empty until products load.
+          ================================================= */}
 
-              <h2 className="mt-4 text-xl font-semibold text-gray-900">
+          {products === null ? null : (
 
-                {selectedCategoryName
-                  ? `No products found in ${selectedCategoryName}`
-                  : search
-                    ? "No matching products found"
-                    : "No products found"}
+            filteredProducts.length === 0 ? (
 
-              </h2>
+              <div className="rounded-xl border bg-white p-12 text-center">
 
-              <p className="mt-2 text-sm text-gray-500">
+                <Package className="mx-auto h-12 w-12 text-gray-300" />
 
-                {selectedCategoryName
-                  ? `There are currently no products available in ${selectedCategoryName}.`
-                  : search
-                    ? `No products matched "${search}".`
-                    : "There are currently no products available."}
+                <h2 className="mt-4 text-xl font-semibold text-gray-900">
 
-              </p>
+                  {selectedCategoryName
+                    ? `No products found in ${selectedCategoryName}`
+                    : search
+                      ? "No matching products found"
+                      : "No products found"}
 
-              {(search ||
-                selectedCategory !== null) && (
-                <Link
-                  href="/products"
-                  className="mt-5 inline-flex rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
-                >
-                  View All Products
-                </Link>
-              )}
+                </h2>
 
-            </div>
-          ) : (
-            <ProductGrid
-              products={filteredProducts}
-            />
+                <p className="mt-2 text-sm text-gray-500">
+
+                  {selectedCategoryName
+                    ? `There are currently no products available in ${selectedCategoryName}.`
+                    : search
+                      ? `No products matched "${search}".`
+                      : "There are currently no products available."}
+
+                </p>
+
+                {(search ||
+                  selectedCategory !== null) && (
+                  <Link
+                    href="/products"
+                    className="mt-5 inline-flex rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+                  >
+                    View All Products
+                  </Link>
+                )}
+
+              </div>
+
+            ) : (
+
+              <ProductGrid
+                products={filteredProducts}
+              />
+
+            )
+
           )}
+
         </div>
 
       </div>
+
     </main>
   );
 }

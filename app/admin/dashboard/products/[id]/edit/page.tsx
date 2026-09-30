@@ -68,16 +68,17 @@ export default function AdminEditProductPage() {
   // CATEGORIES
   // =========================================================
 
+  // null = still loading
+  // [] = loaded but no categories
+  // array = loaded categories
   const [categories, setCategories] =
-    useState<Category[]>([]);
-
-  const [loadingCategories, setLoadingCategories] =
-    useState(true);
+    useState<Category[] | null>(null);
 
   // =========================================================
   // PAGE STATE
   // =========================================================
 
+  // true only during initial request
   const [loading, setLoading] =
     useState(true);
 
@@ -102,19 +103,25 @@ export default function AdminEditProductPage() {
   // =========================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadData() {
       if (
         !Number.isInteger(productId) ||
         productId <= 0
       ) {
+        if (!isMounted) {
+          return;
+        }
+
         setError("Invalid product ID.");
         setLoading(false);
-        setLoadingCategories(false);
+        setCategories([]);
+
         return;
       }
 
       try {
-        setLoading(true);
         setError("");
 
         const [
@@ -124,6 +131,10 @@ export default function AdminEditProductPage() {
           getProduct(productId),
           getCategories(),
         ]);
+
+        if (!isMounted) {
+          return;
+        }
 
         setProduct(productResult);
 
@@ -163,24 +174,34 @@ export default function AdminEditProductPage() {
             productResult.category_id
           )
         );
+
+        setLoading(false);
       } catch (error) {
         console.error(
           "Admin edit product loading error:",
           error
         );
 
+        if (!isMounted) {
+          return;
+        }
+
         setError(
           error instanceof Error
             ? error.message
             : "Unable to load product."
         );
-      } finally {
+
+        setCategories([]);
         setLoading(false);
-        setLoadingCategories(false);
       }
     }
 
     loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [productId]);
 
   // =========================================================
@@ -496,31 +517,11 @@ export default function AdminEditProductPage() {
     };
 
   // =========================================================
-  // LOADING
+  // WAIT FOR INITIAL DATA
   // =========================================================
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="mx-auto max-w-5xl px-4 py-10">
-
-          <div className="flex min-h-[300px] items-center justify-center">
-
-            <div className="text-center">
-
-              <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-500" />
-
-              <p className="mt-3 text-sm text-gray-500">
-                Loading product...
-              </p>
-
-            </div>
-
-          </div>
-
-        </div>
-      </main>
-    );
+  if (loading || product === null) {
+    return null;
   }
 
   // =========================================================
@@ -839,18 +840,18 @@ export default function AdminEditProductPage() {
                 }
                 disabled={
                   saving ||
-                  loadingCategories
+                  categories === null
                 }
                 className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
               >
 
                 <option value="">
-                  {loadingCategories
+                  {categories === null
                     ? "Loading categories..."
                     : "Select category"}
                 </option>
 
-                {categories.map(
+                {categories?.map(
                   (category) => (
                     <option
                       key={category.id}
@@ -968,7 +969,7 @@ export default function AdminEditProductPage() {
               type="submit"
               disabled={
                 saving ||
-                loadingCategories
+                categories === null
               }
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
             >

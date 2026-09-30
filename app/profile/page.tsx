@@ -11,7 +11,6 @@ import {
   Package,
   Heart,
   MapPin,
-  Settings,
   LogOut,
   Pencil,
   ShieldCheck,
@@ -78,11 +77,19 @@ function formatGender(
 export default function ProfilePage() {
   const router = useRouter();
 
+  // =====================================================
+  // USER
+  // Load stored user immediately so the profile does not
+  // appear empty/loading while the API request runs.
+  // =====================================================
+
   const [user, setUser] =
-    useState<AuthUser | null>(null);
+    useState<AuthUser | null>(() =>
+      getStoredUser()
+    );
 
   const [loading, setLoading] =
-    useState(true);
+    useState(false);
 
   const [editing, setEditing] =
     useState(false);
@@ -97,22 +104,44 @@ export default function ProfilePage() {
     useState("");
 
   const [fullName, setFullName] =
-    useState("");
+    useState(() => {
+      const storedUser =
+        getStoredUser();
+
+      return storedUser?.full_name || "";
+    });
 
   const [phone, setPhone] =
-    useState("");
+    useState(() => {
+      const storedUser =
+        getStoredUser();
+
+      return storedUser?.phone || "";
+    });
 
   const [gender, setGender] =
-    useState<UserGender | null>(null);
+    useState<UserGender | null>(() => {
+      const storedUser =
+        getStoredUser();
+
+      return storedUser?.gender || null;
+    });
 
   const [newEmail, setNewEmail] =
-    useState("");
+    useState(() => {
+      const storedUser =
+        getStoredUser();
+
+      return storedUser?.email || "";
+    });
 
   const [emailChanging, setEmailChanging] =
     useState(false);
 
-  const [emailVerificationSent, setEmailVerificationSent] =
-    useState(false);
+  const [
+    emailVerificationSent,
+    setEmailVerificationSent,
+  ] = useState(false);
 
   const [emailCode, setEmailCode] =
     useState("");
@@ -120,20 +149,54 @@ export default function ProfilePage() {
   const [emailVerifying, setEmailVerifying] =
     useState(false);
 
+  // =====================================================
+  // LOAD PROFILE
+  // =====================================================
+
   useEffect(() => {
+    let isMounted = true;
+
     async function loadProfile() {
-      const storedUser = getStoredUser();
+      const storedUser =
+        getStoredUser();
 
       if (!storedUser) {
         router.replace("/login");
         return;
       }
 
+      // Keep the stored user visible immediately.
+      // The API request updates it in the background.
+      if (isMounted) {
+        setUser(storedUser);
+
+        setFullName(
+          storedUser.full_name
+        );
+
+        setPhone(
+          storedUser.phone || ""
+        );
+
+        setGender(
+          storedUser.gender
+        );
+
+        setNewEmail(
+          storedUser.email
+        );
+      }
+
       try {
         setLoading(true);
         setError("");
 
-        const result = await getMyProfile();
+        const result =
+          await getMyProfile();
+
+        if (!isMounted) {
+          return;
+        }
 
         if (!result.success) {
           throw new Error(
@@ -142,72 +205,135 @@ export default function ProfilePage() {
           );
         }
 
-        const profile = result.data as AuthUser;
+        const profile =
+          result.data as AuthUser;
 
         setUser(profile);
 
-        setFullName(profile.full_name);
-        setPhone(profile.phone || "");
-        setGender(profile.gender);
-        setNewEmail(profile.email);
+        setFullName(
+          profile.full_name
+        );
+
+        setPhone(
+          profile.phone || ""
+        );
+
+        setGender(
+          profile.gender
+        );
+
+        setNewEmail(
+          profile.email
+        );
 
         localStorage.setItem(
           "user",
           JSON.stringify(profile)
         );
       } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
         console.error(
           "Profile loading error:",
           error
         );
 
+        // Keep the stored user visible if
+        // the profile API fails.
         setUser(storedUser);
 
-        setFullName(storedUser.full_name);
-        setPhone(storedUser.phone || "");
-        setGender(storedUser.gender);
-        setNewEmail(storedUser.email);
+        setFullName(
+          storedUser.full_name
+        );
+
+        setPhone(
+          storedUser.phone || ""
+        );
+
+        setGender(
+          storedUser.gender
+        );
+
+        setNewEmail(
+          storedUser.email
+        );
 
         setError(
           error instanceof Error
             ? error.message
-            : "Unable to load profile."
+            : "Unable to refresh profile."
         );
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
+
+  // =====================================================
+  // START EDITING
+  // =====================================================
 
   function startEditing() {
     if (!user) {
       return;
     }
 
-    setFullName(user.full_name);
-    setPhone(user.phone || "");
-    setGender(user.gender);
+    setFullName(
+      user.full_name
+    );
+
+    setPhone(
+      user.phone || ""
+    );
+
+    setGender(
+      user.gender
+    );
 
     setError("");
     setSuccess("");
     setEditing(true);
   }
 
+  // =====================================================
+  // CANCEL EDITING
+  // =====================================================
+
   function cancelEditing() {
     if (!user) {
       return;
     }
 
-    setFullName(user.full_name);
-    setPhone(user.phone || "");
-    setGender(user.gender);
+    setFullName(
+      user.full_name
+    );
+
+    setPhone(
+      user.phone || ""
+    );
+
+    setGender(
+      user.gender
+    );
 
     setError("");
     setSuccess("");
     setEditing(false);
   }
+
+  // =====================================================
+  // SAVE PROFILE
+  // =====================================================
 
   async function saveProfile() {
     if (!user) {
@@ -218,6 +344,7 @@ export default function ProfilePage() {
       setError(
         "Full name must contain at least 2 characters."
       );
+
       return;
     }
 
@@ -226,11 +353,12 @@ export default function ProfilePage() {
       setError("");
       setSuccess("");
 
-      const result = await updateMyProfile({
-        full_name: fullName,
-        phone: phone || null,
-        gender,
-      });
+      const result =
+        await updateMyProfile({
+          full_name: fullName,
+          phone: phone || null,
+          gender,
+        });
 
       if (!result.success) {
         throw new Error(
@@ -244,9 +372,21 @@ export default function ProfilePage() {
 
       setUser(updatedUser);
 
-      setFullName(updatedUser.full_name);
-      setPhone(updatedUser.phone || "");
-      setGender(updatedUser.gender);
+      setFullName(
+        updatedUser.full_name
+      );
+
+      setPhone(
+        updatedUser.phone || ""
+      );
+
+      setGender(
+        updatedUser.gender
+      );
+
+      setNewEmail(
+        updatedUser.email
+      );
 
       localStorage.setItem(
         "user",
@@ -258,6 +398,7 @@ export default function ProfilePage() {
       );
 
       setEditing(false);
+
       setSuccess(
         "Profile updated successfully."
       );
@@ -277,6 +418,10 @@ export default function ProfilePage() {
     }
   }
 
+  // =====================================================
+  // CHANGE EMAIL
+  // =====================================================
+
   async function handleChangeEmail() {
     if (!user) {
       return;
@@ -286,14 +431,21 @@ export default function ProfilePage() {
       newEmail.trim().toLowerCase();
 
     if (!email) {
-      setError("Please enter an email address.");
+      setError(
+        "Please enter an email address."
+      );
+
       return;
     }
 
-    if (email === user.email.toLowerCase()) {
+    if (
+      email ===
+      user.email.toLowerCase()
+    ) {
       setError(
         "Please enter a different email address."
       );
+
       return;
     }
 
@@ -333,11 +485,18 @@ export default function ProfilePage() {
     }
   }
 
+  // =====================================================
+  // VERIFY EMAIL CHANGE
+  // =====================================================
+
   async function handleVerifyEmailChange() {
-    if (emailCode.trim().length !== 6) {
+    if (
+      emailCode.trim().length !== 6
+    ) {
       setError(
         "Please enter the 6-digit verification code."
       );
+
       return;
     }
 
@@ -363,7 +522,9 @@ export default function ProfilePage() {
 
       setUser(updatedUser);
 
-      setNewEmail(updatedUser.email);
+      setNewEmail(
+        updatedUser.email
+      );
 
       localStorage.setItem(
         "user",
@@ -375,7 +536,10 @@ export default function ProfilePage() {
       );
 
       setEmailCode("");
-      setEmailVerificationSent(false);
+
+      setEmailVerificationSent(
+        false
+      );
 
       setSuccess(
         "Email updated successfully."
@@ -396,33 +560,36 @@ export default function ProfilePage() {
     }
   }
 
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
   function logout() {
     clearAuthSession();
+
     router.replace("/");
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/30">
-        <p className="text-muted-foreground">
-          Loading profile...
-        </p>
-      </div>
-    );
-  }
+  // =====================================================
+  // NO USER
+  // =====================================================
 
   if (!user) {
     return null;
   }
 
-  const roleLabel = formatRole(user.role);
+  const roleLabel =
+    formatRole(user.role);
 
   return (
     <div className="min-h-screen bg-muted/30">
+
       <div className="mx-auto max-w-5xl px-4 py-10">
 
         {/* Page Header */}
+
         <div className="mb-8">
+
           <h1 className="text-3xl font-bold tracking-tight">
             My Profile
           </h1>
@@ -430,9 +597,11 @@ export default function ProfilePage() {
           <p className="mt-2 text-muted-foreground">
             Manage your account and view your activity.
           </p>
+
         </div>
 
         {/* Messages */}
+
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
@@ -448,8 +617,11 @@ export default function ProfilePage() {
         <div className="grid gap-6 md:grid-cols-3">
 
           {/* Profile Card */}
+
           <Card className="md:col-span-2">
+
             <CardHeader className="flex flex-row items-center justify-between">
+
               <CardTitle>
                 Personal Information
               </CardTitle>
@@ -465,10 +637,13 @@ export default function ProfilePage() {
                 </Button>
               ) : (
                 <div className="flex gap-2">
+
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={cancelEditing}
+                    onClick={
+                      cancelEditing
+                    }
                     disabled={saving}
                   >
                     <X className="mr-2 h-4 w-4" />
@@ -477,27 +652,35 @@ export default function ProfilePage() {
 
                   <Button
                     size="sm"
-                    onClick={saveProfile}
+                    onClick={
+                      saveProfile
+                    }
                     disabled={saving}
                   >
                     <Save className="mr-2 h-4 w-4" />
+
                     {saving
                       ? "Saving..."
                       : "Save"}
                   </Button>
+
                 </div>
               )}
+
             </CardHeader>
 
             <CardContent>
 
               {/* User Header */}
+
               <div className="flex items-center gap-4">
+
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
                   <User className="h-10 w-10 text-primary" />
                 </div>
 
                 <div>
+
                   <h2 className="text-xl font-semibold">
                     {user.full_name}
                   </h2>
@@ -505,19 +688,25 @@ export default function ProfilePage() {
                   <p className="text-sm text-muted-foreground">
                     {roleLabel}
                   </p>
+
                 </div>
+
               </div>
 
               <Separator className="my-6" />
 
               {!editing ? (
+
                 <div className="grid gap-5 sm:grid-cols-2">
 
                   {/* Email */}
+
                   <div className="flex items-start gap-3">
+
                     <Mail className="mt-1 h-5 w-5 text-muted-foreground" />
 
                     <div>
+
                       <p className="text-sm text-muted-foreground">
                         Email
                       </p>
@@ -528,48 +717,69 @@ export default function ProfilePage() {
 
                       {user.is_verified && (
                         <div className="mt-1 flex items-center gap-1 text-xs text-green-600">
+
                           <ShieldCheck className="h-3.5 w-3.5" />
+
                           Verified
+
                         </div>
                       )}
+
                     </div>
+
                   </div>
 
                   {/* Phone */}
+
                   <div className="flex items-start gap-3">
+
                     <Phone className="mt-1 h-5 w-5 text-muted-foreground" />
 
                     <div>
+
                       <p className="text-sm text-muted-foreground">
                         Phone
                       </p>
 
                       <p className="font-medium">
-                        {user.phone || "Not added"}
+                        {user.phone ||
+                          "Not added"}
                       </p>
+
                     </div>
+
                   </div>
 
                   {/* Gender */}
+
                   <div className="flex items-start gap-3">
+
                     <User className="mt-1 h-5 w-5 text-muted-foreground" />
 
                     <div>
+
                       <p className="text-sm text-muted-foreground">
                         Gender
                       </p>
 
                       <p className="font-medium">
-                        {formatGender(user.gender)}
+                        {formatGender(
+                          user.gender
+                        )}
                       </p>
+
                     </div>
+
                   </div>
 
                   {/* Role */}
+
                   <div className="flex items-start gap-3">
+
                     <ShieldCheck className="mt-1 h-5 w-5 text-muted-foreground" />
 
                     <div>
+
                       <p className="text-sm text-muted-foreground">
                         Role
                       </p>
@@ -577,14 +787,21 @@ export default function ProfilePage() {
                       <p className="font-medium">
                         {roleLabel}
                       </p>
+
                     </div>
+
                   </div>
+
                 </div>
+
               ) : (
+
                 <div className="space-y-5">
 
                   {/* Full Name */}
+
                   <div>
+
                     <label
                       htmlFor="full_name"
                       className="mb-2 block text-sm font-medium"
@@ -605,10 +822,13 @@ export default function ProfilePage() {
                       maxLength={100}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
+
                   </div>
 
                   {/* Phone */}
+
                   <div>
+
                     <label
                       htmlFor="phone"
                       className="mb-2 block text-sm font-medium"
@@ -628,10 +848,13 @@ export default function ProfilePage() {
                       maxLength={20}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
+
                   </div>
 
                   {/* Gender */}
+
                   <div>
+
                     <label
                       htmlFor="gender"
                       className="mb-2 block text-sm font-medium"
@@ -644,13 +867,16 @@ export default function ProfilePage() {
                       value={gender || ""}
                       onChange={(event) =>
                         setGender(
-                          event.target.value
-                            ? (event.target.value as UserGender)
+                          event.target
+                            .value
+                            ? (event.target
+                                .value as UserGender)
                             : null
                         )
                       }
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     >
+
                       <option value="">
                         Not specified
                       </option>
@@ -670,15 +896,22 @@ export default function ProfilePage() {
                       <option value="prefer_not_to_say">
                         Prefer not to say
                       </option>
+
                     </select>
+
                   </div>
+
                 </div>
               )}
+
             </CardContent>
+
           </Card>
 
           {/* Quick Actions */}
+
           <Card>
+
             <CardHeader>
               <CardTitle>
                 Quick Actions
@@ -734,22 +967,31 @@ export default function ProfilePage() {
               </Button>
 
             </CardContent>
+
           </Card>
+
         </div>
 
         {/* Change Email */}
+
         <Card className="mt-6">
+
           <CardHeader>
+
             <CardTitle>
               Email Address
             </CardTitle>
+
           </CardHeader>
 
           <CardContent>
+
             <div className="flex items-start gap-3">
+
               <Mail className="mt-1 h-5 w-5 text-muted-foreground" />
 
               <div className="w-full">
+
                 <p className="text-sm text-muted-foreground">
                   Current Email
                 </p>
@@ -760,8 +1002,11 @@ export default function ProfilePage() {
 
                 {user.is_verified && (
                   <div className="mt-1 flex items-center gap-1 text-xs text-green-600">
+
                     <ShieldCheck className="h-3.5 w-3.5" />
+
                     Verified
+
                   </div>
                 )}
 
@@ -775,6 +1020,7 @@ export default function ProfilePage() {
                 </label>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
+
                   <input
                     id="new_email"
                     type="email"
@@ -806,10 +1052,12 @@ export default function ProfilePage() {
                         : "Change Email"}
                     </Button>
                   )}
+
                 </div>
 
                 {emailVerificationSent && (
                   <div className="mt-5 rounded-lg border border-gray-200 bg-muted/30 p-4">
+
                     <p className="text-sm font-medium">
                       Verify your new email
                     </p>
@@ -820,6 +1068,7 @@ export default function ProfilePage() {
                     </p>
 
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+
                       <input
                         type="text"
                         inputMode="numeric"
@@ -850,27 +1099,40 @@ export default function ProfilePage() {
                           ? "Verifying..."
                           : "Verify Email"}
                       </Button>
+
                     </div>
+
                   </div>
                 )}
+
               </div>
+
             </div>
+
           </CardContent>
+
         </Card>
 
         {/* Account Information */}
+
         <Card className="mt-6">
+
           <CardHeader>
+
             <CardTitle>
               Account Information
             </CardTitle>
+
           </CardHeader>
 
           <CardContent>
+
             <div className="grid gap-6 sm:grid-cols-3">
 
               {/* Account Type */}
+
               <div>
+
                 <p className="text-sm text-muted-foreground">
                   Account Type
                 </p>
@@ -878,10 +1140,13 @@ export default function ProfilePage() {
                 <p className="mt-1 font-medium">
                   {roleLabel}
                 </p>
+
               </div>
 
               {/* User ID */}
+
               <div>
+
                 <p className="text-sm text-muted-foreground">
                   User ID
                 </p>
@@ -889,10 +1154,13 @@ export default function ProfilePage() {
                 <p className="mt-1 font-medium">
                   {user.id}
                 </p>
+
               </div>
 
               {/* Account Status */}
+
               <div>
+
                 <p className="text-sm text-muted-foreground">
                   Account Status
                 </p>
@@ -908,12 +1176,17 @@ export default function ProfilePage() {
                     ? "Active"
                     : "Inactive"}
                 </p>
+
               </div>
+
             </div>
+
           </CardContent>
+
         </Card>
 
       </div>
+
     </div>
   );
 }

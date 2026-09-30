@@ -28,8 +28,11 @@ import {
 } from "@/services/categories";
 
 export default function AdminCategoriesPage() {
+  // null = categories are still loading
+  // [] = loaded but no categories exist
+  // array = categories loaded
   const [categories, setCategories] =
-    useState<Category[]>([]);
+    useState<Category[] | null>(null);
 
   const [loading, setLoading] =
     useState(true);
@@ -94,13 +97,63 @@ export default function AdminCategoriesPage() {
           ? error.message
           : "Unable to load categories."
       );
+
+      setCategories([]);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadCategories();
+    let isMounted = true;
+
+    async function loadInitialCategories() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const result =
+          await getAdminCategories();
+
+        console.log(
+          "ADMIN CATEGORIES:",
+          result
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCategories(result);
+      } catch (error) {
+        console.error(
+          "Admin categories error:",
+          error
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load categories."
+        );
+
+        setCategories([]);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInitialCategories();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // =====================================================
@@ -191,12 +244,14 @@ export default function AdminCategoriesPage() {
 
         setCategories(
           (current) =>
-            current.map(
-              (category) =>
-                category.id === editingId
-                  ? updatedCategory
-                  : category
-            )
+            current
+              ? current.map(
+                  (category) =>
+                    category.id === editingId
+                      ? updatedCategory
+                      : category
+                )
+              : [updatedCategory]
         );
 
         setSuccess(
@@ -218,7 +273,7 @@ export default function AdminCategoriesPage() {
 
         setCategories(
           (current) => [
-            ...current,
+            ...(current || []),
             newCategory,
           ]
         );
@@ -276,10 +331,12 @@ export default function AdminCategoriesPage() {
 
       setCategories(
         (current) =>
-          current.filter(
-            (category) =>
-              category.id !== categoryId
-          )
+          current
+            ? current.filter(
+                (category) =>
+                  category.id !== categoryId
+              )
+            : []
       );
 
       setSuccess(
@@ -358,12 +415,14 @@ export default function AdminCategoriesPage() {
 
       setCategories(
         (current) =>
-          current.map(
-            (item) =>
-              item.id === category.id
-                ? updatedCategory
-                : item
-          )
+          current
+            ? current.map(
+                (item) =>
+                  item.id === category.id
+                    ? updatedCategory
+                    : item
+              )
+            : [updatedCategory]
       );
     } catch (error) {
       console.error(
@@ -382,21 +441,11 @@ export default function AdminCategoriesPage() {
   }
 
   // =====================================================
-  // LOADING
+  // WAIT FOR INITIAL API REQUEST
   // =====================================================
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-10">
-          <div className="flex min-h-[300px] items-center justify-center">
-            <p className="text-gray-600">
-              Loading categories...
-            </p>
-          </div>
-        </div>
-      </main>
-    );
+  if (loading || categories === null) {
+    return null;
   }
 
   // =====================================================
@@ -668,7 +717,6 @@ export default function AdminCategoriesPage() {
                   {categories.map(
                     (category) => {
 
-                      // IMPORTANT:
                       // true = active
                       // false = inactive
                       const isActive =
