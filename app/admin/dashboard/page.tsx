@@ -219,9 +219,6 @@ export default function AdminDashboardPage() {
             Admin Dashboard
           </h1>
 
-          <p className="mt-2 text-gray-600">
-            Manage products, categories and users across ShopSphere.
-          </p>
         </div>
 
         {/* Dashboard Cards */}

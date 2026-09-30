@@ -66,10 +66,6 @@ export default function AdminCategoriesPage() {
 
   // =====================================================
   // LOAD ALL CATEGORIES
-  //
-  // IMPORTANT:
-  // Use getAdminCategories(), NOT getCategories().
-  // This keeps inactive categories after refresh.
   // =====================================================
 
   async function loadCategories() {
@@ -469,35 +465,6 @@ export default function AdminCategoriesPage() {
         </Link>
 
         {/* =================================================
-            HEADER
-        ================================================== */}
-
-        <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-500">
-              ShopSphere Admin
-            </p>
-
-            <h1 className="mt-1 text-3xl font-bold text-black">
-              Categories
-            </h1>
-
-            <p className="mt-1 text-sm text-gray-600">
-              Create, update and manage product categories.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={startCreate}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-black bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-black hover:text-white"
-          >
-            <Plus className="h-4 w-4" />
-            Add Category
-          </button>
-        </div>
-
-        {/* =================================================
             ERROR
         ================================================== */}
 
@@ -637,16 +604,27 @@ export default function AdminCategoriesPage() {
         )}
 
         {/* =================================================
-            TOTAL
+            TOTAL CATEGORIES
         ================================================== */}
 
-        <div className="mt-6 rounded-lg border border-gray-200 bg-white px-5 py-4">
+        <div className="mt-6 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4">
+
           <p className="text-sm text-gray-600">
             Total Categories{" "}
             <span className="font-semibold text-black">
               {categories.length}
             </span>
           </p>
+
+          <button
+            type="button"
+            onClick={startCreate}
+            className="inline-flex items-center gap-2 rounded-md border border-black bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-black hover:text-white"
+          >
+            <Plus className="h-4 w-4" />
+            Add Category
+          </button>
+
         </div>
 
         {/* =================================================
@@ -717,8 +695,6 @@ export default function AdminCategoriesPage() {
                   {categories.map(
                     (category) => {
 
-                      // true = active
-                      // false = inactive
                       const isActive =
                         category.is_active === true;
 
@@ -795,7 +771,6 @@ export default function AdminCategoriesPage() {
                                 className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-black transition hover:border-black disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <Edit className="h-4 w-4" />
-
                                 Edit
                               </button>
 

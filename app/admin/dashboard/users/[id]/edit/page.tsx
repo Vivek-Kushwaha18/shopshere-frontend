@@ -173,20 +173,6 @@ export default function EditAdminUserPage() {
           Users
         </Link>
 
-        <div className="mt-6">
-          <p className="text-sm font-medium text-gray-500">
-            ShopSphere Admin
-          </p>
-
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-black">
-            Edit User
-          </h1>
-
-          <p className="mt-1 text-sm text-gray-600">
-            Update user information and account status.
-          </p>
-        </div>
-
         {error && (
           <div className="mt-6 rounded-lg border border-black bg-white p-4 text-sm text-black">
             {error}

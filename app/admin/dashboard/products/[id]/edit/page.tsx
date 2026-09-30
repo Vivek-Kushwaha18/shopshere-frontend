@@ -590,20 +590,6 @@ export default function AdminEditProductPage() {
 
         </div>
 
-        {/* HEADER */}
-
-        <div className="mb-6">
-
-          <h1 className="text-2xl font-bold text-gray-900">
-            Edit Product
-          </h1>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Update product information and images.
-          </p>
-
-        </div>
-
         {/* ERROR */}
 
         {error && (

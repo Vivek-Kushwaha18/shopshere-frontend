@@ -319,22 +319,6 @@ export default function AdminUsersPage() {
           Dashboard
         </Link>
 
-        {/* Header */}
-
-        <div className="mt-6">
-          <p className="text-sm font-medium text-gray-500">
-            ShopSphere Admin
-          </p>
-
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-black">
-            Users
-          </h1>
-
-          <p className="mt-1 text-sm text-gray-600">
-            Manage customers, sellers and admins.
-          </p>
-        </div>
-
         {/* Error */}
 
         {error && (
