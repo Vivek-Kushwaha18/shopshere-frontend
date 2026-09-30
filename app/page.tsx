@@ -20,21 +20,33 @@ import {
 } from "@/services/products";
 
 export default function Home() {
+  // null = products are not loaded yet
+  // [] = products loaded but no products exist
   const [products, setProducts] =
-    useState<Product[]>([]);
+    useState<Product[] | null>(null);
 
   const [productsError, setProductsError] =
     useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadProducts() {
       try {
         setProductsError("");
 
         const result = await getProducts();
 
+        if (!isMounted) {
+          return;
+        }
+
         setProducts(result);
       } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
         console.error(
           "Home products error:",
           error
@@ -45,10 +57,16 @@ export default function Home() {
             ? error.message
             : "Unable to load products."
         );
+
+        setProducts([]);
       }
     }
 
     loadProducts();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (
@@ -89,9 +107,11 @@ export default function Home() {
 
         {/* =================================================
             EMPTY PRODUCTS
+            ONLY SHOW AFTER API HAS FINISHED
         ================================================== */}
 
-        {!productsError &&
+        {products !== null &&
+          !productsError &&
           products.length === 0 && (
             <div className="rounded-xl border p-10 text-center">
 
@@ -112,7 +132,8 @@ export default function Home() {
             PRODUCTS
         ================================================== */}
 
-        {!productsError &&
+        {products !== null &&
+          !productsError &&
           products.length > 0 && (
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
