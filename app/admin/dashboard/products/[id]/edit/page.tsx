@@ -33,7 +33,7 @@ export default function AdminEditProductPage() {
   const params = useParams();
   const router = useRouter();
 
-  const productId = Number(params.id);
+  const productSlug = String(params.id || "");
 
   // =========================================================
   // PRODUCT
@@ -68,9 +68,6 @@ export default function AdminEditProductPage() {
   // CATEGORIES
   // =========================================================
 
-  // null = still loading
-  // [] = loaded but no categories
-  // array = loaded categories
   const [categories, setCategories] =
     useState<Category[] | null>(null);
 
@@ -78,7 +75,6 @@ export default function AdminEditProductPage() {
   // PAGE STATE
   // =========================================================
 
-  // true only during initial request
   const [loading, setLoading] =
     useState(true);
 
@@ -106,15 +102,12 @@ export default function AdminEditProductPage() {
     let isMounted = true;
 
     async function loadData() {
-      if (
-        !Number.isInteger(productId) ||
-        productId <= 0
-      ) {
+      if (!productSlug) {
         if (!isMounted) {
           return;
         }
 
-        setError("Invalid product ID.");
+        setError("Invalid product slug.");
         setLoading(false);
         setCategories([]);
 
@@ -128,7 +121,7 @@ export default function AdminEditProductPage() {
           productResult,
           categoryResult,
         ] = await Promise.all([
-          getProduct(productId),
+          getProduct(productSlug),
           getCategories(),
         ]);
 
@@ -202,7 +195,7 @@ export default function AdminEditProductPage() {
     return () => {
       isMounted = false;
     };
-  }, [productId]);
+  }, [productSlug]);
 
   // =========================================================
   // SAVE PRODUCT INFORMATION
@@ -341,12 +334,19 @@ export default function AdminEditProductPage() {
       return;
     }
 
+    if (!product) {
+      setError(
+        "Product information is unavailable."
+      );
+      return;
+    }
+
     try {
       setSaving(true);
 
       const updatedProduct =
         await updateProduct(
-          productId,
+          product.id,
           {
             name: name.trim(),
             description:
@@ -358,7 +358,7 @@ export default function AdminEditProductPage() {
             category_id:
               categoryIdNumber,
             image:
-              product?.image ??
+              product.image ??
               null,
           }
         );
@@ -399,7 +399,10 @@ export default function AdminEditProductPage() {
   const handleSetPrimaryImage = async (
     imageId: number
   ) => {
-    if (imageUpdatingId !== null) {
+    if (
+      imageUpdatingId !== null ||
+      !product
+    ) {
       return;
     }
 
@@ -410,7 +413,7 @@ export default function AdminEditProductPage() {
 
       const updatedProduct =
         await setPrimaryProductImage(
-          productId,
+          product.id,
           imageId
         );
 
@@ -445,12 +448,15 @@ export default function AdminEditProductPage() {
     async (
       imageId: number
     ) => {
-      if (imageUpdatingId !== null) {
+      if (
+        imageUpdatingId !== null ||
+        !product
+      ) {
         return;
       }
 
       const currentImages =
-        product?.images ?? [];
+        product.images ?? [];
 
       if (currentImages.length <= 1) {
         await Swal.fire(
@@ -484,13 +490,13 @@ export default function AdminEditProductPage() {
         setImageUpdatingId(imageId);
 
         await deleteProductImage(
-          productId,
+          product.id,
           imageId
         );
 
         const updatedProduct =
           await getProduct(
-            productId
+            product.slug
           );
 
         setProduct(
@@ -520,8 +526,30 @@ export default function AdminEditProductPage() {
   // WAIT FOR INITIAL DATA
   // =========================================================
 
-  if (loading || product === null) {
-    return null;
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gray-50">
+
+        <div className="mx-auto max-w-5xl px-4 py-10">
+
+          <div className="flex min-h-[300px] items-center justify-center">
+
+            <div className="text-center">
+
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-500" />
+
+              <p className="mt-3 text-sm text-gray-500">
+                Loading product...
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </main>
+    );
   }
 
   // =========================================================
@@ -657,7 +685,7 @@ export default function AdminEditProductPage() {
                     }`}
                   >
 
-                    {/* IMAGE SIZE */}
+                    {/* IMAGE */}
 
                     <div className="relative aspect-square bg-gray-100">
 
@@ -670,8 +698,6 @@ export default function AdminEditProductPage() {
                         className="h-full w-full object-cover"
                       />
 
-                      {/* MAIN IMAGE BADGE */}
-
                       {image.is_primary && (
                         <span className="absolute left-3 top-3 rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
                           Main Image
@@ -680,7 +706,7 @@ export default function AdminEditProductPage() {
 
                     </div>
 
-                    {/* IMAGE ACTIONS */}
+                    {/* ACTIONS */}
 
                     <div className="space-y-2 p-3">
 

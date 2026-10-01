@@ -1,3 +1,7 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+
 interface CartSummaryProps {
   totalItems: number;
   total: number;
@@ -9,9 +13,14 @@ export default function CartSummary({
   total,
   onClearCart,
 }: CartSummaryProps) {
+  const router = useRouter();
+
+  function handleCheckout() {
+    router.push("/checkout");
+  }
+
   return (
     <div className="h-fit rounded-lg border p-6">
-
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">
           Order Summary
@@ -48,11 +57,11 @@ export default function CartSummary({
 
       <button
         type="button"
+        onClick={handleCheckout}
         className="mt-6 w-full rounded-md bg-black px-4 py-3 text-white transition hover:bg-gray-800"
       >
         Proceed to Checkout
       </button>
-
     </div>
   );
 }

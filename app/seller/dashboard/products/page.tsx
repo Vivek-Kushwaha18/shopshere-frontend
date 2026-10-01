@@ -619,7 +619,7 @@ export default function ManageProductsPage() {
                             <div className="flex items-center justify-end gap-2">
 
                               <Link
-                                href={`/seller/dashboard/products/${product.id}/edit`}
+                                href={`/seller/dashboard/products/${product.slug}/edit`}
                                 className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
                               >
                                 <Edit className="h-4 w-4" />

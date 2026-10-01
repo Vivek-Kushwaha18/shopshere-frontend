@@ -3,7 +3,6 @@
 import {
   FormEvent,
   useEffect,
-  useRef,
   useState,
 } from "react";
 
@@ -13,10 +12,8 @@ import Swal from "sweetalert2";
 
 import {
   ArrowLeft,
-  ImagePlus,
   Loader2,
   Trash2,
-  X,
 } from "lucide-react";
 
 import {
@@ -27,7 +24,6 @@ import {
 import {
   deleteProductImage,
   getProduct,
-  replaceProductImages,
   setPrimaryProductImage,
   updateProduct,
   type Product,
@@ -37,7 +33,7 @@ export default function EditProductPage() {
   const params = useParams();
   const router = useRouter();
 
-  const productId = Number(params.id);
+  const productSlug = String(params.id || "");
 
   // =========================================================
   // PRODUCT
@@ -107,12 +103,10 @@ export default function EditProductPage() {
 
   useEffect(() => {
     async function loadData() {
-      if (
-        !Number.isInteger(productId) ||
-        productId <= 0
-      ) {
-        setError("Invalid product ID.");
+      if (!productSlug) {
+        setError("Invalid product slug.");
         setLoading(false);
+        setLoadingCategories(false);
         return;
       }
 
@@ -124,7 +118,7 @@ export default function EditProductPage() {
           productResult,
           categoryResult,
         ] = await Promise.all([
-          getProduct(productId),
+          getProduct(productSlug),
           getCategories(),
         ]);
 
@@ -182,7 +176,7 @@ export default function EditProductPage() {
     }
 
     loadData();
-  }, [productId]);
+  }, [productSlug]);
 
   // =========================================================
   // SAVE PRODUCT INFORMATION
@@ -321,12 +315,19 @@ export default function EditProductPage() {
       return;
     }
 
+    if (!product) {
+      setError(
+        "Product information is unavailable."
+      );
+      return;
+    }
+
     try {
       setSaving(true);
 
       const updatedProduct =
         await updateProduct(
-          productId,
+          product.id,
           {
             name: name.trim(),
             description:
@@ -338,7 +339,7 @@ export default function EditProductPage() {
             category_id:
               categoryIdNumber,
             image:
-              product?.image ??
+              product.image ??
               null,
           }
         );
@@ -379,7 +380,10 @@ export default function EditProductPage() {
   const handleSetPrimaryImage = async (
     imageId: number
   ) => {
-    if (imageUpdatingId !== null) {
+    if (
+      imageUpdatingId !== null ||
+      !product
+    ) {
       return;
     }
 
@@ -390,7 +394,7 @@ export default function EditProductPage() {
 
       const updatedProduct =
         await setPrimaryProductImage(
-          productId,
+          product.id,
           imageId
         );
 
@@ -425,12 +429,15 @@ export default function EditProductPage() {
     async (
       imageId: number
     ) => {
-      if (imageUpdatingId !== null) {
+      if (
+        imageUpdatingId !== null ||
+        !product
+      ) {
         return;
       }
 
       const currentImages =
-        product?.images ?? [];
+        product.images ?? [];
 
       if (currentImages.length <= 1) {
         await Swal.fire(
@@ -464,13 +471,13 @@ export default function EditProductPage() {
         setImageUpdatingId(imageId);
 
         await deleteProductImage(
-          productId,
+          product.id,
           imageId
         );
 
         const updatedProduct =
           await getProduct(
-            productId
+            product.slug
           );
 
         setProduct(

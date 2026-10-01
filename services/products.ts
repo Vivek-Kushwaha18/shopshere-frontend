@@ -20,6 +20,7 @@ export interface Product {
   category_id: number;
 
   name: string;
+  slug: string;
   description?: string | null;
 
   price: number;
@@ -58,6 +59,8 @@ function normalizeProduct(
     category_id: product.category_id,
 
     name: product.name,
+
+    slug: product.slug,
 
     description:
       product.description ?? null,
@@ -125,15 +128,10 @@ let productsRequest:
 // =====================================================
 
 export async function getProducts(): Promise<Product[]> {
-  // Return cached products immediately
-  // if they have already been loaded.
   if (productsCache !== null) {
     return productsCache;
   }
 
-  // If another request is already running,
-  // use the same request instead of creating
-  // another API request.
   if (productsRequest !== null) {
     return productsRequest;
   }
@@ -163,12 +161,10 @@ export async function getProducts(): Promise<Product[]> {
           normalizeProduct
         );
 
-      // Save successful API response
       productsCache = products;
 
       return products;
     } finally {
-      // Allow a new request if needed
       productsRequest = null;
     }
   })();
@@ -177,15 +173,15 @@ export async function getProducts(): Promise<Product[]> {
 }
 
 // =====================================================
-// GET SINGLE PRODUCT
+// GET SINGLE PRODUCT BY SLUG
 // =====================================================
 
 export async function getProduct(
-  productId: number
+  productSlug: string
 ): Promise<Product> {
   const response =
     await apiFetch(
-      `/api/products/${productId}`
+      `/api/products/slug/${productSlug}`
     );
 
   if (!response.success) {
@@ -229,15 +225,15 @@ export async function getMyProducts(): Promise<Product[]> {
 }
 
 // =====================================================
-// GET PRODUCTS BY CATEGORY
+// GET PRODUCTS BY CATEGORY SLUG
 // =====================================================
 
 export async function getProductsByCategory(
-  categoryId: number
+  categorySlug: string
 ): Promise<Product[]> {
   const response =
     await apiFetch(
-      `/api/products/category/${categoryId}`
+      `/api/products/category/${categorySlug}`
     );
 
   if (!response.success) {
@@ -298,8 +294,6 @@ export async function createProduct(
     );
   }
 
-  // New product means the old cache
-  // may no longer be complete.
   productsCache = null;
 
   return normalizeProduct(
@@ -377,8 +371,6 @@ export async function updateProduct(
     );
   }
 
-  // Product changed, so refresh the
-  // product list next time it is requested.
   productsCache = null;
 
   return normalizeProduct(
@@ -412,7 +404,6 @@ export async function updateProductStock(
     );
   }
 
-  // Stock changed, invalidate cache.
   productsCache = null;
 
   return normalizeProduct(
@@ -442,7 +433,6 @@ export async function activateProduct(
     );
   }
 
-  // Product status changed.
   productsCache = null;
 
   return normalizeProduct(
@@ -472,7 +462,6 @@ export async function deactivateProduct(
     );
   }
 
-  // Product status changed.
   productsCache = null;
 
   return normalizeProduct(
@@ -502,7 +491,6 @@ export async function deleteProduct(
     );
   }
 
-  // Product list changed.
   productsCache = null;
 }
 
@@ -529,7 +517,6 @@ export async function setPrimaryProductImage(
     );
   }
 
-  // Image changed.
   productsCache = null;
 
   return normalizeProduct(
@@ -561,7 +548,6 @@ export async function replaceProductImages(
     );
   }
 
-  // Images changed.
   productsCache = null;
 
   return normalizeProduct(
@@ -592,6 +578,5 @@ export async function deleteProductImage(
     );
   }
 
-  // Images changed.
   productsCache = null;
 }

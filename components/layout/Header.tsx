@@ -719,7 +719,7 @@ export default function Header() {
                           key={
                             category.id
                           }
-                          href={`/categories/${category.id}`}
+                          href={`/categories/${category.slug}`}
                           onClick={() =>
                             setCategoriesOpen(
                               false

@@ -19,7 +19,7 @@ import {
 export default function CategoryProductsPage() {
   const params = useParams();
 
-  const categoryId = Number(params.id);
+  const categorySlug = String(params.id || "");
 
   // null = products are still loading
   // [] = API loaded but category has no products
@@ -41,10 +41,7 @@ export default function CategoryProductsPage() {
     let isMounted = true;
 
     async function loadCategoryProducts() {
-      if (
-        !Number.isInteger(categoryId) ||
-        categoryId <= 0
-      ) {
+      if (!categorySlug.trim()) {
         if (!isMounted) return;
 
         setError("Invalid category.");
@@ -59,7 +56,7 @@ export default function CategoryProductsPage() {
 
         const result =
           await getProductsByCategory(
-            categoryId
+            categorySlug
           );
 
         if (!isMounted) return;
@@ -92,7 +89,7 @@ export default function CategoryProductsPage() {
     return () => {
       isMounted = false;
     };
-  }, [categoryId]);
+  }, [categorySlug]);
 
   // =====================================================
   // ERROR
