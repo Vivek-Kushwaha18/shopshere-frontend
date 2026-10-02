@@ -6,6 +6,9 @@ import {
   Package,
   FolderTree,
   Users,
+  FileText,
+  TicketPercent,
+  MessageSquare,
   ArrowRight,
 } from "lucide-react";
 
@@ -27,12 +30,10 @@ let dashboardRequest: Promise<{
 }> | null = null;
 
 async function getDashboardCounts() {
-  // Return cached data immediately
   if (dashboardCache) {
     return dashboardCache;
   }
 
-  // Reuse existing request if one is already running
   if (dashboardRequest) {
     return dashboardRequest;
   }
@@ -66,26 +67,22 @@ export function clearDashboardCache() {
   dashboardCache = null;
 }
 
+// =====================================================
+// ADMIN DASHBOARD
+// =====================================================
+
 export default function AdminDashboardPage() {
-  // =====================================================
-  // INITIAL STATE
-  // =====================================================
+  const [productCount, setProductCount] = useState<number | null>(
+    dashboardCache?.productCount ?? null
+  );
 
-  const [productCount, setProductCount] =
-    useState<number | null>(
-      dashboardCache?.productCount ?? null
-    );
+  const [categoryCount, setCategoryCount] = useState<number | null>(
+    dashboardCache?.categoryCount ?? null
+  );
 
-  const [categoryCount, setCategoryCount] =
-    useState<number | null>(
-      dashboardCache?.categoryCount ?? null
-    );
+  const [loading, setLoading] = useState(dashboardCache === null);
 
-  const [loading, setLoading] =
-    useState(dashboardCache === null);
-
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
 
   // =====================================================
   // LOAD DASHBOARD
@@ -96,20 +93,13 @@ export default function AdminDashboardPage() {
 
     async function loadDashboard() {
       try {
-        // If cache already exists, don't show loading again
         if (dashboardCache) {
           if (!isMounted) {
             return;
           }
 
-          setProductCount(
-            dashboardCache.productCount
-          );
-
-          setCategoryCount(
-            dashboardCache.categoryCount
-          );
-
+          setProductCount(dashboardCache.productCount);
+          setCategoryCount(dashboardCache.categoryCount);
           setLoading(false);
 
           return;
@@ -117,27 +107,17 @@ export default function AdminDashboardPage() {
 
         setError("");
 
-        const result =
-          await getDashboardCounts();
+        const result = await getDashboardCounts();
 
         if (!isMounted) {
           return;
         }
 
-        setProductCount(
-          result.productCount
-        );
-
-        setCategoryCount(
-          result.categoryCount
-        );
-
+        setProductCount(result.productCount);
+        setCategoryCount(result.categoryCount);
         setLoading(false);
       } catch (error) {
-        console.error(
-          "Admin dashboard error:",
-          error
-        );
+        console.error("Admin dashboard error:", error);
 
         if (!isMounted) {
           return;
@@ -168,7 +148,6 @@ export default function AdminDashboardPage() {
     return (
       <main className="min-h-screen bg-gray-50">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-
           <div className="mb-8">
             <p className="text-sm font-medium text-gray-500">
               ShopSphere Admin
@@ -182,14 +161,13 @@ export default function AdminDashboardPage() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
             {error}
           </div>
-
         </div>
       </main>
     );
   }
 
   // =====================================================
-  // WAIT ONLY FOR FIRST REQUEST
+  // LOADING
   // =====================================================
 
   if (
@@ -197,7 +175,30 @@ export default function AdminDashboardPage() {
     productCount === null ||
     categoryCount === null
   ) {
-    return null;
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <p className="text-sm font-medium text-gray-500">
+              ShopSphere Admin
+            </p>
+
+            <h1 className="mt-1 text-3xl font-bold text-gray-900">
+              Admin Dashboard
+            </h1>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-64 animate-pulse rounded-xl border bg-white"
+              />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   // =====================================================
@@ -207,7 +208,6 @@ export default function AdminDashboardPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-
         {/* Header */}
 
         <div className="mb-8">
@@ -219,12 +219,14 @@ export default function AdminDashboardPage() {
             Admin Dashboard
           </h1>
 
+          <p className="mt-2 text-gray-600">
+            Manage your ShopSphere platform from one place.
+          </p>
         </div>
 
         {/* Dashboard Cards */}
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-
           {/* Products */}
 
           <Link
@@ -232,15 +234,12 @@ export default function AdminDashboardPage() {
             className="group"
           >
             <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
-
               <div className="flex items-start justify-between">
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
                   <Package className="h-6 w-6 text-gray-700" />
                 </div>
 
                 <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
-
               </div>
 
               <h2 className="mt-5 text-xl font-semibold text-gray-900">
@@ -258,7 +257,6 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-gray-500">
                 Active products
               </p>
-
             </div>
           </Link>
 
@@ -269,15 +267,12 @@ export default function AdminDashboardPage() {
             className="group"
           >
             <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
-
               <div className="flex items-start justify-between">
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
                   <FolderTree className="h-6 w-6 text-gray-700" />
                 </div>
 
                 <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
-
               </div>
 
               <h2 className="mt-5 text-xl font-semibold text-gray-900">
@@ -295,7 +290,6 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-gray-500">
                 Active categories
               </p>
-
             </div>
           </Link>
 
@@ -306,15 +300,12 @@ export default function AdminDashboardPage() {
             className="group"
           >
             <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
-
               <div className="flex items-start justify-between">
-
                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
                   <Users className="h-6 w-6 text-gray-700" />
                 </div>
 
                 <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
-
               </div>
 
               <h2 className="mt-5 text-xl font-semibold text-gray-900">
@@ -332,10 +323,107 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-gray-500">
                 User management
               </p>
-
             </div>
           </Link>
 
+          {/* Reports */}
+
+          <Link
+            href="/admin/dashboard/reports"
+            className="group"
+          >
+            <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                  <FileText className="h-6 w-6 text-gray-700" />
+                </div>
+
+                <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
+              </div>
+
+              <h2 className="mt-5 text-xl font-semibold text-gray-900">
+                Reports
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-600">
+                View platform reports and business information.
+              </p>
+
+              <div className="mt-5 text-2xl font-bold text-gray-900">
+                Reports
+              </div>
+
+              <p className="text-sm text-gray-500">
+                Platform reporting
+              </p>
+            </div>
+          </Link>
+
+          {/* Coupons */}
+
+          <Link
+            href="/admin/dashboard/coupons"
+            className="group"
+          >
+            <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                  <TicketPercent className="h-6 w-6 text-gray-700" />
+                </div>
+
+                <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
+              </div>
+
+              <h2 className="mt-5 text-xl font-semibold text-gray-900">
+                Coupons
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-600">
+                Create and manage discount coupons.
+              </p>
+
+              <div className="mt-5 text-2xl font-bold text-gray-900">
+                Coupons
+              </div>
+
+              <p className="text-sm text-gray-500">
+                Discount management
+              </p>
+            </div>
+          </Link>
+
+          {/* AI Conversations */}
+
+          <Link
+            href="/admin/dashboard/ai-conversations"
+            className="group"
+          >
+            <div className="rounded-xl border bg-white p-6 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                  <MessageSquare className="h-6 w-6 text-gray-700" />
+                </div>
+
+                <ArrowRight className="h-5 w-5 text-gray-400 transition-transform group-hover:translate-x-1" />
+              </div>
+
+              <h2 className="mt-5 text-xl font-semibold text-gray-900">
+                AI Conversations
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-600">
+                Monitor customer conversations with the AI assistant.
+              </p>
+
+              <div className="mt-5 text-2xl font-bold text-gray-900">
+                Monitor
+              </div>
+
+              <p className="text-sm text-gray-500">
+                AI conversation management
+              </p>
+            </div>
+          </Link>
         </div>
       </div>
     </main>

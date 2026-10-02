@@ -45,16 +45,12 @@ export default function Header() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [categoriesOpen, setCategoriesOpen] =
-    useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [mobileCategoriesOpen, setMobileCategoriesOpen] =
     useState(false);
 
-  const [categories, setCategories] =
-    useState<Category[]>([]);
-
-  const [categoriesLoading, setCategoriesLoading] =
-    useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
 
@@ -63,17 +59,11 @@ export default function Header() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchSuggestions, setSearchSuggestions] =
     useState<Product[]>([]);
-  const [searchFocused, setSearchFocused] =
-    useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  const profileRef =
-    useRef<HTMLDivElement>(null);
-
-  const categoriesRef =
-    useRef<HTMLDivElement>(null);
-
-  const searchRef =
-    useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const categoriesRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   // =====================================================
   // ACTIVE ROUTE
@@ -184,9 +174,7 @@ export default function Header() {
   // =====================================================
 
   useEffect(() => {
-    function handleClickOutside(
-      event: MouseEvent
-    ) {
+    function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
 
       if (
@@ -292,12 +280,12 @@ export default function Header() {
   // =====================================================
 
   function getDashboardUrl() {
-    if (user?.role === "seller") {
-      return "/seller/dashboard";
-    }
-
     if (user?.role === "admin") {
       return "/admin/dashboard";
+    }
+
+    if (user?.role === "seller") {
+      return "/seller/dashboard";
     }
 
     return "/";
@@ -308,12 +296,12 @@ export default function Header() {
   // =====================================================
 
   function getDashboardLabel() {
-    if (user?.role === "seller") {
-      return "Seller Dashboard";
-    }
-
     if (user?.role === "admin") {
       return "Admin Dashboard";
+    }
+
+    if (user?.role === "seller") {
+      return "Seller Dashboard";
     }
 
     return "Dashboard";
@@ -368,12 +356,11 @@ export default function Header() {
           matrix[row][column] =
             matrix[row - 1][column - 1];
         } else {
-          matrix[row][column] =
-            Math.min(
-              matrix[row - 1][column] + 1,
-              matrix[row][column - 1] + 1,
-              matrix[row - 1][column - 1] + 1
-            );
+          matrix[row][column] = Math.min(
+            matrix[row - 1][column] + 1,
+            matrix[row][column - 1] + 1,
+            matrix[row - 1][column - 1] + 1
+          );
         }
       }
     }
@@ -385,9 +372,7 @@ export default function Header() {
   // GET SEARCH SUGGESTIONS
   // =====================================================
 
-  function getSearchSuggestions(
-    value: string
-  ) {
+  function getSearchSuggestions(value: string) {
     const searchValue =
       value.trim().toLowerCase();
 
@@ -405,28 +390,22 @@ export default function Header() {
 
         let score = 0;
 
-        // Exact match
-        if (
-          productName === searchValue
-        ) {
+        if (productName === searchValue) {
           score += 100;
         }
 
-        // Starts with search
         if (
           productName.startsWith(searchValue)
         ) {
           score += 80;
         }
 
-        // Contains search
         if (
           productName.includes(searchValue)
         ) {
           score += 60;
         }
 
-        // Description match
         if (
           productDescription.includes(
             searchValue
@@ -435,7 +414,6 @@ export default function Header() {
           score += 30;
         }
 
-        // Spelling match
         const distance =
           levenshteinDistance(
             searchValue,
@@ -478,17 +456,13 @@ export default function Header() {
   // SEARCH CHANGE
   // =====================================================
 
-  function handleSearchChange(
-    value: string
-  ) {
+  function handleSearchChange(value: string) {
     setSearch(value);
 
     if (!value.trim()) {
       setSearchSuggestions([]);
       setSearchFocused(false);
 
-      // IMPORTANT:
-      // Do not navigate while typing.
       return;
     }
 
@@ -500,10 +474,6 @@ export default function Header() {
     );
 
     setSearchFocused(true);
-
-    // IMPORTANT:
-    // Do not router.push() here.
-    // Navigation happens only when Enter is pressed.
   }
 
   // =====================================================
@@ -560,8 +530,6 @@ export default function Header() {
       return;
     }
 
-    // Navigation happens ONLY when
-    // the user submits the form / presses Enter.
     router.push(
       `/products?search=${encodeURIComponent(
         trimmedSearch
@@ -585,9 +553,7 @@ export default function Header() {
     <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4">
 
-        {/* =================================================
-            LOGO
-        ================================================= */}
+        {/* LOGO */}
 
         <Link
           href="/"
@@ -608,13 +574,9 @@ export default function Header() {
           </div>
         </Link>
 
-        {/* =================================================
-            DESKTOP NAVIGATION
-        ================================================= */}
+        {/* DESKTOP NAVIGATION */}
 
         <nav className="hidden items-center gap-6 md:flex">
-
-          {/* HOME */}
 
           <Link
             href="/"
@@ -631,8 +593,6 @@ export default function Header() {
             )}
           </Link>
 
-          {/* PRODUCTS */}
-
           <Link
             href="/products"
             className={`relative pb-1 text-sm font-medium transition-colors ${
@@ -647,8 +607,6 @@ export default function Header() {
               <span className="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-black" />
             )}
           </Link>
-
-          {/* CATEGORIES */}
 
           <div
             ref={categoriesRef}
@@ -691,7 +649,6 @@ export default function Header() {
 
             {categoriesOpen && (
               <div className="absolute left-1/2 top-10 z-50 w-72 -translate-x-1/2 overflow-hidden rounded-xl border bg-white shadow-xl">
-
                 <div className="border-b px-4 py-3">
                   <p className="text-sm font-semibold text-gray-900">
                     Shop by Category
@@ -707,8 +664,7 @@ export default function Header() {
                     <div className="px-3 py-6 text-center text-sm text-gray-500">
                       Loading categories...
                     </div>
-                  ) : categories.length ===
-                    0 ? (
+                  ) : categories.length === 0 ? (
                     <div className="px-3 py-6 text-center text-sm text-gray-500">
                       No categories available.
                     </div>
@@ -745,14 +701,10 @@ export default function Header() {
             )}
           </div>
 
-          {/* AI ASSISTANT */}
-
           <Link
             href="/ai-assistant"
             className={`relative pb-1 text-sm font-medium transition-colors ${
-              isActive(
-                "/ai-assistant"
-              )
+              isActive("/ai-assistant")
                 ? "text-black"
                 : "text-gray-600 hover:text-black"
             }`}
@@ -767,9 +719,7 @@ export default function Header() {
           </Link>
         </nav>
 
-        {/* =================================================
-            DESKTOP SEARCH
-        ================================================= */}
+        {/* DESKTOP SEARCH */}
 
         <div
           ref={searchRef}
@@ -796,19 +746,13 @@ export default function Header() {
             />
           </form>
 
-          {/* SEARCH SUGGESTIONS */}
-
           {searchFocused &&
-            searchSuggestions.length >
-              0 && (
+            searchSuggestions.length > 0 && (
               <div className="absolute left-0 right-0 top-11 z-50 overflow-hidden rounded-xl border bg-white shadow-xl">
-
                 {searchSuggestions.map(
                   (product) => (
                     <button
-                      key={
-                        product.id
-                      }
+                      key={product.id}
                       type="button"
                       onClick={() =>
                         handleSuggestionClick(
@@ -819,12 +763,8 @@ export default function Header() {
                     >
                       {product.image ? (
                         <img
-                          src={
-                            product.image
-                          }
-                          alt={
-                            product.name
-                          }
+                          src={product.image}
+                          alt={product.name}
                           className="h-10 w-10 rounded-lg object-cover"
                         />
                       ) : (
@@ -835,16 +775,11 @@ export default function Header() {
 
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-gray-900">
-                          {
-                            product.name
-                          }
+                          {product.name}
                         </p>
 
                         <p className="truncate text-xs text-gray-500">
-                          ₹
-                          {
-                            product.price
-                          }
+                          ₹{product.price}
                         </p>
                       </div>
                     </button>
@@ -854,14 +789,9 @@ export default function Header() {
             )}
         </div>
 
-        {/* =================================================
-            DESKTOP ACTIONS
-        ================================================= */}
+        {/* DESKTOP ACTIONS */}
 
         <div className="hidden items-center gap-1 md:flex">
-
-          {/* CART */}
-
           <Button
             variant="ghost"
             size="icon"
@@ -879,8 +809,6 @@ export default function Header() {
 
           {!isLoggedIn ? (
             <>
-              {/* LOGIN */}
-
               <Button
                 variant="ghost"
                 size="sm"
@@ -890,8 +818,6 @@ export default function Header() {
                   Login
                 </Link>
               </Button>
-
-              {/* SIGN UP */}
 
               <Button
                 size="sm"
@@ -908,9 +834,6 @@ export default function Header() {
               ref={profileRef}
               className="relative ml-1"
             >
-
-              {/* PROFILE BUTTON */}
-
               <Button
                 type="button"
                 variant="ghost"
@@ -945,13 +868,8 @@ export default function Header() {
                 />
               </Button>
 
-              {/* PROFILE DROPDOWN */}
-
               {profileOpen && (
                 <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border bg-white shadow-2xl">
-
-                  {/* USER HEADER */}
-
                   <div className="bg-gray-50 px-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
@@ -985,9 +903,6 @@ export default function Header() {
                   </div>
 
                   <div className="p-2">
-
-                    {/* PROFILE */}
-
                     <Link
                       href="/profile"
                       onClick={() =>
@@ -1016,12 +931,8 @@ export default function Header() {
                       </div>
                     </Link>
 
-                    {/* DASHBOARD */}
-
-                    {(user?.role ===
-                      "seller" ||
-                      user?.role ===
-                        "admin") && (
+                    {(user?.role === "seller" ||
+                      user?.role === "admin") && (
                       <Link
                         href={getDashboardUrl()}
                         onClick={() =>
@@ -1045,8 +956,6 @@ export default function Header() {
                       </Link>
                     )}
 
-                    {/* ORDERS */}
-
                     <Link
                       href="/orders"
                       onClick={() =>
@@ -1068,8 +977,6 @@ export default function Header() {
                         </p>
                       </div>
                     </Link>
-
-                    {/* WISHLIST */}
 
                     <Link
                       href="/wishlist"
@@ -1094,8 +1001,6 @@ export default function Header() {
                     </Link>
 
                     <div className="my-2 border-t" />
-
-                    {/* LOGOUT */}
 
                     <button
                       type="button"
@@ -1123,9 +1028,7 @@ export default function Header() {
           )}
         </div>
 
-        {/* =================================================
-            MOBILE MENU BUTTON
-        ================================================= */}
+        {/* MOBILE MENU BUTTON */}
 
         <button
           type="button"
@@ -1150,16 +1053,11 @@ export default function Header() {
         </button>
       </div>
 
-      {/* ===================================================
-          MOBILE MENU
-      =================================================== */}
+      {/* MOBILE MENU */}
 
       {mobileMenu && (
         <div className="border-t bg-white md:hidden">
           <div className="mx-auto max-w-7xl px-4 py-4">
-
-            {/* MOBILE SEARCH */}
-
             <div
               ref={searchRef}
               className="relative mb-5"
@@ -1188,19 +1086,13 @@ export default function Header() {
                 />
               </form>
 
-              {/* MOBILE SEARCH SUGGESTIONS */}
-
               {searchFocused &&
-                searchSuggestions.length >
-                  0 && (
+                searchSuggestions.length > 0 && (
                   <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-xl border bg-white shadow-xl">
-
                     {searchSuggestions.map(
                       (product) => (
                         <button
-                          key={
-                            product.id
-                          }
+                          key={product.id}
                           type="button"
                           onClick={() => {
                             handleSuggestionClick(
@@ -1249,9 +1141,6 @@ export default function Header() {
             </div>
 
             <nav className="flex flex-col gap-1">
-
-              {/* HOME */}
-
               <Link
                 href="/"
                 onClick={
@@ -1265,8 +1154,6 @@ export default function Header() {
               >
                 Home
               </Link>
-
-              {/* PRODUCTS */}
 
               <Link
                 href="/products"
@@ -1283,8 +1170,6 @@ export default function Header() {
               >
                 Products
               </Link>
-
-              {/* CATEGORIES */}
 
               <div>
                 <button
@@ -1318,7 +1203,6 @@ export default function Header() {
 
                 {mobileCategoriesOpen && (
                   <div className="mt-1 rounded-lg bg-gray-50 p-2">
-
                     {categoriesLoading ? (
                       <p className="px-3 py-3 text-sm text-gray-500">
                         Loading categories...
@@ -1370,8 +1254,6 @@ export default function Header() {
                 )}
               </div>
 
-              {/* AI ASSISTANT */}
-
               <Link
                 href="/ai-assistant"
                 onClick={
@@ -1388,8 +1270,6 @@ export default function Header() {
                 AI Assistant
               </Link>
 
-              {/* CART */}
-
               <Link
                 href="/cart"
                 onClick={
@@ -1403,8 +1283,6 @@ export default function Header() {
 
               {!isLoggedIn ? (
                 <>
-                  {/* LOGIN */}
-
                   <Link
                     href="/login"
                     onClick={
@@ -1414,8 +1292,6 @@ export default function Header() {
                   >
                     Login
                   </Link>
-
-                  {/* SIGN UP */}
 
                   <Link
                     href="/signup"
@@ -1429,8 +1305,6 @@ export default function Header() {
                 </>
               ) : (
                 <>
-                  {/* MOBILE USER */}
-
                   <div className="my-2 border-t pt-4">
                     <div className="mb-3 flex items-center gap-3 px-3">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
@@ -1462,8 +1336,6 @@ export default function Header() {
                     </div>
                   </div>
 
-                  {/* PROFILE */}
-
                   <Link
                     href="/profile"
                     onClick={
@@ -1481,12 +1353,8 @@ export default function Header() {
                     My Profile
                   </Link>
 
-                  {/* DASHBOARD */}
-
-                  {(user?.role ===
-                    "seller" ||
-                    user?.role ===
-                      "admin") && (
+                  {(user?.role === "seller" ||
+                    user?.role === "admin") && (
                     <Link
                       href={getDashboardUrl()}
                       onClick={
@@ -1499,8 +1367,6 @@ export default function Header() {
                     </Link>
                   )}
 
-                  {/* ORDERS */}
-
                   <Link
                     href="/orders"
                     onClick={
@@ -1511,8 +1377,6 @@ export default function Header() {
                     <Package className="h-4 w-4" />
                     My Orders
                   </Link>
-
-                  {/* WISHLIST */}
 
                   <Link
                     href="/wishlist"
@@ -1526,8 +1390,6 @@ export default function Header() {
                   </Link>
 
                   <div className="my-2 border-t" />
-
-                  {/* LOGOUT */}
 
                   <button
                     type="button"

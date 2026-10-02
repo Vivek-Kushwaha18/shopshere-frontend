@@ -241,24 +241,29 @@ export function saveAuthSession(data: {
     return;
   }
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "access_token",
     data.access_token
   );
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "refresh_token",
     data.refresh_token
   );
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "user",
     JSON.stringify(data.user)
   );
 
-  localStorage.setItem(
+  sessionStorage.setItem(
     "isLoggedIn",
     "true"
+  );
+
+  sessionStorage.setItem(
+    "login_time",
+    Date.now().toString()
   );
 
   window.dispatchEvent(
@@ -275,22 +280,26 @@ export function clearAuthSession() {
     return;
   }
 
-  localStorage.removeItem(
+  sessionStorage.removeItem(
     "access_token"
   );
 
-  localStorage.removeItem(
+  sessionStorage.removeItem(
     "refresh_token"
   );
 
-  localStorage.removeItem("user");
+  sessionStorage.removeItem("user");
 
-  localStorage.removeItem(
+  sessionStorage.removeItem(
     "isLoggedIn"
   );
 
-  localStorage.removeItem(
+  sessionStorage.removeItem(
     "remember_me"
+  );
+
+  sessionStorage.removeItem(
+    "login_time"
   );
 
   window.dispatchEvent(
@@ -308,7 +317,7 @@ export function getStoredUser(): User | null {
   }
 
   const storedUser =
-    localStorage.getItem("user");
+    sessionStorage.getItem("user");
 
   if (!storedUser) {
     return null;
@@ -324,7 +333,7 @@ export function getStoredUser(): User | null {
       error
     );
 
-    localStorage.removeItem("user");
+    sessionStorage.removeItem("user");
 
     return null;
   }
@@ -339,7 +348,7 @@ export function getAccessToken(): string | null {
     return null;
   }
 
-  return localStorage.getItem(
+  return sessionStorage.getItem(
     "access_token"
   );
 }
@@ -353,7 +362,7 @@ export function getRefreshToken(): string | null {
     return null;
   }
 
-  return localStorage.getItem(
+  return sessionStorage.getItem(
     "refresh_token"
   );
 }

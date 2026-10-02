@@ -185,6 +185,10 @@ export default function ProductDetailsPage() {
         quantity
       );
 
+      if (response.status === 401) {
+        return;
+      }
+
       if (!response.success) {
         const message =
           response.data?.detail ||
@@ -237,6 +241,10 @@ export default function ProductDetailsPage() {
         product.id,
         quantity
       );
+
+      if (response.status === 401) {
+        return;
+      }
 
       if (!response.success) {
         const message =

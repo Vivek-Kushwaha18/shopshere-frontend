@@ -8,6 +8,11 @@ import {
   ShoppingBag,
   AlertCircle,
   CheckCircle,
+  Wallet,
+  Boxes,
+  ClipboardList,
+  LineChart,
+  ArrowRight,
 } from "lucide-react";
 
 import {
@@ -56,6 +61,10 @@ async function getCachedSellerProducts() {
 export function clearSellerDashboardCache() {
   sellerProductsCache = null;
 }
+
+// =====================================================
+// SELLER DASHBOARD
+// =====================================================
 
 export default function SellerDashboardPage() {
   // =====================================================
@@ -166,7 +175,7 @@ export default function SellerDashboardPage() {
 
   if (error) {
     return (
-      <main className="mx-auto max-w-7xl px-4 py-10">
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="rounded-xl border border-red-200 bg-red-50 p-6">
           <h1 className="text-xl font-semibold text-red-700">
             Unable to load dashboard
@@ -199,11 +208,43 @@ export default function SellerDashboardPage() {
     loading ||
     products === null
   ) {
-    return null;
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <div className="h-4 w-32 animate-pulse rounded bg-gray-200" />
+
+          <div className="mt-3 h-9 w-72 animate-pulse rounded bg-gray-200" />
+
+          <div className="mt-3 h-5 w-96 max-w-full animate-pulse rounded bg-gray-200" />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-32 animate-pulse rounded-xl border bg-white"
+            />
+          ))}
+        </div>
+
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-48 animate-pulse rounded-xl border bg-white"
+            />
+          ))}
+        </div>
+      </main>
+    );
   }
 
+  // =====================================================
+  // PAGE
+  // =====================================================
+
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10">
+    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
 
       {/* =================================================
           HEADER
@@ -341,9 +382,7 @@ export default function SellerDashboardPage() {
                 <Package className="h-6 w-6 text-gray-700" />
               </div>
 
-              <span className="text-sm text-gray-400 transition group-hover:translate-x-1">
-                →
-              </span>
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
 
             </div>
 
@@ -369,9 +408,7 @@ export default function SellerDashboardPage() {
                 <Plus className="h-6 w-6 text-gray-700" />
               </div>
 
-              <span className="text-sm text-gray-400 transition group-hover:translate-x-1">
-                →
-              </span>
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
 
             </div>
 
@@ -381,6 +418,132 @@ export default function SellerDashboardPage() {
 
             <p className="mt-2 text-sm text-gray-500">
               Add a new product to your ShopSphere store.
+            </p>
+
+          </Link>
+
+        </div>
+
+      </section>
+
+      {/* =================================================
+          SELLER MANAGEMENT
+      ================================================== */}
+
+      <section className="mt-10">
+
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">
+            Seller Management
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Manage your store, inventory, orders and business performance.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+          {/* REVENUE */}
+
+          <Link
+            href="/seller/dashboard/revenue"
+            className="group rounded-xl border bg-white p-6 transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                <Wallet className="h-6 w-6 text-gray-700" />
+              </div>
+
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
+
+            </div>
+
+            <h3 className="mt-5 text-lg font-semibold text-gray-900">
+              Revenue
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500">
+              View your sales revenue and earnings.
+            </p>
+
+          </Link>
+
+          {/* INVENTORY */}
+
+          <Link
+            href="/seller/dashboard/inventory"
+            className="group rounded-xl border bg-white p-6 transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                <Boxes className="h-6 w-6 text-gray-700" />
+              </div>
+
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
+
+            </div>
+
+            <h3 className="mt-5 text-lg font-semibold text-gray-900">
+              Inventory
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Monitor stock levels and product inventory.
+            </p>
+
+          </Link>
+
+          {/* ORDERS */}
+
+          <Link
+            href="/seller/dashboard/orders"
+            className="group rounded-xl border bg-white p-6 transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                <ClipboardList className="h-6 w-6 text-gray-700" />
+              </div>
+
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
+
+            </div>
+
+            <h3 className="mt-5 text-lg font-semibold text-gray-900">
+              Orders
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500">
+              View and manage orders for your products.
+            </p>
+
+          </Link>
+
+          {/* ANALYTICS */}
+
+          <Link
+            href="/seller/dashboard/analytics"
+            className="group rounded-xl border bg-white p-6 transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                <LineChart className="h-6 w-6 text-gray-700" />
+              </div>
+
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
+
+            </div>
+
+            <h3 className="mt-5 text-lg font-semibold text-gray-900">
+              Analytics
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500">
+              View product and store performance analytics.
             </p>
 
           </Link>
@@ -463,23 +626,36 @@ export default function SellerDashboardPage() {
                       </p>
                     </div>
 
-                    <div className="shrink-0 text-right">
+                    <div className="flex shrink-0 items-center gap-4">
 
-                      <p className="text-sm font-medium">
-                        Stock: {product.stock}
-                      </p>
+                      <div className="text-right">
 
-                      <p
-                        className={
-                          product.stock > 0
-                            ? "mt-1 text-xs text-green-600"
-                            : "mt-1 text-xs text-red-600"
-                        }
+                        <p className="text-sm font-medium">
+                          Stock: {product.stock}
+                        </p>
+
+                        <p
+                          className={
+                            product.stock > 0
+                              ? "mt-1 text-xs text-green-600"
+                              : "mt-1 text-xs text-red-600"
+                          }
+                        >
+                          {product.stock > 0
+                            ? "In stock"
+                            : "Out of stock"}
+                        </p>
+
+                      </div>
+
+                      {/* EDIT / MANAGE */}
+
+                      <Link
+                        href={`/seller/dashboard/products/${product.slug}/edit`}
+                        className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
                       >
-                        {product.stock > 0
-                          ? "In stock"
-                          : "Out of stock"}
-                      </p>
+                        Manage
+                      </Link>
 
                     </div>
 

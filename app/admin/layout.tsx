@@ -1,13 +1,13 @@
-import SellerHeader from "@/components/layout/SellerHeader";
+import AdminHeader from "@/components/layout/AdminHeader";
 
-export default function SellerLayout({
+export default function AdminLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <SellerHeader />
+      <AdminHeader />
 
       <main>{children}</main>
     </div>

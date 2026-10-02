@@ -6,22 +6,31 @@ const API_URL =
     : process.env.NEXT_PUBLIC_API_URL ||
       "http://127.0.0.1:8000";
 
-
 function clearAuth() {
   if (typeof window === "undefined") {
     return;
   }
 
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("user");
-  localStorage.removeItem("isLoggedIn");
+  sessionStorage.removeItem("access_token");
+  sessionStorage.removeItem("refresh_token");
+  sessionStorage.removeItem("user");
+  sessionStorage.removeItem("isLoggedIn");
+  sessionStorage.removeItem("login_time");
 
   window.dispatchEvent(
     new Event("auth-change")
   );
 }
 
+function redirectToLogin() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  clearAuth();
+
+  window.location.href = "/login";
+}
 
 export async function apiFetch(
   endpoint: string,
@@ -29,9 +38,8 @@ export async function apiFetch(
 ) {
   let token =
     typeof window !== "undefined"
-      ? localStorage.getItem("access_token")
+      ? sessionStorage.getItem("access_token")
       : null;
-
 
   async function makeRequest(
     accessToken: string | null
@@ -40,26 +48,11 @@ export async function apiFetch(
       options.headers || {}
     );
 
-
-    // =====================================================
-    // CHECK FOR FORMDATA
-    // =====================================================
-
     const isFormData =
       typeof FormData !== "undefined" &&
       options.body instanceof FormData;
 
-
-    // =====================================================
-    // CONTENT TYPE
-    // =====================================================
-
     if (isFormData) {
-      /*
-       * Do not set Content-Type manually for FormData.
-       * The browser automatically creates the
-       * multipart/form-data boundary.
-       */
       headers.delete("Content-Type");
     } else if (
       options.body &&
@@ -71,11 +64,6 @@ export async function apiFetch(
       );
     }
 
-
-    // =====================================================
-    // AUTHORIZATION
-    // =====================================================
-
     if (accessToken) {
       headers.set(
         "Authorization",
@@ -83,30 +71,18 @@ export async function apiFetch(
       );
     }
 
-
-    // =====================================================
-    // NORMALIZE ENDPOINT
-    // =====================================================
-
     const normalizedEndpoint =
       endpoint.startsWith("/")
         ? endpoint
         : `/${endpoint}`;
 
-
-    // =====================================================
-    // BUILD URL
-    // =====================================================
-
     const url =
       `${API_URL}${normalizedEndpoint}`;
-
 
     console.log(
       "API REQUEST:",
       url
     );
-
 
     try {
       return await fetch(url, {
@@ -124,22 +100,9 @@ export async function apiFetch(
     }
   }
 
-
   try {
-    // =====================================================
-    // FIRST REQUEST
-    // =====================================================
-
     let response =
       await makeRequest(token);
-
-
-    // =====================================================
-    // AUTH ENDPOINTS
-    //
-    // These endpoints should not automatically
-    // refresh the access token.
-    // =====================================================
 
     const authEndpointsWithoutRefresh = [
       "/auth/signup",
@@ -151,10 +114,8 @@ export async function apiFetch(
       "/auth/refresh",
     ];
 
-
     const normalizedAuthEndpoint =
       endpoint.split("?")[0];
-
 
     const shouldTryRefresh =
       response.status === 401 &&
@@ -162,41 +123,26 @@ export async function apiFetch(
         normalizedAuthEndpoint
       );
 
-
-    // =====================================================
-    // ACCESS TOKEN EXPIRED
-    // =====================================================
-
     if (shouldTryRefresh) {
       const refreshToken =
         typeof window !== "undefined"
-          ? localStorage.getItem(
+          ? sessionStorage.getItem(
               "refresh_token"
             )
           : null;
 
-
-      // ===================================================
-      // NO REFRESH TOKEN
-      // ===================================================
-
       if (!refreshToken) {
-        clearAuth();
+        redirectToLogin();
 
         return {
           success: false,
           status: 401,
           data: {
             detail:
-              "Session expired. Please login again.",
+              "Please login to continue.",
           },
         };
       }
-
-
-      // ===================================================
-      // REFRESH TOKEN REQUEST
-      // ===================================================
 
       const refreshResponse =
         await fetch(
@@ -214,13 +160,10 @@ export async function apiFetch(
           }
         );
 
-
       const refreshText =
         await refreshResponse.text();
 
-
       let refreshData: any = {};
-
 
       try {
         refreshData = refreshText
@@ -230,11 +173,6 @@ export async function apiFetch(
         refreshData = {};
       }
 
-
-      // ===================================================
-      // REFRESH SUCCESSFUL
-      // ===================================================
-
       if (
         refreshResponse.ok &&
         refreshData.access_token &&
@@ -243,27 +181,23 @@ export async function apiFetch(
         token =
           refreshData.access_token;
 
-
-        localStorage.setItem(
+        sessionStorage.setItem(
           "access_token",
           refreshData.access_token
         );
 
-
-        localStorage.setItem(
+        sessionStorage.setItem(
           "refresh_token",
           refreshData.refresh_token
         );
 
-
-        localStorage.setItem(
+        sessionStorage.setItem(
           "isLoggedIn",
           "true"
         );
 
-
         if (refreshData.user) {
-          localStorage.setItem(
+          sessionStorage.setItem(
             "user",
             JSON.stringify(
               refreshData.user
@@ -271,47 +205,30 @@ export async function apiFetch(
           );
         }
 
-
         window.dispatchEvent(
           new Event("auth-change")
         );
 
-
-        // ===============================================
-        // RETRY ORIGINAL REQUEST
-        // ===============================================
-
         response =
           await makeRequest(token);
       } else {
-        // ===============================================
-        // REFRESH FAILED
-        // ===============================================
-
-        clearAuth();
+        redirectToLogin();
 
         return {
           success: false,
           status: 401,
           data: {
             detail:
-              "Session expired. Please login again.",
+              "Please login to continue.",
           },
         };
       }
     }
 
-
-    // =====================================================
-    // READ RESPONSE
-    // =====================================================
-
     const text =
       await response.text();
 
-
     let data: any = {};
-
 
     try {
       data = text
@@ -325,21 +242,11 @@ export async function apiFetch(
       };
     }
 
-
-    // =====================================================
-    // DEBUG
-    // =====================================================
-
     console.log(
       "API RESPONSE:",
       response.status,
       data
     );
-
-
-    // =====================================================
-    // RETURN RESULT
-    // =====================================================
 
     return {
       success: response.ok,
@@ -351,7 +258,6 @@ export async function apiFetch(
       "API FETCH ERROR:",
       error
     );
-
 
     return {
       success: false,
@@ -365,6 +271,5 @@ export async function apiFetch(
     };
   }
 }
-
 
 export { API_URL };

@@ -1,7 +1,8 @@
-
 import type { Metadata } from "next";
 import "./globals.css";
-import Header from "@/components/layout/Header";
+
+import ConditionalHeader from "@/components/layout/ConditionalHeader";
+import RoleGuard from "@/components/auth/RoleGuard";
 
 export const metadata: Metadata = {
   title: "ShopSphere",
@@ -16,9 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-background antialiased">
-        <Header />
+        <ConditionalHeader />
 
-        <main>{children}</main>
+        <main>
+          <RoleGuard>{children}</RoleGuard>
+        </main>
       </body>
     </html>
   );

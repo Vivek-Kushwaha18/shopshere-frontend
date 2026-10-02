@@ -40,6 +40,15 @@ export async function getCart(): Promise<CartData> {
   const response =
     (await apiFetch("/api/cart/")) as ApiCartResponse;
 
+  if (response.status === 401) {
+    return {
+      cart_id: 0,
+      items: [],
+      total_items: 0,
+      total: 0,
+    };
+  }
+
   if (!response.success) {
     throw new Error("Unable to load cart.");
   }
