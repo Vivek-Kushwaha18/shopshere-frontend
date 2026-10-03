@@ -79,8 +79,6 @@ export default function ProfilePage() {
 
   // =====================================================
   // USER
-  // Load stored user immediately so the profile does not
-  // appear empty/loading while the API request runs.
   // =====================================================
 
   const [user, setUser] =
@@ -165,8 +163,6 @@ export default function ProfilePage() {
         return;
       }
 
-      // Keep the stored user visible immediately.
-      // The API request updates it in the background.
       if (isMounted) {
         setUser(storedUser);
 
@@ -240,8 +236,6 @@ export default function ProfilePage() {
           error
         );
 
-        // Keep the stored user visible if
-        // the profile API fails.
         setUser(storedUser);
 
         setFullName(
@@ -641,9 +635,7 @@ export default function ProfilePage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={
-                      cancelEditing
-                    }
+                    onClick={cancelEditing}
                     disabled={saving}
                   >
                     <X className="mr-2 h-4 w-4" />
@@ -652,9 +644,7 @@ export default function ProfilePage() {
 
                   <Button
                     size="sm"
-                    onClick={
-                      saveProfile
-                    }
+                    onClick={saveProfile}
                     disabled={saving}
                   >
                     <Save className="mr-2 h-4 w-4" />
@@ -711,7 +701,7 @@ export default function ProfilePage() {
                         Email
                       </p>
 
-                      <p className="font-medium break-all">
+                      <p className="break-all font-medium">
                         {user.email}
                       </p>
 
@@ -913,9 +903,11 @@ export default function ProfilePage() {
           <Card>
 
             <CardHeader>
+
               <CardTitle>
                 Quick Actions
               </CardTitle>
+
             </CardHeader>
 
             <CardContent className="space-y-3">
@@ -946,14 +938,20 @@ export default function ProfilePage() {
                 </Button>
               </Link>
 
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                disabled
+              {/* My Addresses */}
+
+              <Link
+                href="/addresses"
+                className="block"
               >
-                <MapPin className="mr-3 h-4 w-4" />
-                My Addresses
-              </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                >
+                  <MapPin className="mr-3 h-4 w-4" />
+                  My Addresses
+                </Button>
+              </Link>
 
               <Separator />
 
@@ -996,7 +994,7 @@ export default function ProfilePage() {
                   Current Email
                 </p>
 
-                <p className="font-medium break-all">
+                <p className="break-all font-medium">
                   {user.email}
                 </p>
 
