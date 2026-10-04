@@ -7,6 +7,7 @@ import {
   Package,
   Plus,
   Pencil,
+  CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,20 @@ import {
   type AddressCreateData,
 } from "@/services/addresses";
 
+import { createPaymentIntent } from "@/services/payments";
+
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+);
+
 const emptyAddressForm: AddressCreateData = {
   full_name: "",
   phone: "",
@@ -37,6 +52,107 @@ const emptyAddressForm: AddressCreateData = {
   address_type: "Home",
   is_default: false,
 };
+
+function PaymentForm({
+  onSuccess,
+  onCancel,
+  processing,
+}: {
+  onSuccess: () => Promise<void>;
+  onCancel: () => void;
+  processing: boolean;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+
+  const [paymentError, setPaymentError] =
+    useState("");
+
+  async function handlePayment(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (!stripe || !elements) {
+      setPaymentError(
+        "Payment system is still loading. Please wait."
+      );
+      return;
+    }
+
+    setPaymentError("");
+
+    const { error, paymentIntent } =
+      await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+      });
+
+    if (error) {
+      setPaymentError(
+        error.message ||
+          "Payment could not be completed."
+      );
+      return;
+    }
+
+    if (
+      paymentIntent &&
+      paymentIntent.status === "succeeded"
+    ) {
+      await onSuccess();
+      return;
+    }
+
+    setPaymentError(
+      "Payment was not completed."
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handlePayment}
+      className="mt-6 space-y-5"
+    >
+      <div className="rounded-xl border bg-white p-5">
+        <PaymentElement />
+      </div>
+
+      {paymentError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="text-sm text-red-700">
+            {paymentError}
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={processing}
+          className="w-full rounded-lg border px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Back
+        </button>
+
+        <button
+          type="submit"
+          disabled={
+            !stripe ||
+            !elements ||
+            processing
+          }
+          className="w-full rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {processing
+            ? "Processing Payment..."
+            : "Pay Now"}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -64,6 +180,15 @@ export default function CheckoutPage() {
 
   const [savingAddress, setSavingAddress] =
     useState(false);
+
+  const [paymentProcessing, setPaymentProcessing] =
+    useState(false);
+
+  const [paymentClientSecret, setPaymentClientSecret] =
+    useState<string | null>(null);
+
+  const [paymentOrderId, setPaymentOrderId] =
+    useState<number | null>(null);
 
   const [addressForm, setAddressForm] =
     useState<AddressCreateData>(
@@ -308,11 +433,6 @@ export default function CheckoutPage() {
       const newAddress =
         await createAddress(data);
 
-      /*
-       * Refresh saved addresses.
-       * The new address is selected explicitly
-       * after the refresh.
-       */
       await loadAddresses();
 
       setSelectedAddressId(
@@ -382,7 +502,7 @@ export default function CheckoutPage() {
   }
 
   // =====================================================
-  // PLACE ORDER
+  // CREATE ORDER + PAYMENT
   // =====================================================
 
   async function handleSubmit() {
@@ -438,35 +558,83 @@ export default function CheckoutPage() {
           ),
         });
 
-      await clearCart();
+      const payment =
+        await createPaymentIntent({
+          order_id: order.id,
+        });
 
-      await Swal.fire({
-        icon: "success",
-        title:
-          "Order Placed Successfully",
-        text: `Your order #${order.id} has been placed successfully.`,
-        confirmButtonText:
-          "View Orders",
-      });
-
-      router.push("/orders");
+      setPaymentOrderId(order.id);
+      setPaymentClientSecret(
+        payment.client_secret
+      );
     } catch (error) {
       console.error(
-        "Failed to place order:",
+        "Failed to start payment:",
         error
       );
 
       Swal.fire({
         icon: "error",
-        title: "Unable to place order",
+        title: "Unable to start payment",
         text:
           error instanceof Error
             ? error.message
-            : "Something went wrong while placing your order.",
+            : "Something went wrong while starting payment.",
       });
     } finally {
       setPlacingOrder(false);
     }
+  }
+
+  // =====================================================
+  // PAYMENT SUCCESS
+  // =====================================================
+
+  async function handlePaymentSuccess() {
+    if (!paymentOrderId) {
+      return;
+    }
+
+    try {
+      setPaymentProcessing(true);
+
+      await clearCart();
+
+      await Swal.fire({
+        icon: "success",
+        title: "Payment Successful",
+        text: `Your order #${paymentOrderId} has been paid successfully.`,
+        confirmButtonText: "View Orders",
+      });
+
+      router.push("/orders");
+    } catch (error) {
+      console.error(
+        "Failed after payment:",
+        error
+      );
+
+      Swal.fire({
+        icon: "error",
+        title: "Payment Successful",
+        text:
+          "Your payment was successful, but we could not clear the cart. Your order has still been created.",
+        confirmButtonText: "View Orders",
+      });
+
+      router.push("/orders");
+    } finally {
+      setPaymentProcessing(false);
+    }
+  }
+
+  // =====================================================
+  // CANCEL PAYMENT VIEW
+  // =====================================================
+
+  function handleCancelPayment() {
+    setPaymentClientSecret(null);
+    setPaymentOrderId(null);
   }
 
   // =====================================================
@@ -476,15 +644,11 @@ export default function CheckoutPage() {
   if (loadingCart) {
     return (
       <main className="mx-auto max-w-7xl px-4 py-10">
-
         <div className="rounded-xl border bg-white p-10 text-center">
-
           <p className="text-gray-500">
             Loading checkout...
           </p>
-
         </div>
-
       </main>
     );
   }
@@ -499,7 +663,6 @@ export default function CheckoutPage() {
   ) {
     return (
       <main className="mx-auto max-w-7xl px-4 py-10">
-
         <Link
           href="/cart"
           className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black"
@@ -509,7 +672,6 @@ export default function CheckoutPage() {
         </Link>
 
         <div className="rounded-xl border bg-white p-10 text-center shadow-sm">
-
           <h1 className="text-2xl font-bold text-gray-900">
             Your cart is empty
           </h1>
@@ -524,9 +686,69 @@ export default function CheckoutPage() {
           >
             Continue Shopping
           </Link>
-
         </div>
+      </main>
+    );
+  }
 
+  // =====================================================
+  // PAYMENT SCREEN
+  // =====================================================
+
+  if (
+    paymentClientSecret &&
+    paymentOrderId
+  ) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <Link
+          href="/cart"
+          className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Cart
+        </Link>
+
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
+              <CreditCard className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Complete Payment
+              </h1>
+
+              <p className="text-sm text-gray-500">
+                Order #{paymentOrderId}
+              </p>
+            </div>
+          </div>
+
+          <Elements
+            stripe={stripePromise}
+            options={{
+              clientSecret:
+                paymentClientSecret,
+              appearance: {
+                theme: "stripe",
+              },
+            }}
+          >
+            <PaymentForm
+              onSuccess={
+                handlePaymentSuccess
+              }
+              onCancel={
+                handleCancelPayment
+              }
+              processing={
+                paymentProcessing
+              }
+            />
+          </Elements>
+        </div>
       </main>
     );
   }
@@ -534,9 +756,7 @@ export default function CheckoutPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
 
-      {/* =================================================
-          BACK TO CART
-      ================================================= */}
+      {/* BACK TO CART */}
 
       <Link
         href="/cart"
@@ -546,42 +766,31 @@ export default function CheckoutPage() {
         Back to Cart
       </Link>
 
-      {/* =================================================
-          HEADING
-      ================================================= */}
+      {/* HEADING */}
 
       <div className="mb-8">
-
         <h1 className="text-3xl font-bold text-gray-900">
           Checkout
         </h1>
 
         <p className="mt-2 text-gray-500">
-          Select your delivery address and place your order.
+          Select your delivery address and continue to payment.
         </p>
-
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
 
-        {/* =================================================
-            DELIVERY ADDRESS
-        ================================================= */}
+        {/* DELIVERY ADDRESS */}
 
         <section className="lg:col-span-2">
-
           <div className="rounded-xl border bg-white p-6 shadow-sm">
 
-            {/* Header */}
-
             <div className="mb-6 flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
                 <MapPin className="h-5 w-5" />
               </div>
 
               <div>
-
                 <h2 className="text-xl font-semibold text-gray-900">
                   Delivery Address
                 </h2>
@@ -589,38 +798,23 @@ export default function CheckoutPage() {
                 <p className="text-sm text-gray-500">
                   Select where you want your order delivered.
                 </p>
-
               </div>
-
             </div>
 
-            {/* Loading */}
-
             {loadingAddresses ? (
-
               <div className="rounded-lg border bg-gray-50 p-6 text-center">
-
                 <p className="text-sm text-gray-500">
                   Loading your addresses...
                 </p>
-
               </div>
-
             ) : (
-
               <>
-
-                {/* =================================================
-                    SAVED ADDRESSES
-                ================================================= */}
+                {/* SAVED ADDRESSES */}
 
                 {addresses.length > 0 && (
-
                   <div className="space-y-4">
-
                     {addresses.map(
                       (address) => {
-
                         const selected =
                           selectedAddressId ===
                           address.id;
@@ -645,10 +839,7 @@ export default function CheckoutPage() {
                                 : "border-gray-200 hover:border-gray-400"
                             } disabled:cursor-not-allowed disabled:opacity-60`}
                           >
-
                             <div className="flex items-start gap-4">
-
-                              {/* Radio */}
 
                               <div
                                 className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
@@ -657,19 +848,14 @@ export default function CheckoutPage() {
                                     : "border-gray-400"
                                 }`}
                               >
-
                                 {selected && (
                                   <div className="h-2.5 w-2.5 rounded-full bg-black" />
                                 )}
-
                               </div>
-
-                              {/* Details */}
 
                               <div className="min-w-0 flex-1">
 
                                 <div className="flex flex-wrap items-center gap-2">
-
                                   <h3 className="font-semibold text-gray-900">
                                     {
                                       address.full_name
@@ -687,7 +873,6 @@ export default function CheckoutPage() {
                                       Default
                                     </span>
                                   )}
-
                                 </div>
 
                                 <p className="mt-2 text-sm text-gray-600">
@@ -697,7 +882,6 @@ export default function CheckoutPage() {
                                 </p>
 
                                 <p className="mt-2 text-sm leading-6 text-gray-600">
-
                                   {
                                     address.address_line
                                   }
@@ -717,25 +901,17 @@ export default function CheckoutPage() {
                                   {
                                     address.postal_code
                                   }
-
                                 </p>
-
                               </div>
-
                             </div>
-
                           </button>
                         );
                       }
                     )}
-
                   </div>
-
                 )}
 
-                {/* =================================================
-                    ADD NEW ADDRESS BUTTON
-                ================================================= */}
+                {/* ADD NEW ADDRESS */}
 
                 {!showNewAddressForm && (
                   <button
@@ -750,26 +926,18 @@ export default function CheckoutPage() {
                     }
                     className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-400 px-4 py-3 font-medium text-gray-700 transition hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
                   >
-
                     <Plus className="h-4 w-4" />
-
                     Add New Address
-
                   </button>
                 )}
 
-                {/* =================================================
-                    NEW ADDRESS FORM
-                ================================================= */}
+                {/* NEW ADDRESS FORM */}
 
                 {showNewAddressForm && (
-
                   <div className="mt-6 rounded-xl border bg-gray-50 p-5">
 
                     <div className="mb-5 flex items-center justify-between">
-
                       <div>
-
                         <h3 className="font-semibold text-gray-900">
                           Add New Address
                         </h3>
@@ -777,7 +945,6 @@ export default function CheckoutPage() {
                         <p className="mt-1 text-sm text-gray-500">
                           Save this address for future orders.
                         </p>
-
                       </div>
 
                       {addresses.length > 0 && (
@@ -794,7 +961,6 @@ export default function CheckoutPage() {
                           Cancel
                         </button>
                       )}
-
                     </div>
 
                     <form
@@ -804,10 +970,9 @@ export default function CheckoutPage() {
                       className="space-y-4"
                     >
 
-                      {/* Full Name */}
+                      {/* FULL NAME */}
 
                       <div>
-
                         <label
                           htmlFor="new-full-name"
                           className="mb-2 block text-sm font-medium text-gray-700"
@@ -832,13 +997,11 @@ export default function CheckoutPage() {
                           }
                           className="w-full rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                         />
-
                       </div>
 
-                      {/* Phone */}
+                      {/* PHONE */}
 
                       <div>
-
                         <label
                           htmlFor="new-phone"
                           className="mb-2 block text-sm font-medium text-gray-700"
@@ -864,13 +1027,11 @@ export default function CheckoutPage() {
                           }
                           className="w-full rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                         />
-
                       </div>
 
-                      {/* Address */}
+                      {/* ADDRESS */}
 
                       <div>
-
                         <label
                           htmlFor="new-address"
                           className="mb-2 block text-sm font-medium text-gray-700"
@@ -895,15 +1056,13 @@ export default function CheckoutPage() {
                           }
                           className="w-full resize-none rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                         />
-
                       </div>
 
-                      {/* City + State */}
+                      {/* CITY + STATE */}
 
                       <div className="grid gap-4 sm:grid-cols-2">
 
                         <div>
-
                           <label
                             htmlFor="new-city"
                             className="mb-2 block text-sm font-medium text-gray-700"
@@ -928,11 +1087,9 @@ export default function CheckoutPage() {
                             }
                             className="w-full rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                           />
-
                         </div>
 
                         <div>
-
                           <label
                             htmlFor="new-state"
                             className="mb-2 block text-sm font-medium text-gray-700"
@@ -957,15 +1114,13 @@ export default function CheckoutPage() {
                             }
                             className="w-full rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                           />
-
                         </div>
 
                       </div>
 
-                      {/* Postal Code */}
+                      {/* POSTAL CODE */}
 
                       <div>
-
                         <label
                           htmlFor="new-postal-code"
                           className="mb-2 block text-sm font-medium text-gray-700"
@@ -991,13 +1146,11 @@ export default function CheckoutPage() {
                           }
                           className="w-full rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                         />
-
                       </div>
 
-                      {/* Address Type */}
+                      {/* ADDRESS TYPE */}
 
                       <div>
-
                         <label
                           htmlFor="new-address-type"
                           className="mb-2 block text-sm font-medium text-gray-700"
@@ -1019,7 +1172,6 @@ export default function CheckoutPage() {
                           }
                           className="w-full rounded-lg border bg-white px-4 py-3 outline-none transition focus:border-black disabled:bg-gray-100"
                         >
-
                           <option value="Home">
                             Home
                           </option>
@@ -1031,15 +1183,12 @@ export default function CheckoutPage() {
                           <option value="Other">
                             Other
                           </option>
-
                         </select>
-
                       </div>
 
-                      {/* Default */}
+                      {/* DEFAULT */}
 
                       <label className="flex items-center gap-3 text-sm text-gray-700">
-
                         <input
                           type="checkbox"
                           checked={
@@ -1067,10 +1216,9 @@ export default function CheckoutPage() {
                         />
 
                         Make this my default address
-
                       </label>
 
-                      {/* Save */}
+                      {/* SAVE */}
 
                       <button
                         type="submit"
@@ -1079,116 +1227,89 @@ export default function CheckoutPage() {
                         }
                         className="flex w-full items-center justify-center gap-2 rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-
                         <Plus className="h-4 w-4" />
 
                         {savingAddress
                           ? "Saving Address..."
                           : "Save Address"}
-
                       </button>
 
                     </form>
-
                   </div>
                 )}
 
+                {/* MANAGE ADDRESSES */}
+
+                {addresses.length > 0 &&
+                  !showNewAddressForm && (
+                    <div className="mt-5 flex items-center justify-between rounded-lg bg-gray-50 p-4">
+
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          Manage your saved addresses
+                        </p>
+
+                        <p className="mt-1 text-xs text-gray-500">
+                          Edit, delete, or change your default address.
+                        </p>
+                      </div>
+
+                      <Link
+                        href="/addresses"
+                        className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Manage
+                      </Link>
+                    </div>
+                  )}
+
+                {/* CONTINUE TO PAYMENT */}
+
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={
+                    placingOrder ||
+                    loadingAddresses ||
+                    addresses.length === 0 ||
+                    selectedAddressId === null
+                  }
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CreditCard className="h-4 w-4" />
+
+                  {placingOrder
+                    ? "Preparing Payment..."
+                    : "Continue to Payment"}
+                </button>
               </>
             )}
-
-            {/* =================================================
-                MANAGE ADDRESSES
-            ================================================= */}
-
-            {addresses.length > 0 &&
-              !showNewAddressForm && (
-
-                <div className="mt-5 flex items-center justify-between rounded-lg bg-gray-50 p-4">
-
-                  <div>
-
-                    <p className="text-sm font-medium text-gray-900">
-                      Manage your saved addresses
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      Edit, delete, or change your default address.
-                    </p>
-
-                  </div>
-
-                  <Link
-                    href="/addresses"
-                    className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                  >
-
-                    <Pencil className="h-4 w-4" />
-
-                    Manage
-
-                  </Link>
-
-                </div>
-              )}
-
-            {/* =================================================
-                PLACE ORDER
-            ================================================= */}
-
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={
-                placingOrder ||
-                loadingAddresses ||
-                addresses.length === 0 ||
-                selectedAddressId === null
-              }
-              className="mt-6 w-full rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-
-              {placingOrder
-                ? "Placing Order..."
-                : "Place Order"}
-
-            </button>
-
           </div>
-
         </section>
 
-        {/* =================================================
-            ORDER SUMMARY
-        ================================================= */}
+        {/* ORDER SUMMARY */}
 
         <aside>
-
           <div className="sticky top-6 rounded-xl border bg-white p-6 shadow-sm">
 
             <div className="mb-6 flex items-center gap-3">
-
               <Package className="h-5 w-5 text-gray-700" />
 
               <h2 className="text-xl font-semibold text-gray-900">
                 Order Summary
               </h2>
-
             </div>
-
-            {/* Products */}
 
             <div className="space-y-4 border-b pb-5">
 
               {cart.items.map(
                 (item) => (
-
                   <div
                     key={item.id}
                     className="flex items-center gap-3"
                   >
-
                     {item.product.image_url ? (
-
                       <img
                         src={
                           item.product
@@ -1199,21 +1320,17 @@ export default function CheckoutPage() {
                         }
                         className="h-14 w-14 shrink-0 rounded-md border object-cover"
                       />
-
                     ) : (
-
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md border bg-gray-100 text-xs text-gray-500">
                         No image
                       </div>
-
                     )}
 
                     <div className="min-w-0 flex-1">
 
                       <p className="truncate text-sm font-medium text-gray-900">
                         {
-                          item.product
-                            .name
+                          item.product.name
                         }
                       </p>
 
@@ -1231,7 +1348,6 @@ export default function CheckoutPage() {
                         )}{" "}
                         each
                       </p>
-
                     </div>
 
                     <p className="text-sm font-medium text-gray-900">
@@ -1240,20 +1356,15 @@ export default function CheckoutPage() {
                         2
                       )}
                     </p>
-
                   </div>
-
                 )
               )}
 
             </div>
 
-            {/* Totals */}
-
             <div className="space-y-4 border-b py-5">
 
               <div className="flex justify-between text-sm">
-
                 <span className="text-gray-500">
                   Items
                 </span>
@@ -1263,11 +1374,9 @@ export default function CheckoutPage() {
                     cart.total_items
                   }
                 </span>
-
               </div>
 
               <div className="flex justify-between text-sm">
-
                 <span className="text-gray-500">
                   Shipping
                 </span>
@@ -1275,12 +1384,9 @@ export default function CheckoutPage() {
                 <span className="font-medium text-gray-900">
                   Free
                 </span>
-
               </div>
 
             </div>
-
-            {/* Total */}
 
             <div className="flex justify-between pt-5">
 
@@ -1297,8 +1403,6 @@ export default function CheckoutPage() {
 
             </div>
 
-            {/* Payment */}
-
             <div className="mt-5 rounded-lg bg-gray-50 p-3">
 
               <p className="text-xs text-gray-500">
@@ -1306,17 +1410,15 @@ export default function CheckoutPage() {
               </p>
 
               <p className="mt-1 text-sm font-medium text-gray-900">
-                Payment not required
+                Secure Stripe Payment
               </p>
 
             </div>
 
           </div>
-
         </aside>
 
       </div>
-
     </main>
   );
 }
