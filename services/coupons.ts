@@ -66,13 +66,15 @@ export async function getCoupons(): Promise<Coupon[]> {
     );
   }
 
-  if (!Array.isArray(response.data)) {
+  const coupons = response.data?.data;
+
+  if (!Array.isArray(coupons)) {
     throw new Error(
       "Invalid coupons response."
     );
   }
 
-  return response.data as Coupon[];
+  return coupons as Coupon[];
 }
 
 // =====================================================
@@ -97,7 +99,7 @@ export async function createCoupon(
     );
   }
 
-  return response.data as Coupon;
+  return response.data?.data as Coupon;
 }
 
 // =====================================================
@@ -123,7 +125,7 @@ export async function updateCoupon(
     );
   }
 
-  return response.data as Coupon;
+  return response.data?.data as Coupon;
 }
 
 // =====================================================
@@ -148,7 +150,7 @@ export async function updateCouponStatus(
     );
   }
 
-  return response.data as Coupon;
+  return response.data?.data as Coupon;
 }
 
 // =====================================================
