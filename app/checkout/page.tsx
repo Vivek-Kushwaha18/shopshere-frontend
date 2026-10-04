@@ -8,6 +8,8 @@ import {
   Plus,
   Pencil,
   CreditCard,
+  Tag,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +29,11 @@ import {
   type Address,
   type AddressCreateData,
 } from "@/services/addresses";
+
+import {
+  validateCoupon,
+  type CouponValidationResponse,
+} from "@/services/coupons";
 
 import { createPaymentIntent } from "@/services/payments";
 
@@ -194,6 +201,21 @@ export default function CheckoutPage() {
     useState<AddressCreateData>(
       emptyAddressForm
     );
+
+  // =====================================================
+  // COUPON
+  // =====================================================
+
+  const [couponCode, setCouponCode] =
+    useState("");
+
+  const [appliedCoupon, setAppliedCoupon] =
+    useState<CouponValidationResponse | null>(
+      null
+    );
+
+  const [couponLoading, setCouponLoading] =
+    useState(false);
 
   // =====================================================
   // LOAD CART
@@ -502,6 +524,89 @@ export default function CheckoutPage() {
   }
 
   // =====================================================
+  // APPLY COUPON
+  // =====================================================
+
+  async function handleApplyCoupon() {
+    if (!cart) {
+      return;
+    }
+
+    const code = couponCode.trim();
+
+    if (!code) {
+      Swal.fire({
+        icon: "warning",
+        title: "Enter Coupon Code",
+        text:
+          "Please enter a coupon code.",
+      });
+
+      return;
+    }
+
+    try {
+      setCouponLoading(true);
+
+      const coupon =
+        await validateCoupon(
+          code,
+          cart.total
+        );
+
+      setAppliedCoupon(coupon);
+
+      setCouponCode(coupon.code);
+
+      Swal.fire({
+        icon: "success",
+        title: "Coupon Applied",
+        text: `You saved ₹${coupon.discount_amount.toFixed(
+          2
+        )}.`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      setAppliedCoupon(null);
+
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Coupon",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Unable to apply coupon.",
+      });
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  // =====================================================
+  // REMOVE COUPON
+  // =====================================================
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponCode("");
+  }
+
+  // =====================================================
+  // CALCULATE CHECKOUT TOTALS
+  // =====================================================
+
+  const subtotal = cart?.total ?? 0;
+
+  const discountAmount =
+    appliedCoupon?.discount_amount ?? 0;
+
+  const finalAmount = Math.max(
+    subtotal - discountAmount,
+    0
+  );
+
+  // =====================================================
   // CREATE ORDER + PAYMENT
   // =====================================================
 
@@ -556,6 +661,9 @@ export default function CheckoutPage() {
                 item.quantity,
             })
           ),
+
+          coupon_code:
+            appliedCoupon?.code,
         });
 
       const payment =
@@ -564,6 +672,7 @@ export default function CheckoutPage() {
         });
 
       setPaymentOrderId(order.id);
+
       setPaymentClientSecret(
         payment.client_secret
       );
@@ -1271,6 +1380,7 @@ export default function CheckoutPage() {
                   onClick={handleSubmit}
                   disabled={
                     placingOrder ||
+                    couponLoading ||
                     loadingAddresses ||
                     addresses.length === 0 ||
                     selectedAddressId === null
@@ -1362,6 +1472,105 @@ export default function CheckoutPage() {
 
             </div>
 
+            {/* COUPON */}
+
+            <div className="border-b py-5">
+
+              <div className="mb-3 flex items-center gap-2">
+                <Tag className="h-4 w-4 text-gray-700" />
+
+                <p className="text-sm font-semibold text-gray-900">
+                  Coupon Code
+                </p>
+              </div>
+
+              {appliedCoupon ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+
+                  <div className="flex items-center justify-between gap-3">
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-green-800">
+                        {appliedCoupon.code}
+                      </p>
+
+                      <p className="mt-1 text-xs text-green-700">
+                        You saved ₹
+                        {appliedCoupon.discount_amount.toFixed(
+                          2
+                        )}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleRemoveCoupon
+                      }
+                      disabled={
+                        couponLoading ||
+                        placingOrder
+                      }
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-green-300 bg-white px-2 py-1 text-xs font-medium text-green-800 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <X className="h-3 w-3" />
+                      Remove
+                    </button>
+
+                  </div>
+
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 sm:flex-row">
+
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(event) =>
+                      setCouponCode(
+                        event.target.value.toUpperCase()
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter"
+                      ) {
+                        event.preventDefault();
+                        handleApplyCoupon();
+                      }
+                    }}
+                    placeholder="Enter coupon code"
+                    disabled={
+                      couponLoading ||
+                      placingOrder
+                    }
+                    className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm uppercase outline-none transition focus:border-black disabled:bg-gray-100"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleApplyCoupon
+                    }
+                    disabled={
+                      couponLoading ||
+                      placingOrder ||
+                      !couponCode.trim()
+                    }
+                    className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {couponLoading
+                      ? "Applying..."
+                      : "Apply"}
+                  </button>
+
+                </div>
+              )}
+
+            </div>
+
+            {/* PRICE SUMMARY */}
+
             <div className="space-y-4 border-b py-5">
 
               <div className="flex justify-between text-sm">
@@ -1378,6 +1587,34 @@ export default function CheckoutPage() {
 
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">
+                  Subtotal
+                </span>
+
+                <span className="font-medium text-gray-900">
+                  ₹
+                  {subtotal.toFixed(
+                    2
+                  )}
+                </span>
+              </div>
+
+              {appliedCoupon && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-green-700">
+                    Discount
+                  </span>
+
+                  <span className="font-medium text-green-700">
+                    -₹
+                    {discountAmount.toFixed(
+                      2
+                    )}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">
                   Shipping
                 </span>
 
@@ -1388,6 +1625,8 @@ export default function CheckoutPage() {
 
             </div>
 
+            {/* FINAL TOTAL */}
+
             <div className="flex justify-between pt-5">
 
               <span className="text-lg font-semibold">
@@ -1396,7 +1635,7 @@ export default function CheckoutPage() {
 
               <span className="text-lg font-bold">
                 ₹
-                {cart.total.toFixed(
+                {finalAmount.toFixed(
                   2
                 )}
               </span>

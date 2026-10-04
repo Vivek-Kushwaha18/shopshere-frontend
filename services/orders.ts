@@ -1,6 +1,25 @@
 import { apiFetch } from "./api";
 
 // =====================================================
+// ORDER ITEM CREATE
+// =====================================================
+
+export interface OrderItemCreate {
+  product_id: number;
+  quantity: number;
+}
+
+// =====================================================
+// CREATE ORDER DATA
+// =====================================================
+
+export interface OrderCreateData {
+  shipping_address: string;
+  items: OrderItemCreate[];
+  coupon_code?: string;
+}
+
+// =====================================================
 // ORDER ITEM
 // =====================================================
 
@@ -9,8 +28,10 @@ export interface OrderItem {
   order_id: number;
   product_id: number;
   seller_id: number;
+
   product_name: string;
   product_image: string | null;
+
   quantity: number;
   price: number;
   total: number;
@@ -23,31 +44,31 @@ export interface OrderItem {
 export interface Order {
   id: number;
   user_id: number;
+
   total_amount: number;
+  discount_amount: number;
+  coupon_code: string | null;
+
   status: string;
   payment_status: string;
+
   shipping_address: string;
+
   created_at: string;
   updated_at: string;
+
   items: OrderItem[];
 }
 
 // =====================================================
-// CREATE ORDER ITEM
+// SELLER TOP PRODUCT
 // =====================================================
 
-export interface OrderItemCreate {
+export interface SellerTopProduct {
   product_id: number;
-  quantity: number;
-}
-
-// =====================================================
-// CREATE ORDER
-// =====================================================
-
-export interface OrderCreateData {
-  shipping_address: string;
-  items: OrderItemCreate[];
+  product_name: string;
+  units_sold: number;
+  sales: number;
 }
 
 // =====================================================
@@ -67,12 +88,18 @@ export interface SellerAnalytics {
     cancelled: number;
   };
 
-  top_products: {
-    product_id: number;
-    product_name: string;
-    units_sold: number;
-    sales: number;
-  }[];
+  top_products: SellerTopProduct[];
+}
+
+// =====================================================
+// SELLER REVENUE
+// =====================================================
+
+export interface SellerRevenue {
+  date: string;
+  orders: number;
+  units: number;
+  sales: number;
 }
 
 // =====================================================
@@ -101,7 +128,7 @@ export async function createOrder(
 }
 
 // =====================================================
-// GET CUSTOMER ORDERS
+// GET MY ORDERS - CUSTOMER
 // =====================================================
 
 export async function getMyOrders(): Promise<Order[]> {
@@ -112,13 +139,7 @@ export async function getMyOrders(): Promise<Order[]> {
   if (!response.success) {
     throw new Error(
       response.data?.detail ||
-        "Unable to fetch your orders."
-    );
-  }
-
-  if (!Array.isArray(response.data)) {
-    throw new Error(
-      "Invalid orders response."
+        "Unable to fetch orders."
     );
   }
 
@@ -147,7 +168,45 @@ export async function getOrder(
 }
 
 // =====================================================
-// GET SELLER ORDERS
+// SELLER - GET ANALYTICS
+// =====================================================
+
+export async function getSellerAnalytics(): Promise<SellerAnalytics> {
+  const response = await apiFetch(
+    "/orders/seller/analytics"
+  );
+
+  if (!response.success) {
+    throw new Error(
+      response.data?.detail ||
+        "Unable to fetch seller analytics."
+    );
+  }
+
+  return response.data as SellerAnalytics;
+}
+
+// =====================================================
+// SELLER - GET REVENUE
+// =====================================================
+
+export async function getSellerRevenue(): Promise<SellerRevenue[]> {
+  const response = await apiFetch(
+    "/orders/seller/revenue"
+  );
+
+  if (!response.success) {
+    throw new Error(
+      response.data?.detail ||
+        "Unable to fetch seller revenue."
+    );
+  }
+
+  return response.data as SellerRevenue[];
+}
+
+// =====================================================
+// SELLER - GET ORDERS
 // =====================================================
 
 export async function getSellerOrders(): Promise<Order[]> {
@@ -162,17 +221,11 @@ export async function getSellerOrders(): Promise<Order[]> {
     );
   }
 
-  if (!Array.isArray(response.data)) {
-    throw new Error(
-      "Invalid seller orders response."
-    );
-  }
-
   return response.data as Order[];
 }
 
 // =====================================================
-// UPDATE SELLER ORDER STATUS
+// SELLER - UPDATE ORDER STATUS
 // =====================================================
 
 export async function updateSellerOrderStatus(
@@ -196,23 +249,4 @@ export async function updateSellerOrderStatus(
   }
 
   return response.data as Order;
-}
-
-// =====================================================
-// GET SELLER ANALYTICS
-// =====================================================
-
-export async function getSellerAnalytics(): Promise<SellerAnalytics> {
-  const response = await apiFetch(
-    "/orders/seller/analytics"
-  );
-
-  if (!response.success) {
-    throw new Error(
-      response.data?.detail ||
-        "Unable to fetch seller analytics."
-    );
-  }
-
-  return response.data as SellerAnalytics;
 }
