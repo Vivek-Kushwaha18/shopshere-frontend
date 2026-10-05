@@ -86,8 +86,10 @@ export default function Header() {
 
   useEffect(() => {
     function loadAuthUser() {
+      // FIX:
+      // auth.ts stores the token in sessionStorage
       const accessToken =
-        localStorage.getItem("access_token");
+        sessionStorage.getItem("access_token");
 
       const storedUser = getStoredUser();
 
@@ -800,7 +802,6 @@ export default function Header() {
           >
             <Link href="/cart">
               <ShoppingCart className="h-5 w-5" />
-
               <span className="sr-only">
                 Shopping cart
               </span>
