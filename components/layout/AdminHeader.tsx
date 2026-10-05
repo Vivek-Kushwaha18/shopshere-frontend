@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -27,6 +27,7 @@ import {
 
 export default function AdminHeader() {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -61,10 +62,7 @@ export default function AdminHeader() {
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleClickOutside
-      );
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
@@ -84,10 +82,17 @@ export default function AdminHeader() {
     });
   }
 
+  function isActive(path: string) {
+    if (path === "/admin/dashboard") {
+      return pathname === "/admin/dashboard";
+    }
+
+    return pathname.startsWith(path);
+  }
+
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-
         {/* Logo */}
 
         <Link
@@ -100,75 +105,137 @@ export default function AdminHeader() {
         {/* Navigation */}
 
         <nav className="flex items-center gap-6">
-
           {/* Dashboard */}
 
           <Link
             href="/admin/dashboard"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <LayoutDashboard className="h-4 w-4" />
+
             Dashboard
+
+            {isActive("/admin/dashboard") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Products */}
 
           <Link
             href="/admin/dashboard/products"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard/products")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <Package className="h-4 w-4" />
+
             Products
+
+            {isActive("/admin/dashboard/products") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Categories */}
 
           <Link
             href="/admin/dashboard/categories"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard/categories")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <FolderTree className="h-4 w-4" />
+
             Categories
+
+            {isActive("/admin/dashboard/categories") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Users */}
 
           <Link
             href="/admin/dashboard/users"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard/users")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <Users className="h-4 w-4" />
+
             Users
+
+            {isActive("/admin/dashboard/users") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Reports */}
 
           <Link
             href="/admin/dashboard/reports"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard/reports")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <FileText className="h-4 w-4" />
+
             Reports
+
+            {isActive("/admin/dashboard/reports") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Coupons */}
 
           <Link
             href="/admin/dashboard/coupons"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard/coupons")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <TicketPercent className="h-4 w-4" />
+
             Coupons
+
+            {isActive("/admin/dashboard/coupons") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* AI Conversations */}
 
           <Link
             href="/admin/dashboard/ai-conversations"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-2 text-sm font-medium transition ${
+              isActive("/admin/dashboard/ai-conversations")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <MessageSquare className="h-4 w-4" />
+
             AI Conversations
+
+            {isActive("/admin/dashboard/ai-conversations") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Profile */}
@@ -182,7 +249,11 @@ export default function AdminHeader() {
               onClick={() =>
                 setProfileOpen((prev) => !prev)
               }
-              className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+              className={`relative flex items-center gap-2 py-2 text-sm font-medium ${
+                pathname === "/admin/dashboard/profile"
+                  ? "text-black"
+                  : "text-gray-700 hover:text-black"
+              }`}
             >
               <UserCircle className="h-5 w-5" />
 
@@ -197,13 +268,16 @@ export default function AdminHeader() {
                     : ""
                 }`}
               />
+
+              {pathname === "/admin/dashboard/profile" && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+              )}
             </button>
 
             {/* Profile Dropdown */}
 
             {profileOpen && (
               <div className="absolute right-0 top-full z-50 mt-3 w-56 rounded-lg border bg-white py-2 shadow-lg">
-
                 {/* User Information */}
 
                 <div className="border-b px-4 py-3">
@@ -230,6 +304,7 @@ export default function AdminHeader() {
                   className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   <UserCircle className="h-4 w-4" />
+
                   Profile
                 </Link>
 
@@ -241,13 +316,12 @@ export default function AdminHeader() {
                   className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="h-4 w-4" />
+
                   Logout
                 </button>
-
               </div>
             )}
           </div>
-
         </nav>
       </div>
     </header>

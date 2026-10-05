@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Package,
   ShoppingBag,
   Boxes,
-  BarChart3,
   UserCircle,
   LogOut,
   ChevronDown,
@@ -25,6 +24,7 @@ import {
 
 export default function SellerHeader() {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [user, setUser] = useState<User | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -79,6 +79,14 @@ export default function SellerHeader() {
     });
   }
 
+  function isActive(path: string) {
+    if (path === "/seller/dashboard") {
+      return pathname === path;
+    }
+
+    return pathname.startsWith(path);
+  }
+
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
@@ -98,88 +106,141 @@ export default function SellerHeader() {
 
           <Link
             href="/seller/dashboard"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <LayoutDashboard className="h-4 w-4" />
+
             Dashboard
+
+            {isActive("/seller/dashboard") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Products */}
 
           <Link
             href="/seller/dashboard/products"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard/products")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <Package className="h-4 w-4" />
+
             Products
+
+            {isActive("/seller/dashboard/products") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Revenue */}
 
           <Link
             href="/seller/dashboard/revenue"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard/revenue")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <Wallet className="h-4 w-4" />
+
             Revenue
+
+            {isActive("/seller/dashboard/revenue") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Inventory */}
 
           <Link
             href="/seller/dashboard/inventory"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard/inventory")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <Boxes className="h-4 w-4" />
+
             Inventory
+
+            {isActive("/seller/dashboard/inventory") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Orders */}
 
           <Link
             href="/seller/dashboard/orders"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard/orders")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <ShoppingBag className="h-4 w-4" />
+
             Orders
+
+            {isActive("/seller/dashboard/orders") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Analytics */}
 
           <Link
             href="/seller/dashboard/analytics"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard/analytics")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
           >
             <LineChart className="h-4 w-4" />
+
             Analytics
+
+            {isActive("/seller/dashboard/analytics") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
           </Link>
 
           {/* Profile */}
 
-          <div
-            className="relative"
-            ref={profileRef}
-          >
+          <div className="relative" ref={profileRef}>
             <button
               type="button"
-              onClick={() =>
-                setProfileOpen((prev) => !prev)
-              }
-              className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+              onClick={() => setProfileOpen((prev) => !prev)}
+              className={`relative flex items-center gap-2 py-1 text-sm font-medium ${
+                pathname === "/seller/dashboard/profile"
+                  ? "text-black"
+                  : "text-gray-700 hover:text-black"
+              }`}
             >
               <UserCircle className="h-5 w-5" />
 
-              <span>
-                {user?.full_name || "Seller"}
-              </span>
+              <span>{user?.full_name || "Seller"}</span>
 
               <ChevronDown
                 className={`h-4 w-4 transition-transform ${
-                  profileOpen
-                    ? "rotate-180"
-                    : ""
+                  profileOpen ? "rotate-180" : ""
                 }`}
               />
+
+              {pathname === "/seller/dashboard/profile" && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+              )}
             </button>
 
             {/* Profile Dropdown */}
@@ -204,12 +265,11 @@ export default function SellerHeader() {
 
                 <Link
                   href="/seller/dashboard/profile"
-                  onClick={() =>
-                    setProfileOpen(false)
-                  }
+                  onClick={() => setProfileOpen(false)}
                   className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   <UserCircle className="h-4 w-4" />
+
                   Profile
                 </Link>
 
@@ -221,6 +281,7 @@ export default function SellerHeader() {
                   className="flex w-full items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="h-4 w-4" />
+
                   Logout
                 </button>
               </div>
