@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Wallet,
   LineChart,
+  Truck,
 } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -59,7 +60,10 @@ export default function SellerHeader() {
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
     };
   }, []);
 
@@ -197,6 +201,25 @@ export default function SellerHeader() {
             )}
           </Link>
 
+          {/* Shipments */}
+
+          <Link
+            href="/seller/dashboard/shipments"
+            className={`relative flex items-center gap-2 py-1 text-sm font-medium transition ${
+              isActive("/seller/dashboard/shipments")
+                ? "text-black"
+                : "text-gray-700 hover:text-black"
+            }`}
+          >
+            <Truck className="h-4 w-4" />
+
+            Shipments
+
+            {isActive("/seller/dashboard/shipments") && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
+            )}
+          </Link>
+
           {/* Analytics */}
 
           <Link
@@ -218,27 +241,40 @@ export default function SellerHeader() {
 
           {/* Profile */}
 
-          <div className="relative" ref={profileRef}>
+          <div
+            className="relative"
+            ref={profileRef}
+          >
             <button
               type="button"
-              onClick={() => setProfileOpen((prev) => !prev)}
+              onClick={() =>
+                setProfileOpen(
+                  (prev) => !prev
+                )
+              }
               className={`relative flex items-center gap-2 py-1 text-sm font-medium ${
-                pathname === "/seller/dashboard/profile"
+                pathname ===
+                "/seller/dashboard/profile"
                   ? "text-black"
                   : "text-gray-700 hover:text-black"
               }`}
             >
               <UserCircle className="h-5 w-5" />
 
-              <span>{user?.full_name || "Seller"}</span>
+              <span>
+                {user?.full_name || "Seller"}
+              </span>
 
               <ChevronDown
                 className={`h-4 w-4 transition-transform ${
-                  profileOpen ? "rotate-180" : ""
+                  profileOpen
+                    ? "rotate-180"
+                    : ""
                 }`}
               />
 
-              {pathname === "/seller/dashboard/profile" && (
+              {pathname ===
+                "/seller/dashboard/profile" && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-black" />
               )}
             </button>
@@ -249,7 +285,8 @@ export default function SellerHeader() {
               <div className="absolute right-0 top-full z-50 mt-3 w-56 rounded-lg border bg-white py-2 shadow-lg">
                 <div className="border-b px-4 py-3">
                   <p className="text-sm font-semibold text-gray-900">
-                    {user?.full_name || "Seller"}
+                    {user?.full_name ||
+                      "Seller"}
                   </p>
 
                   <p className="mt-1 truncate text-xs text-gray-500">
@@ -265,7 +302,9 @@ export default function SellerHeader() {
 
                 <Link
                   href="/seller/dashboard/profile"
-                  onClick={() => setProfileOpen(false)}
+                  onClick={() =>
+                    setProfileOpen(false)
+                  }
                   className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   <UserCircle className="h-4 w-4" />

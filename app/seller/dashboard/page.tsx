@@ -12,6 +12,7 @@ import {
   Boxes,
   ClipboardList,
   LineChart,
+  Truck,
   ArrowRight,
 } from "lucide-react";
 
@@ -31,12 +32,10 @@ let sellerProductsCache: Product[] | null = null;
 let sellerProductsRequest: Promise<Product[]> | null = null;
 
 async function getCachedSellerProducts() {
-  // Return cached products immediately
   if (sellerProductsCache !== null) {
     return sellerProductsCache;
   }
 
-  // Reuse existing request if one is already running
   if (sellerProductsRequest) {
     return sellerProductsRequest;
   }
@@ -98,10 +97,6 @@ export default function SellerDashboardPage() {
       try {
         setError("");
 
-        // -------------------------------------------------
-        // GET LOGGED-IN SELLER
-        // -------------------------------------------------
-
         const user = getStoredUser();
 
         if (
@@ -110,10 +105,6 @@ export default function SellerDashboardPage() {
         ) {
           setSellerName(user.full_name);
         }
-
-        // -------------------------------------------------
-        // USE CACHE OR GET SELLER PRODUCTS
-        // -------------------------------------------------
 
         const result =
           await getCachedSellerProducts();
@@ -201,7 +192,7 @@ export default function SellerDashboardPage() {
   }
 
   // =====================================================
-  // WAIT ONLY FOR FIRST REQUEST
+  // LOADING
   // =====================================================
 
   if (
@@ -219,21 +210,25 @@ export default function SellerDashboardPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-32 animate-pulse rounded-xl border bg-white"
-            />
-          ))}
+          {Array.from({ length: 3 }).map(
+            (_, index) => (
+              <div
+                key={index}
+                className="h-32 animate-pulse rounded-xl border bg-white"
+              />
+            )
+          )}
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-48 animate-pulse rounded-xl border bg-white"
-            />
-          ))}
+          {Array.from({ length: 6 }).map(
+            (_, index) => (
+              <div
+                key={index}
+                className="h-48 animate-pulse rounded-xl border bg-white"
+              />
+            )
+          )}
         </div>
       </main>
     );
@@ -287,7 +282,6 @@ export default function SellerDashboardPage() {
         {/* TOTAL PRODUCTS */}
 
         <div className="rounded-xl border bg-white p-6 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -305,13 +299,11 @@ export default function SellerDashboardPage() {
             </div>
 
           </div>
-
         </div>
 
         {/* IN STOCK */}
 
         <div className="rounded-xl border bg-white p-6 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -329,13 +321,11 @@ export default function SellerDashboardPage() {
             </div>
 
           </div>
-
         </div>
 
         {/* OUT OF STOCK */}
 
         <div className="rounded-xl border bg-white p-6 shadow-sm">
-
           <div className="flex items-center justify-between">
 
             <div>
@@ -353,7 +343,6 @@ export default function SellerDashboardPage() {
             </div>
 
           </div>
-
         </div>
 
       </div>
@@ -442,7 +431,7 @@ export default function SellerDashboardPage() {
           </p>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
           {/* REVENUE */}
 
@@ -518,6 +507,32 @@ export default function SellerDashboardPage() {
 
             <p className="mt-2 text-sm text-gray-500">
               View and manage orders for your products.
+            </p>
+
+          </Link>
+
+          {/* SHIPMENTS */}
+
+          <Link
+            href="/seller/dashboard/shipments"
+            className="group rounded-xl border bg-white p-6 transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                <Truck className="h-6 w-6 text-gray-700" />
+              </div>
+
+              <ArrowRight className="h-5 w-5 text-gray-400 transition group-hover:translate-x-1" />
+
+            </div>
+
+            <h3 className="mt-5 text-lg font-semibold text-gray-900">
+              Shipments
+            </h3>
+
+            <p className="mt-2 text-sm text-gray-500">
+              Manage tracking numbers and shipment status.
             </p>
 
           </Link>
@@ -606,8 +621,9 @@ export default function SellerDashboardPage() {
 
             <div className="divide-y">
 
-              {products.slice(0, 5).map(
-                (product) => (
+              {products
+                .slice(0, 5)
+                .map((product) => (
                   <div
                     key={product.id}
                     className="flex items-center justify-between gap-4 p-4"
@@ -660,8 +676,7 @@ export default function SellerDashboardPage() {
                     </div>
 
                   </div>
-                )
-              )}
+                ))}
 
             </div>
 
