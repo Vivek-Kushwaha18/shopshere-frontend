@@ -7,6 +7,7 @@ import Swal from "sweetalert2";
 import {
   getMyOrders,
   getCustomerOrderShipments,
+  cancelOrder,
   type Order,
   type Shipment,
 } from "@/services/orders";
@@ -107,6 +108,7 @@ function ShipmentTimeline({
       <div className="grid grid-cols-4 gap-2">
         {steps.map((step, index) => {
           const stepNumber = index + 1;
+
           const completed =
             stepNumber <= currentProgress;
 
@@ -185,6 +187,11 @@ export default function OrdersPage() {
     setLoadingShipments,
   ] = useState(true);
 
+  const [
+    cancellingOrderId,
+    setCancellingOrderId,
+  ] = useState<number | null>(null);
+
   async function loadOrders() {
     try {
       setLoading(true);
@@ -240,6 +247,51 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
       setLoadingShipments(false);
+    }
+  }
+
+  async function handleCancelOrder(
+    orderId: number
+  ) {
+    const confirmation = await Swal.fire({
+      icon: "warning",
+      title: "Cancel this order?",
+      text: "This action cannot be undone.",
+      showCancelButton: true,
+      confirmButtonText: "Yes, cancel order",
+      cancelButtonText: "Keep order",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+    });
+
+    if (!confirmation.isConfirmed) {
+      return;
+    }
+
+    try {
+      setCancellingOrderId(orderId);
+
+      await cancelOrder(orderId);
+
+      await Swal.fire({
+        icon: "success",
+        title: "Order cancelled",
+        text: "Your order has been cancelled successfully.",
+        confirmButtonColor: "#000000",
+      });
+
+      await loadOrders();
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Unable to cancel order",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Something went wrong.",
+      });
+    } finally {
+      setCancellingOrderId(null);
     }
   }
 
@@ -299,6 +351,18 @@ export default function OrdersPage() {
             {orders.map((order) => {
               const shipments =
                 orderShipments[order.id] || [];
+
+              const canCancel =
+                (order.status === "pending" ||
+                  order.status === "processing") &&
+                shipments.every(
+                  (shipment) =>
+                    shipment.status ===
+                    "processing"
+                );
+
+              const isCancelling =
+                cancellingOrderId === order.id;
 
               return (
                 <div
@@ -590,9 +654,11 @@ export default function OrdersPage() {
 
                   </div>
 
-                  {/* VIEW DETAILS */}
+                  {/* ACTIONS */}
 
-                  <div className="mt-6 border-t pt-5">
+                  <div className="mt-6 flex flex-wrap gap-3 border-t pt-5">
+
+                    {/* VIEW DETAILS */}
 
                     <Link
                       href={`/orders/${order.id}`}
@@ -600,6 +666,25 @@ export default function OrdersPage() {
                     >
                       View Order Details
                     </Link>
+
+                    {/* CANCEL ORDER */}
+
+                    {canCancel && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCancelOrder(
+                            order.id
+                          )
+                        }
+                        disabled={isCancelling}
+                        className="inline-flex rounded-lg border border-red-600 px-5 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isCancelling
+                          ? "Cancelling..."
+                          : "Cancel Order"}
+                      </button>
+                    )}
 
                   </div>
 

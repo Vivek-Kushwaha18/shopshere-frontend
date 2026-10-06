@@ -190,6 +190,30 @@ export async function getMyOrders(): Promise<Order[]> {
 }
 
 // =====================================================
+// CUSTOMER - CANCEL ORDER
+// =====================================================
+
+export async function cancelOrder(
+  orderId: number
+): Promise<Order> {
+  const response = await apiFetch(
+    `/orders/${orderId}/cancel`,
+    {
+      method: "PATCH",
+    }
+  );
+
+  if (!response.success) {
+    throw new Error(
+      response.data?.detail ||
+        "Unable to cancel order."
+    );
+  }
+
+  return response.data as Order;
+}
+
+// =====================================================
 // GET SINGLE ORDER
 // =====================================================
 
