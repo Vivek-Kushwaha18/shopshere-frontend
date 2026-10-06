@@ -5,15 +5,18 @@ import Swal from "sweetalert2";
 
 import {
   getSellerOrders,
-  updateSellerOrderStatus,
+  getSellerShipments,
+  updateShipmentStatus,
+  updateShipmentTrackingNumber,
   type Order,
+  type Shipment,
 } from "@/services/orders";
 
 const STATUS_OPTIONS = [
   "processing",
   "shipped",
+  "out_for_delivery",
   "delivered",
-  "cancelled",
 ];
 
 function getStatusClass(status: string) {
@@ -26,6 +29,9 @@ function getStatusClass(status: string) {
 
     case "shipped":
       return "bg-purple-100 text-purple-800";
+
+    case "out_for_delivery":
+      return "bg-orange-100 text-orange-800";
 
     case "delivered":
       return "bg-green-100 text-green-800";
@@ -43,22 +49,45 @@ function formatStatus(status: string) {
     return "";
   }
 
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  return status
+    .split("_")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(" ");
 }
 
 export default function SellerOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [shipments, setShipments] = useState<
+    Shipment[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
-  const [updatingOrderId, setUpdatingOrderId] =
+
+  const [updatingShipmentId, setUpdatingShipmentId] =
     useState<number | null>(null);
+
+  const [trackingShipmentId, setTrackingShipmentId] =
+    useState<number | null>(null);
+
+  const [trackingNumber, setTrackingNumber] =
+    useState("");
 
   async function loadOrders() {
     try {
       setLoading(true);
 
-      const data = await getSellerOrders();
+      const [ordersData, shipmentsData] =
+        await Promise.all([
+          getSellerOrders(),
+          getSellerShipments(),
+        ]);
 
-      setOrders(data);
+      setOrders(ordersData);
+      setShipments(shipmentsData);
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -77,31 +106,31 @@ export default function SellerOrdersPage() {
     loadOrders();
   }, []);
 
-  async function handleStatusChange(
-    orderId: number,
+  async function handleShipmentStatusChange(
+    shipmentId: number,
     newStatus: string
   ) {
     try {
-      setUpdatingOrderId(orderId);
+      setUpdatingShipmentId(shipmentId);
 
-      const updatedOrder =
-        await updateSellerOrderStatus(
-          orderId,
+      const updatedShipment =
+        await updateShipmentStatus(
+          shipmentId,
           newStatus
         );
 
-      setOrders((currentOrders) =>
-        currentOrders.map((order) =>
-          order.id === orderId
-            ? updatedOrder
-            : order
+      setShipments((currentShipments) =>
+        currentShipments.map((shipment) =>
+          shipment.id === shipmentId
+            ? updatedShipment
+            : shipment
         )
       );
 
       Swal.fire({
         icon: "success",
-        title: "Order updated",
-        text: "Order status has been updated.",
+        title: "Shipment updated",
+        text: "Shipment status has been updated.",
         timer: 1500,
         showConfirmButton: false,
       });
@@ -112,10 +141,65 @@ export default function SellerOrdersPage() {
         text:
           error instanceof Error
             ? error.message
-            : "Unable to update order.",
+            : "Unable to update shipment.",
       });
     } finally {
-      setUpdatingOrderId(null);
+      setUpdatingShipmentId(null);
+    }
+  }
+
+  async function handleTrackingNumberUpdate(
+    shipmentId: number
+  ) {
+    const value = trackingNumber.trim();
+
+    if (!value) {
+      Swal.fire({
+        icon: "warning",
+        title: "Tracking number required",
+        text: "Please enter a tracking number.",
+      });
+
+      return;
+    }
+
+    try {
+      setTrackingShipmentId(shipmentId);
+
+      const updatedShipment =
+        await updateShipmentTrackingNumber(
+          shipmentId,
+          value
+        );
+
+      setShipments((currentShipments) =>
+        currentShipments.map((shipment) =>
+          shipment.id === shipmentId
+            ? updatedShipment
+            : shipment
+        )
+      );
+
+      setTrackingNumber("");
+
+      Swal.fire({
+        icon: "success",
+        title: "Tracking number saved",
+        text: "Tracking number has been updated.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Update failed",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Unable to update tracking number.",
+      });
+    } finally {
+      setTrackingShipmentId(null);
     }
   }
 
@@ -141,7 +225,8 @@ export default function SellerOrdersPage() {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Manage orders containing your products.
+          Manage orders and shipments containing your
+          products.
         </p>
       </div>
 
@@ -152,15 +237,23 @@ export default function SellerOrdersPage() {
           </h2>
 
           <p className="mt-2 text-sm text-gray-500">
-            Orders containing your products will appear here.
+            Orders containing your products will appear
+            here.
           </p>
         </div>
       ) : (
         <div className="space-y-6">
           {orders.map((order) => {
-            const sellerOrderTotal = order.items.reduce(
-              (total, item) => total + item.total,
-              0
+            const sellerOrderTotal =
+              order.items.reduce(
+                (total, item) =>
+                  total + item.total,
+                0
+              );
+
+            const shipment = shipments.find(
+              (item) =>
+                item.order_id === order.id
             );
 
             return (
@@ -184,46 +277,47 @@ export default function SellerOrdersPage() {
                     </p>
                   </div>
 
-                  {/* STATUS */}
+                  {/* SHIPMENT STATUS */}
 
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClass(
-                        order.status
-                      )}`}
-                    >
-                      {formatStatus(order.status)}
-                    </span>
+                  {shipment && (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClass(
+                          shipment.status
+                        )}`}
+                      >
+                        {formatStatus(
+                          shipment.status
+                        )}
+                      </span>
 
-                    <select
-                      value={order.status}
-                      disabled={
-                        updatingOrderId === order.id
-                      }
-                      onChange={(event) =>
-                        handleStatusChange(
-                          order.id,
-                          event.target.value
-                        )
-                      }
-                      className="rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black disabled:cursor-not-allowed disabled:bg-gray-100"
-                    >
-                      <option value="pending">
-                        Pending
-                      </option>
-
-                      {STATUS_OPTIONS.map(
-                        (status) => (
-                          <option
-                            key={status}
-                            value={status}
-                          >
-                            {formatStatus(status)}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
+                      <select
+                        value={shipment.status}
+                        disabled={
+                          updatingShipmentId ===
+                          shipment.id
+                        }
+                        onChange={(event) =>
+                          handleShipmentStatusChange(
+                            shipment.id,
+                            event.target.value
+                          )
+                        }
+                        className="rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black disabled:cursor-not-allowed disabled:bg-gray-100"
+                      >
+                        {STATUS_OPTIONS.map(
+                          (status) => (
+                            <option
+                              key={status}
+                              value={status}
+                            >
+                              {formatStatus(status)}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* PRODUCTS */}
@@ -319,6 +413,126 @@ export default function SellerOrdersPage() {
                     </table>
                   </div>
                 </div>
+
+                {/* SHIPMENT */}
+
+                {shipment && (
+                  <div className="mt-6 border-t pt-6">
+                    <h3 className="text-sm font-medium">
+                      Delivery Shipment
+                    </h3>
+
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      {/* TRACKING NUMBER */}
+
+                      <div>
+                        <label className="text-sm text-gray-600">
+                          Tracking Number
+                        </label>
+
+                        {shipment.tracking_number ? (
+                          <p className="mt-2 font-medium">
+                            {
+                              shipment.tracking_number
+                            }
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-sm text-gray-500">
+                            No tracking number added.
+                          </p>
+                        )}
+
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                          <input
+                            type="text"
+                            value={
+                              trackingShipmentId ===
+                              shipment.id
+                                ? trackingNumber
+                                : ""
+                            }
+                            onChange={(event) =>
+                              setTrackingNumber(
+                                event.target.value
+                              )
+                            }
+                            placeholder="Enter tracking number"
+                            className="rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black"
+                          />
+
+                          <button
+                            type="button"
+                            disabled={
+                              trackingShipmentId ===
+                              shipment.id
+                            }
+                            onClick={() =>
+                              handleTrackingNumberUpdate(
+                                shipment.id
+                              )
+                            }
+                            className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {trackingShipmentId ===
+                            shipment.id
+                              ? "Saving..."
+                              : "Save"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* DELIVERY TIMELINE */}
+
+                      <div>
+                        <p className="text-sm font-medium">
+                          Delivery Timeline
+                        </p>
+
+                        <div className="mt-3 space-y-2 text-sm text-gray-600">
+                          <p>
+                            <span className="font-medium">
+                              Processing:
+                            </span>{" "}
+                            Created
+                          </p>
+
+                          {shipment.shipped_at && (
+                            <p>
+                              <span className="font-medium">
+                                Shipped:
+                              </span>{" "}
+                              {new Date(
+                                shipment.shipped_at
+                              ).toLocaleString()}
+                            </p>
+                          )}
+
+                          {shipment.out_for_delivery_at && (
+                            <p>
+                              <span className="font-medium">
+                                Out for delivery:
+                              </span>{" "}
+                              {new Date(
+                                shipment.out_for_delivery_at
+                              ).toLocaleString()}
+                            </p>
+                          )}
+
+                          {shipment.delivered_at && (
+                            <p>
+                              <span className="font-medium">
+                                Delivered:
+                              </span>{" "}
+                              {new Date(
+                                shipment.delivered_at
+                              ).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* ORDER INFORMATION */}
 

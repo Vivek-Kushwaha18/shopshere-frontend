@@ -8,6 +8,7 @@ import {
   Plus,
   Pencil,
   CreditCard,
+  Banknote,
   Tag,
   X,
 } from "lucide-react";
@@ -21,7 +22,10 @@ import {
   type CartData,
 } from "@/services/cart";
 
-import { createOrder } from "@/services/orders";
+import {
+  createOrder,
+  type PaymentMethod,
+} from "@/services/orders";
 
 import {
   getAddresses,
@@ -60,6 +64,11 @@ const emptyAddressForm: AddressCreateData = {
   is_default: false,
 };
 
+
+// =====================================================
+// STRIPE PAYMENT FORM
+// =====================================================
+
 function PaymentForm({
   onSuccess,
   onCancel,
@@ -84,6 +93,7 @@ function PaymentForm({
       setPaymentError(
         "Payment system is still loading. Please wait."
       );
+
       return;
     }
 
@@ -100,6 +110,7 @@ function PaymentForm({
         error.message ||
           "Payment could not be completed."
       );
+
       return;
     }
 
@@ -108,6 +119,7 @@ function PaymentForm({
       paymentIntent.status === "succeeded"
     ) {
       await onSuccess();
+
       return;
     }
 
@@ -161,6 +173,11 @@ function PaymentForm({
   );
 }
 
+
+// =====================================================
+// CHECKOUT PAGE
+// =====================================================
+
 export default function CheckoutPage() {
   const router = useRouter();
 
@@ -196,6 +213,13 @@ export default function CheckoutPage() {
 
   const [paymentOrderId, setPaymentOrderId] =
     useState<number | null>(null);
+
+  // =====================================================
+  // PAYMENT METHOD
+  // =====================================================
+
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>("stripe");
 
   const [addressForm, setAddressForm] =
     useState<AddressCreateData>(
@@ -262,6 +286,7 @@ export default function CheckoutPage() {
       if (data.length === 0) {
         setSelectedAddressId(null);
         setShowNewAddressForm(true);
+
         return;
       }
 
@@ -593,7 +618,7 @@ export default function CheckoutPage() {
   }
 
   // =====================================================
-  // CALCULATE CHECKOUT TOTALS
+  // CALCULATE TOTALS
   // =====================================================
 
   const subtotal = cart?.total ?? 0;
@@ -607,7 +632,7 @@ export default function CheckoutPage() {
   );
 
   // =====================================================
-  // CREATE ORDER + PAYMENT
+  // CREATE ORDER
   // =====================================================
 
   async function handleSubmit() {
@@ -657,6 +682,7 @@ export default function CheckoutPage() {
             (item) => ({
               product_id:
                 item.product_id,
+
               quantity:
                 item.quantity,
             })
@@ -664,7 +690,49 @@ export default function CheckoutPage() {
 
           coupon_code:
             appliedCoupon?.code,
+
+          payment_method:
+            paymentMethod,
         });
+
+      // =================================================
+      // COD
+      // =================================================
+
+      if (paymentMethod === "cod") {
+        try {
+          await clearCart();
+
+          await Swal.fire({
+            icon: "success",
+            title: "Order Placed Successfully",
+            text: `Your order #${order.id} has been placed with Cash on Delivery.`,
+            confirmButtonText: "View Orders",
+          });
+
+          router.push("/orders");
+        } catch (error) {
+          console.error(
+            "COD order completed but cart clear failed:",
+            error
+          );
+
+          await Swal.fire({
+            icon: "success",
+            title: "Order Placed",
+            text: `Your order #${order.id} has been placed successfully.`,
+            confirmButtonText: "View Orders",
+          });
+
+          router.push("/orders");
+        }
+
+        return;
+      }
+
+      // =================================================
+      // STRIPE
+      // =================================================
 
       const payment =
         await createPaymentIntent({
@@ -678,17 +746,20 @@ export default function CheckoutPage() {
       );
     } catch (error) {
       console.error(
-        "Failed to start payment:",
+        "Failed to create order:",
         error
       );
 
       Swal.fire({
         icon: "error",
-        title: "Unable to start payment",
+        title:
+          paymentMethod === "cod"
+            ? "Unable to place order"
+            : "Unable to start payment",
         text:
           error instanceof Error
             ? error.message
-            : "Something went wrong while starting payment.",
+            : "Something went wrong.",
       });
     } finally {
       setPlacingOrder(false);
@@ -696,7 +767,7 @@ export default function CheckoutPage() {
   }
 
   // =====================================================
-  // PAYMENT SUCCESS
+  // STRIPE PAYMENT SUCCESS
   // =====================================================
 
   async function handlePaymentSuccess() {
@@ -738,7 +809,7 @@ export default function CheckoutPage() {
   }
 
   // =====================================================
-  // CANCEL PAYMENT VIEW
+  // CANCEL STRIPE PAYMENT
   // =====================================================
 
   function handleCancelPayment() {
@@ -801,7 +872,7 @@ export default function CheckoutPage() {
   }
 
   // =====================================================
-  // PAYMENT SCREEN
+  // STRIPE PAYMENT SCREEN
   // =====================================================
 
   if (
@@ -840,6 +911,7 @@ export default function CheckoutPage() {
             options={{
               clientSecret:
                 paymentClientSecret,
+
               appearance: {
                 theme: "stripe",
               },
@@ -862,6 +934,10 @@ export default function CheckoutPage() {
     );
   }
 
+  // =====================================================
+  // CHECKOUT PAGE
+  // =====================================================
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
 
@@ -883,15 +959,18 @@ export default function CheckoutPage() {
         </h1>
 
         <p className="mt-2 text-gray-500">
-          Select your delivery address and continue to payment.
+          Select your delivery address and payment method.
         </p>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
 
-        {/* DELIVERY ADDRESS */}
+        {/* LEFT SIDE */}
 
         <section className="lg:col-span-2">
+
+          {/* DELIVERY ADDRESS */}
+
           <div className="rounded-xl border bg-white p-6 shadow-sm">
 
             <div className="mb-6 flex items-center gap-3">
@@ -965,6 +1044,7 @@ export default function CheckoutPage() {
                               <div className="min-w-0 flex-1">
 
                                 <div className="flex flex-wrap items-center gap-2">
+
                                   <h3 className="font-semibold text-gray-900">
                                     {
                                       address.full_name
@@ -982,6 +1062,7 @@ export default function CheckoutPage() {
                                       Default
                                     </span>
                                   )}
+
                                 </div>
 
                                 <p className="mt-2 text-sm text-gray-600">
@@ -1011,6 +1092,7 @@ export default function CheckoutPage() {
                                     address.postal_code
                                   }
                                 </p>
+
                               </div>
                             </div>
                           </button>
@@ -1046,6 +1128,7 @@ export default function CheckoutPage() {
                   <div className="mt-6 rounded-xl border bg-gray-50 p-5">
 
                     <div className="mb-5 flex items-center justify-between">
+
                       <div>
                         <h3 className="font-semibold text-gray-900">
                           Add New Address
@@ -1070,6 +1153,7 @@ export default function CheckoutPage() {
                           Cancel
                         </button>
                       )}
+
                     </div>
 
                     <form
@@ -1370,37 +1454,173 @@ export default function CheckoutPage() {
                         <Pencil className="h-4 w-4" />
                         Manage
                       </Link>
+
                     </div>
                   )}
-
-                {/* CONTINUE TO PAYMENT */}
-
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={
-                    placingOrder ||
-                    couponLoading ||
-                    loadingAddresses ||
-                    addresses.length === 0 ||
-                    selectedAddressId === null
-                  }
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <CreditCard className="h-4 w-4" />
-
-                  {placingOrder
-                    ? "Preparing Payment..."
-                    : "Continue to Payment"}
-                </button>
               </>
             )}
           </div>
+
+
+          {/* =====================================================
+              PAYMENT METHOD
+          ====================================================== */}
+
+          <div className="mt-8 rounded-xl border bg-white p-6 shadow-sm">
+
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
+                <CreditCard className="h-5 w-5" />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Payment Method
+                </h2>
+
+                <p className="text-sm text-gray-500">
+                  Choose how you want to pay.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+
+              {/* STRIPE */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPaymentMethod("stripe")
+                }
+                disabled={
+                  placingOrder
+                }
+                className={`w-full rounded-xl border p-5 text-left transition ${
+                  paymentMethod === "stripe"
+                    ? "border-black bg-gray-50"
+                    : "border-gray-200 hover:border-gray-400"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <div className="flex items-center gap-4">
+
+                  <div
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                      paymentMethod === "stripe"
+                        ? "border-black"
+                        : "border-gray-400"
+                    }`}
+                  >
+                    {paymentMethod ===
+                      "stripe" && (
+                      <div className="h-2.5 w-2.5 rounded-full bg-black" />
+                    )}
+                  </div>
+
+                  <CreditCard className="h-6 w-6 text-gray-700" />
+
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">
+                      Online Payment
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      Pay securely using Stripe.
+                    </p>
+                  </div>
+
+                </div>
+              </button>
+
+
+              {/* COD */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPaymentMethod("cod")
+                }
+                disabled={
+                  placingOrder
+                }
+                className={`w-full rounded-xl border p-5 text-left transition ${
+                  paymentMethod === "cod"
+                    ? "border-black bg-gray-50"
+                    : "border-gray-200 hover:border-gray-400"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <div className="flex items-center gap-4">
+
+                  <div
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                      paymentMethod === "cod"
+                        ? "border-black"
+                        : "border-gray-400"
+                    }`}
+                  >
+                    {paymentMethod ===
+                      "cod" && (
+                      <div className="h-2.5 w-2.5 rounded-full bg-black" />
+                    )}
+                  </div>
+
+                  <Banknote className="h-6 w-6 text-gray-700" />
+
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">
+                      Cash on Delivery
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      Pay with cash when your order is delivered.
+                    </p>
+                  </div>
+
+                </div>
+              </button>
+
+            </div>
+
+
+            {/* CONTINUE / PLACE ORDER */}
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={
+                placingOrder ||
+                couponLoading ||
+                loadingAddresses ||
+                addresses.length === 0 ||
+                selectedAddressId === null
+              }
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-black px-5 py-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {paymentMethod === "cod" ? (
+                <Banknote className="h-4 w-4" />
+              ) : (
+                <CreditCard className="h-4 w-4" />
+              )}
+
+              {placingOrder
+                ? paymentMethod === "cod"
+                  ? "Placing Order..."
+                  : "Preparing Payment..."
+                : paymentMethod === "cod"
+                  ? "Place Order"
+                  : "Continue to Payment"}
+            </button>
+
+          </div>
         </section>
 
-        {/* ORDER SUMMARY */}
+
+        {/* =====================================================
+            ORDER SUMMARY
+        ====================================================== */}
 
         <aside>
+
           <div className="sticky top-6 rounded-xl border bg-white p-6 shadow-sm">
 
             <div className="mb-6 flex items-center gap-3">
@@ -1419,6 +1639,7 @@ export default function CheckoutPage() {
                     key={item.id}
                     className="flex items-center gap-3"
                   >
+
                     {item.product.image_url ? (
                       <img
                         src={
@@ -1458,6 +1679,7 @@ export default function CheckoutPage() {
                         )}{" "}
                         each
                       </p>
+
                     </div>
 
                     <p className="text-sm font-medium text-gray-900">
@@ -1466,11 +1688,13 @@ export default function CheckoutPage() {
                         2
                       )}
                     </p>
+
                   </div>
                 )
               )}
 
             </div>
+
 
             {/* COUPON */}
 
@@ -1490,6 +1714,7 @@ export default function CheckoutPage() {
                   <div className="flex items-center justify-between gap-3">
 
                     <div className="min-w-0">
+
                       <p className="text-sm font-semibold text-green-800">
                         {appliedCoupon.code}
                       </p>
@@ -1500,6 +1725,7 @@ export default function CheckoutPage() {
                           2
                         )}
                       </p>
+
                     </div>
 
                     <button
@@ -1569,11 +1795,13 @@ export default function CheckoutPage() {
 
             </div>
 
+
             {/* PRICE SUMMARY */}
 
             <div className="space-y-4 border-b py-5">
 
               <div className="flex justify-between text-sm">
+
                 <span className="text-gray-500">
                   Items
                 </span>
@@ -1583,9 +1811,11 @@ export default function CheckoutPage() {
                     cart.total_items
                   }
                 </span>
+
               </div>
 
               <div className="flex justify-between text-sm">
+
                 <span className="text-gray-500">
                   Subtotal
                 </span>
@@ -1596,10 +1826,12 @@ export default function CheckoutPage() {
                     2
                   )}
                 </span>
+
               </div>
 
               {appliedCoupon && (
                 <div className="flex justify-between text-sm">
+
                   <span className="text-green-700">
                     Discount
                   </span>
@@ -1610,10 +1842,12 @@ export default function CheckoutPage() {
                       2
                     )}
                   </span>
+
                 </div>
               )}
 
               <div className="flex justify-between text-sm">
+
                 <span className="text-gray-500">
                   Shipping
                 </span>
@@ -1621,9 +1855,11 @@ export default function CheckoutPage() {
                 <span className="font-medium text-gray-900">
                   Free
                 </span>
+
               </div>
 
             </div>
+
 
             {/* FINAL TOTAL */}
 
@@ -1642,6 +1878,9 @@ export default function CheckoutPage() {
 
             </div>
 
+
+            {/* PAYMENT SUMMARY */}
+
             <div className="mt-5 rounded-lg bg-gray-50 p-3">
 
               <p className="text-xs text-gray-500">
@@ -1649,12 +1888,15 @@ export default function CheckoutPage() {
               </p>
 
               <p className="mt-1 text-sm font-medium text-gray-900">
-                Secure Stripe Payment
+                {paymentMethod === "cod"
+                  ? "Cash on Delivery"
+                  : "Secure Stripe Payment"}
               </p>
 
             </div>
 
           </div>
+
         </aside>
 
       </div>
