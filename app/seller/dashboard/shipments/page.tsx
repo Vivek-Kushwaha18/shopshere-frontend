@@ -6,7 +6,6 @@ import Swal from "sweetalert2";
 import {
   getSellerShipments,
   updateShipmentStatus,
-  updateShipmentTrackingNumber,
   type Shipment,
 } from "@/services/orders";
 
@@ -48,16 +47,6 @@ export default function SellerShipmentsPage() {
   const [loading, setLoading] = useState(true);
 
   const [
-    trackingNumbers,
-    setTrackingNumbers,
-  ] = useState<Record<number, string>>({});
-
-  const [
-    savingTrackingId,
-    setSavingTrackingId,
-  ] = useState<number | null>(null);
-
-  const [
     updatingStatusId,
     setUpdatingStatusId,
   ] = useState<number | null>(null);
@@ -69,18 +58,6 @@ export default function SellerShipmentsPage() {
       const data = await getSellerShipments();
 
       setShipments(data);
-
-      const trackingMap: Record<
-        number,
-        string
-      > = {};
-
-      data.forEach((shipment) => {
-        trackingMap[shipment.id] =
-          shipment.tracking_number || "";
-      });
-
-      setTrackingNumbers(trackingMap);
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -98,62 +75,6 @@ export default function SellerShipmentsPage() {
   useEffect(() => {
     loadShipments();
   }, []);
-
-  async function handleSaveTrackingNumber(
-    shipmentId: number
-  ) {
-    const trackingNumber =
-      trackingNumbers[shipmentId]?.trim();
-
-    if (!trackingNumber) {
-      Swal.fire({
-        icon: "warning",
-        title: "Tracking number required",
-        text: "Please enter a tracking number.",
-      });
-
-      return;
-    }
-
-    try {
-      setSavingTrackingId(shipmentId);
-
-      await updateShipmentTrackingNumber(
-        shipmentId,
-        trackingNumber
-      );
-
-      setShipments((currentShipments) =>
-        currentShipments.map((shipment) =>
-          shipment.id === shipmentId
-            ? {
-                ...shipment,
-                tracking_number:
-                  trackingNumber,
-              }
-            : shipment
-        )
-      );
-
-      Swal.fire({
-        icon: "success",
-        title: "Tracking number saved",
-        text: "The tracking number has been updated.",
-        confirmButtonColor: "#000000",
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Unable to save tracking number",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Something went wrong.",
-      });
-    } finally {
-      setSavingTrackingId(null);
-    }
-  }
 
   async function handleStatusChange(
     shipmentId: number,
@@ -228,7 +149,7 @@ export default function SellerShipmentsPage() {
           </h1>
 
           <p className="mt-2 text-sm text-gray-500">
-            Manage your shipments and tracking
+            Manage your shipment status and delivery
             information.
           </p>
         </div>
@@ -250,15 +171,6 @@ export default function SellerShipmentsPage() {
           <div className="space-y-6">
 
             {shipments.map((shipment) => {
-              const trackingNumber =
-                trackingNumbers[
-                  shipment.id
-                ] || "";
-
-              const isSavingTracking =
-                savingTrackingId ===
-                shipment.id;
-
               const isUpdatingStatus =
                 updatingStatusId ===
                 shipment.id;
@@ -299,66 +211,9 @@ export default function SellerShipmentsPage() {
 
                   </div>
 
-                  {/* TRACKING NUMBER */}
-
-                  <div className="mt-6">
-
-                    <label
-                      htmlFor={`tracking-${shipment.id}`}
-                      className="block text-sm font-medium text-gray-900"
-                    >
-                      Tracking Number
-                    </label>
-
-                    <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-
-                      <input
-                        id={`tracking-${shipment.id}`}
-                        type="text"
-                        value={trackingNumber}
-                        onChange={(event) =>
-                          setTrackingNumbers(
-                            (current) => ({
-                              ...current,
-                              [shipment.id]:
-                                event.target.value,
-                            })
-                          )
-                        }
-                        placeholder="Enter tracking number"
-                        className="min-w-0 flex-1 rounded-lg border px-4 py-3 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleSaveTrackingNumber(
-                            shipment.id
-                          )
-                        }
-                        disabled={
-                          isSavingTracking
-                        }
-                        className="rounded-lg bg-black px-5 py-3 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isSavingTracking
-                          ? "Saving..."
-                          : "Save Tracking Number"}
-                      </button>
-
-                    </div>
-
-                    <p className="mt-2 text-xs text-gray-500">
-                      Customers will see this
-                      tracking number on their
-                      order tracking page.
-                    </p>
-
-                  </div>
-
                   {/* SHIPMENT STATUS */}
 
-                  <div className="mt-6 border-t pt-6">
+                  <div className="mt-6">
 
                     <label
                       htmlFor={`status-${shipment.id}`}
@@ -423,24 +278,6 @@ export default function SellerShipmentsPage() {
                           shipment.expected_delivery_date
                         ).toLocaleDateString()}
                       </p>
-                    </div>
-                  )}
-
-                  {/* CURRENT TRACKING */}
-
-                  {shipment.tracking_number && (
-                    <div className="mt-6 rounded-lg bg-gray-50 p-4">
-
-                      <p className="text-xs text-gray-500">
-                        Current Tracking Number
-                      </p>
-
-                      <p className="mt-1 break-all font-medium">
-                        {
-                          shipment.tracking_number
-                        }
-                      </p>
-
                     </div>
                   )}
 

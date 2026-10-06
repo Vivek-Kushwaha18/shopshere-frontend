@@ -361,7 +361,7 @@ export async function updateShipmentStatus(
     );
   }
 
-  return response.data as Shipment;
+  return response.data.shipment as Shipment;
 }
 
 // =====================================================
@@ -388,7 +388,7 @@ export async function updateShipmentTrackingNumber(
     );
   }
 
-  return response.data as Shipment;
+  return response.data.shipment as Shipment;
 }
 
 // =====================================================

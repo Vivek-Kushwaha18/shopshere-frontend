@@ -73,8 +73,8 @@ export default function SellerOrdersPage() {
   const [trackingShipmentId, setTrackingShipmentId] =
     useState<number | null>(null);
 
-  const [trackingNumber, setTrackingNumber] =
-    useState("");
+  const [trackingNumbers, setTrackingNumbers] =
+    useState<Record<number, string>>({});
 
   async function loadOrders() {
     try {
@@ -88,6 +88,15 @@ export default function SellerOrdersPage() {
 
       setOrders(ordersData);
       setShipments(shipmentsData);
+
+      setTrackingNumbers(
+        Object.fromEntries(
+          shipmentsData.map((shipment) => [
+            shipment.id,
+            shipment.tracking_number || "",
+          ])
+        )
+      );
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -151,7 +160,8 @@ export default function SellerOrdersPage() {
   async function handleTrackingNumberUpdate(
     shipmentId: number
   ) {
-    const value = trackingNumber.trim();
+    const value =
+      trackingNumbers[shipmentId]?.trim() || "";
 
     if (!value) {
       Swal.fire({
@@ -180,7 +190,11 @@ export default function SellerOrdersPage() {
         )
       );
 
-      setTrackingNumber("");
+      setTrackingNumbers((currentNumbers) => ({
+        ...currentNumbers,
+        [shipmentId]:
+          updatedShipment.tracking_number || value,
+      }));
 
       Swal.fire({
         icon: "success",
@@ -446,14 +460,17 @@ export default function SellerOrdersPage() {
                           <input
                             type="text"
                             value={
-                              trackingShipmentId ===
-                              shipment.id
-                                ? trackingNumber
-                                : ""
+                              trackingNumbers[
+                                shipment.id
+                              ] ?? ""
                             }
                             onChange={(event) =>
-                              setTrackingNumber(
-                                event.target.value
+                              setTrackingNumbers(
+                                (currentNumbers) => ({
+                                  ...currentNumbers,
+                                  [shipment.id]:
+                                    event.target.value,
+                                })
                               )
                             }
                             placeholder="Enter tracking number"
