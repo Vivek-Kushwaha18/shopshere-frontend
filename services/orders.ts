@@ -14,6 +14,7 @@ export type PaymentMethod =
 
 export interface OrderItemCreate {
   product_id: number;
+  variant_id: number | null;
   quantity: number;
 }
 
@@ -36,6 +37,7 @@ export interface OrderItem {
   id: number;
   order_id: number;
   product_id: number;
+  variant_id: number | null;
   seller_id: number;
 
   product_name: string;

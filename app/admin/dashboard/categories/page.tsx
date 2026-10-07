@@ -18,19 +18,16 @@ import {
 } from "lucide-react";
 
 import {
+  activateCategory,
   createCategory,
-  deleteCategory,
   deactivateCategory,
+  deleteCategory,
   getAdminCategories,
   updateCategory,
-  activateCategory,
   type Category,
 } from "@/services/categories";
 
 export default function AdminCategoriesPage() {
-  // null = categories are still loading
-  // [] = loaded but no categories exist
-  // array = categories loaded
   const [categories, setCategories] =
     useState<Category[] | null>(null);
 
@@ -47,10 +44,10 @@ export default function AdminCategoriesPage() {
     useState<number | null>(null);
 
   const [error, setError] =
-    useState("");
+    useState<string | null>(null);
 
   const [success, setSuccess] =
-    useState("");
+    useState<string | null>(null);
 
   const [showForm, setShowForm] =
     useState(false);
@@ -64,93 +61,210 @@ export default function AdminCategoriesPage() {
   const [description, setDescription] =
     useState("");
 
+  const [parentId, setParentId] =
+    useState<number | null>(null);
+
+  const [selectedParentIds, setSelectedParentIds] =
+    useState<string[]>([]);
+
   // =====================================================
-  // LOAD ALL CATEGORIES
+  // LOAD CATEGORIES
   // =====================================================
 
   async function loadCategories() {
     try {
       setLoading(true);
-      setError("");
+      setError(null);
 
-      const result =
+      const data =
         await getAdminCategories();
 
-      console.log(
-        "ADMIN CATEGORIES:",
-        result
-      );
-
-      setCategories(result);
-    } catch (error) {
-      console.error(
-        "Admin categories error:",
-        error
-      );
-
+      setCategories(data);
+    } catch (err) {
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to load categories."
       );
-
-      setCategories([]);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    let isMounted = true;
+    loadCategories();
+  }, []);
 
-    async function loadInitialCategories() {
-      try {
-        setLoading(true);
-        setError("");
+  // =====================================================
+  // GET CHILD CATEGORIES
+  // =====================================================
 
-        const result =
-          await getAdminCategories();
-
-        console.log(
-          "ADMIN CATEGORIES:",
-          result
-        );
-
-        if (!isMounted) {
-          return;
-        }
-
-        setCategories(result);
-      } catch (error) {
-        console.error(
-          "Admin categories error:",
-          error
-        );
-
-        if (!isMounted) {
-          return;
-        }
-
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load categories."
-        );
-
-        setCategories([]);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+  function getChildCategories(
+    currentParentId: number | null
+  ): Category[] {
+    if (!categories) {
+      return [];
     }
 
-    loadInitialCategories();
+    return categories
+      .filter(
+        (category) =>
+          category.parent_id ===
+            currentParentId &&
+          category.id !== editingId
+      )
+      .sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+  }
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // =====================================================
+  // CHECK IF CATEGORY IS DESCENDANT
+  // =====================================================
+
+  function isDescendant(
+    categoryId: number,
+    possibleParentId: number
+  ): boolean {
+    if (!categories) {
+      return false;
+    }
+
+    let currentParentId =
+      categories.find(
+        (category) =>
+          category.id === categoryId
+      )?.parent_id ?? null;
+
+    while (currentParentId !== null) {
+      if (
+        currentParentId ===
+        possibleParentId
+      ) {
+        return true;
+      }
+
+      currentParentId =
+        categories.find(
+          (category) =>
+            category.id ===
+            currentParentId
+        )?.parent_id ?? null;
+    }
+
+    return false;
+  }
+
+  // =====================================================
+  // CHECK IF CATEGORY CAN BE SELECTED AS PARENT
+  // =====================================================
+
+  function canSelectAsParent(
+    category: Category
+  ): boolean {
+    if (editingId === null) {
+      return true;
+    }
+
+    if (category.id === editingId) {
+      return false;
+    }
+
+    if (
+      isDescendant(
+        editingId,
+        category.id
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // =====================================================
+  // GET AVAILABLE CHILD CATEGORIES
+  // =====================================================
+
+  function getAvailableChildCategories(
+    currentParentId: number | null
+  ): Category[] {
+    return getChildCategories(
+      currentParentId
+    ).filter(
+      canSelectAsParent
+    );
+  }
+
+  // =====================================================
+  // HANDLE PARENT CATEGORY CHANGE
+  // =====================================================
+
+  function handleParentChange(
+    level: number,
+    value: string
+  ) {
+    const updated =
+      selectedParentIds.slice(0, level);
+
+    if (value) {
+      updated.push(value);
+    }
+
+    setSelectedParentIds(updated);
+
+    setParentId(
+      updated.length > 0
+        ? Number(
+            updated[
+              updated.length - 1
+            ]
+          )
+        : null
+    );
+  }
+
+  // =====================================================
+  // GET PARENT CATEGORY DROPDOWNS
+  // =====================================================
+
+  function getParentCategoryLevels(): Category[][] {
+    const levels: Category[][] = [];
+
+    let currentParentId:
+      | number
+      | null = null;
+
+    for (
+      let level = 0;
+      level <=
+        selectedParentIds.length;
+      level++
+    ) {
+      const options =
+        getAvailableChildCategories(
+          currentParentId
+        );
+
+      if (options.length === 0) {
+        break;
+      }
+
+      levels.push(options);
+
+      const selectedId =
+        selectedParentIds[level];
+
+      if (!selectedId) {
+        break;
+      }
+
+      currentParentId =
+        Number(selectedId);
+    }
+
+    return levels;
+  }
 
   // =====================================================
   // RESET FORM
@@ -159,45 +273,76 @@ export default function AdminCategoriesPage() {
   function resetForm() {
     setName("");
     setDescription("");
+    setParentId(null);
+    setSelectedParentIds([]);
     setEditingId(null);
     setShowForm(false);
   }
 
   // =====================================================
-  // START CREATE
+  // CREATE
   // =====================================================
 
   function startCreate() {
-    setError("");
-    setSuccess("");
-
     setName("");
     setDescription("");
+    setParentId(null);
+    setSelectedParentIds([]);
     setEditingId(null);
-
+    setError(null);
+    setSuccess(null);
     setShowForm(true);
   }
 
   // =====================================================
-  // START EDIT
+  // EDIT
   // =====================================================
 
   function startEdit(category: Category) {
-    setError("");
-    setSuccess("");
-
     setName(category.name);
 
     setDescription(
       category.description || ""
     );
 
+    setParentId(
+      category.parent_id ?? null
+    );
+
     setEditingId(category.id);
+    setError(null);
+    setSuccess(null);
     setShowForm(true);
+
+    // Build the existing parent path
+    const parentPath: number[] = [];
+
+    let currentParentId =
+      category.parent_id ?? null;
+
+    while (currentParentId !== null) {
+      parentPath.unshift(
+        currentParentId
+      );
+
+      const parent =
+        categories?.find(
+          (item) =>
+            item.id ===
+            currentParentId
+        );
+
+      currentParentId =
+        parent?.parent_id ?? null;
+    }
+
+    setSelectedParentIds(
+      parentPath.map(String)
+    );
   }
 
   // =====================================================
-  // CREATE / UPDATE
+  // SUBMIT
   // =====================================================
 
   async function handleSubmit(
@@ -205,73 +350,70 @@ export default function AdminCategoriesPage() {
   ) {
     event.preventDefault();
 
-    if (saving) {
-      return;
-    }
+    const trimmedName =
+      name.trim();
 
-    setError("");
-    setSuccess("");
-
-    if (!name.trim()) {
+    if (!trimmedName) {
       setError(
         "Category name is required."
       );
-
       return;
     }
 
-    setSaving(true);
-
     try {
-      // ===================================================
-      // UPDATE
-      // ===================================================
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
 
       if (editingId !== null) {
-        const updatedCategory =
+        const updated =
           await updateCategory(
             editingId,
             {
-              name: name.trim(),
+              name: trimmedName,
               description:
-                description.trim() || null,
+                description.trim() ||
+                null,
+              parent_id: parentId,
             }
           );
 
-        setCategories(
-          (current) =>
-            current
-              ? current.map(
-                  (category) =>
-                    category.id === editingId
-                      ? updatedCategory
-                      : category
-                )
-              : [updatedCategory]
+        setCategories((current) =>
+          current
+            ? current.map(
+                (category) =>
+                  category.id ===
+                  editingId
+                    ? updated
+                    : category
+              )
+            : current
         );
 
         setSuccess(
           "Category updated successfully."
         );
-      }
-
-      // ===================================================
-      // CREATE
-      // ===================================================
-
-      else {
-        const newCategory =
+      } else {
+        const created =
           await createCategory({
-            name: name.trim(),
+            name: trimmedName,
             description:
-              description.trim() || null,
+              description.trim() ||
+              null,
+            parent_id: parentId,
           });
 
-        setCategories(
-          (current) => [
-            ...(current || []),
-            newCategory,
-          ]
+        setCategories((current) =>
+          current
+            ? [
+                ...current,
+                created,
+              ].sort((a, b) =>
+                a.name.localeCompare(
+                  b.name
+                )
+              )
+            : [created]
         );
 
         setSuccess(
@@ -279,19 +421,11 @@ export default function AdminCategoriesPage() {
         );
       }
 
-      setName("");
-      setDescription("");
-      setEditingId(null);
-      setShowForm(false);
-    } catch (error) {
-      console.error(
-        "Category save error:",
-        error
-      );
-
+      resetForm();
+    } catch (err) {
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to save category."
       );
     } finally {
@@ -300,16 +434,15 @@ export default function AdminCategoriesPage() {
   }
 
   // =====================================================
-  // DELETE CATEGORY
+  // DELETE
   // =====================================================
 
   async function handleDelete(
-    categoryId: number,
-    categoryName: string
+    category: Category
   ) {
     const confirmed =
       window.confirm(
-        `Are you sure you want to permanently delete "${categoryName}"?`
+        `Are you sure you want to delete "${category.name}"?`
       );
 
     if (!confirmed) {
@@ -317,36 +450,31 @@ export default function AdminCategoriesPage() {
     }
 
     try {
-      setError("");
-      setSuccess("");
-      setDeletingId(categoryId);
+      setDeletingId(category.id);
+      setError(null);
+      setSuccess(null);
 
       await deleteCategory(
-        categoryId
+        category.id
       );
 
-      setCategories(
-        (current) =>
-          current
-            ? current.filter(
-                (category) =>
-                  category.id !== categoryId
-              )
-            : []
+      setCategories((current) =>
+        current
+          ? current.filter(
+              (item) =>
+                item.id !==
+                category.id
+            )
+          : current
       );
 
       setSuccess(
         "Category deleted successfully."
       );
-    } catch (error) {
-      console.error(
-        "Category delete error:",
-        error
-      );
-
+    } catch (err) {
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to delete category."
       );
     } finally {
@@ -361,74 +489,42 @@ export default function AdminCategoriesPage() {
   async function handleToggleStatus(
     category: Category
   ) {
-    if (statusUpdatingId !== null) {
-      return;
-    }
-
     try {
-      setError("");
-      setSuccess("");
-
       setStatusUpdatingId(
         category.id
       );
+      setError(null);
+      setSuccess(null);
 
-      let updatedCategory: Category;
+      const updated =
+        category.is_active
+          ? await deactivateCategory(
+              category.id
+            )
+          : await activateCategory(
+              category.id
+            );
 
-      // ===================================================
-      // INACTIVE -> ACTIVE
-      // ===================================================
-
-      if (category.is_active === false) {
-        updatedCategory =
-          await activateCategory(
-            category.id
-          );
-
-        setSuccess(
-          "Category activated successfully."
-        );
-      }
-
-      // ===================================================
-      // ACTIVE -> INACTIVE
-      // ===================================================
-
-      else {
-        updatedCategory =
-          await deactivateCategory(
-            category.id
-          );
-
-        setSuccess(
-          "Category deactivated successfully."
-        );
-      }
-
-      // ===================================================
-      // UPDATE LOCAL STATE
-      // ===================================================
-
-      setCategories(
-        (current) =>
-          current
-            ? current.map(
-                (item) =>
-                  item.id === category.id
-                    ? updatedCategory
-                    : item
-              )
-            : [updatedCategory]
-      );
-    } catch (error) {
-      console.error(
-        "Category status error:",
-        error
+      setCategories((current) =>
+        current
+          ? current.map((item) =>
+              item.id ===
+              category.id
+                ? updated
+                : item
+            )
+          : current
       );
 
+      setSuccess(
+        category.is_active
+          ? "Category deactivated successfully."
+          : "Category activated successfully."
+      );
+    } catch (err) {
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to update category status."
       );
     } finally {
@@ -437,103 +533,141 @@ export default function AdminCategoriesPage() {
   }
 
   // =====================================================
-  // WAIT FOR INITIAL API REQUEST
+  // GET PARENT NAME
   // =====================================================
 
-  if (loading || categories === null) {
-    return null;
+  function getParentName(
+    category: Category
+  ): string {
+    if (category.parent_id === null) {
+      return "None";
+    }
+
+    const parent =
+      categories?.find(
+        (item) =>
+          item.id ===
+          category.parent_id
+      );
+
+    return parent?.name || "Unknown";
   }
 
   // =====================================================
-  // PAGE
+  // PARENT CATEGORY LEVELS
+  // =====================================================
+
+  const parentCategoryLevels =
+    getParentCategoryLevels();
+
+  // =====================================================
+  // RENDER
   // =====================================================
 
   return (
-    <main className="min-h-screen bg-white">
-      <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="min-h-screen bg-gray-50">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 
-        {/* =================================================
-            BACK
-        ================================================== */}
+        {/* HEADER */}
 
-        <Link
-          href="/admin/dashboard"
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 transition hover:text-black"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Dashboard
-        </Link>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link
+              href="/admin/dashboard"
+              className="mb-3 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft size={16} />
+              Back to Dashboard
+            </Link>
 
-        {/* =================================================
-            ERROR
-        ================================================== */}
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-blue-100 p-2 text-blue-600">
+                <FolderTree size={22} />
+              </div>
+
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Categories
+                </h1>
+
+                <p className="text-sm text-gray-500">
+                  Manage your product category hierarchy.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {!showForm && (
+            <button
+              type="button"
+              onClick={startCreate}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <Plus size={18} />
+              Add Category
+            </button>
+          )}
+        </div>
+
+        {/* ERROR */}
 
         {error && (
-          <div className="mt-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        {/* =================================================
-            SUCCESS
-        ================================================== */}
+        {/* SUCCESS */}
 
         {success && (
-          <div className="mt-6 rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-700">
+          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
             {success}
           </div>
         )}
 
-        {/* =================================================
-            ADD / EDIT FORM
-        ================================================== */}
+        {/* FORM */}
 
         {showForm && (
-          <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-
-            <div className="flex items-center justify-between">
-
+          <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-black">
+                <h2 className="text-lg font-semibold text-gray-900">
                   {editingId !== null
                     ? "Edit Category"
                     : "Add Category"}
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-600">
-                  {editingId !== null
-                    ? "Update category information."
-                    : "Create a new product category."}
+                <p className="mt-1 text-sm text-gray-500">
+                  Create a category and optionally place it under another category.
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={resetForm}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-300 text-black transition hover:border-black"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close"
               >
-                <X className="h-4 w-4" />
+                <X size={20} />
               </button>
-
             </div>
 
             <form
               onSubmit={handleSubmit}
-              className="mt-6 space-y-5"
+              className="space-y-5"
             >
-
               {/* CATEGORY NAME */}
 
               <div>
                 <label
-                  htmlFor="categoryName"
-                  className="mb-2 block text-sm font-medium text-black"
+                  htmlFor="category-name"
+                  className="mb-2 block text-sm font-medium text-gray-700"
                 >
                   Category Name
                 </label>
 
                 <input
-                  id="categoryName"
+                  id="category-name"
                   type="text"
                   value={name}
                   onChange={(event) =>
@@ -541,9 +675,9 @@ export default function AdminCategoriesPage() {
                       event.target.value
                     )
                   }
-                  placeholder="Enter category name"
+                  placeholder="e.g. Pants"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   disabled={saving}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
                 />
               </div>
 
@@ -551,36 +685,118 @@ export default function AdminCategoriesPage() {
 
               <div>
                 <label
-                  htmlFor="categoryDescription"
-                  className="mb-2 block text-sm font-medium text-black"
+                  htmlFor="category-description"
+                  className="mb-2 block text-sm font-medium text-gray-700"
                 >
                   Description
                 </label>
 
                 <textarea
-                  id="categoryDescription"
+                  id="category-description"
                   value={description}
                   onChange={(event) =>
                     setDescription(
                       event.target.value
                     )
                   }
-                  placeholder="Enter category description"
-                  rows={4}
+                  placeholder="Optional category description"
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   disabled={saving}
-                  className="w-full resize-none rounded-md border border-gray-300 px-3 py-2.5 text-sm text-black outline-none focus:border-black"
                 />
               </div>
 
-              {/* FORM BUTTONS */}
+              {/* PARENT CATEGORY */}
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Parent Category
+                </label>
+
+                <div className="space-y-4">
+                  {parentCategoryLevels.map(
+                    (
+                      levelCategories,
+                      level
+                    ) => (
+                      <div
+                        key={`parent-category-level-${level}`}
+                      >
+                        <label
+                          htmlFor={`parent-category-level-${level}`}
+                          className="mb-2 block text-xs font-medium text-gray-600"
+                        >
+                          {level === 0
+                            ? "Main Category"
+                            : level === 1
+                            ? "Subcategory"
+                            : `Subcategory Level ${level + 1}`}
+                        </label>
+
+                        <select
+                          id={`parent-category-level-${level}`}
+                          value={
+                            selectedParentIds[
+                              level
+                            ] || ""
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            handleParentChange(
+                              level,
+                              event.target
+                                .value
+                            )
+                          }
+                          disabled={
+                            saving
+                          }
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        >
+                          <option value="">
+                            {level === 0
+                              ? "None — Top Level Category"
+                              : "Select subcategory"}
+                          </option>
+
+                          {levelCategories.map(
+                            (
+                              category
+                            ) => (
+                              <option
+                                key={
+                                  category.id
+                                }
+                                value={
+                                  category.id
+                                }
+                              >
+                                {
+                                  category.name
+                                }
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </div>
+                    )
+                  )}
+                </div>
+
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Select a main category first. If it has subcategories, another dropdown will appear automatically.
+                </p>
+              </div>
+
+              {/* BUTTONS */}
 
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-
                 <button
                   type="button"
                   onClick={resetForm}
                   disabled={saving}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-black transition hover:border-black disabled:opacity-50"
+                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -588,258 +804,242 @@ export default function AdminCategoriesPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-md border border-black bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving
                     ? "Saving..."
                     : editingId !== null
-                      ? "Update Category"
-                      : "Create Category"}
+                    ? "Update Category"
+                    : "Create Category"}
                 </button>
-
               </div>
-
             </form>
           </div>
         )}
 
-        {/* =================================================
-            TOTAL CATEGORIES
-        ================================================== */}
+        {/* CATEGORY LIST */}
 
-        <div className="mt-6 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4">
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-900">
+                  All Categories
+                </h2>
 
-          <p className="text-sm text-gray-600">
-            Total Categories{" "}
-            <span className="font-semibold text-black">
-              {categories.length}
-            </span>
-          </p>
+                <p className="text-sm text-gray-500">
+                  {categories?.length ?? 0} categories
+                </p>
+              </div>
 
-          <button
-            type="button"
-            onClick={startCreate}
-            className="inline-flex items-center gap-2 rounded-md border border-black bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-black hover:text-white"
-          >
-            <Plus className="h-4 w-4" />
-            Add Category
-          </button>
-
-        </div>
-
-        {/* =================================================
-            EMPTY
-        ================================================== */}
-
-        {categories.length === 0 ? (
-          <div className="mt-6 rounded-xl border border-gray-200 bg-white p-12 text-center">
-
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-gray-50">
-              <FolderTree className="h-8 w-8 text-gray-500" />
+              {!showForm && (
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <Plus size={16} />
+                  Add
+                </button>
+              )}
             </div>
-
-            <h2 className="mt-5 text-xl font-semibold text-black">
-              No categories found
-            </h2>
-
-            <p className="mt-2 text-sm text-gray-600">
-              Create your first category.
-            </p>
-
-            <button
-              type="button"
-              onClick={startCreate}
-              className="mt-6 inline-flex items-center gap-2 rounded-md border border-black bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-black hover:text-white"
-            >
-              <Plus className="h-4 w-4" />
-              Add Category
-            </button>
-
           </div>
-        ) : (
 
-          /* =================================================
-             CATEGORY TABLE
-          ================================================== */
+          {/* LOADING */}
 
-          <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
+          {loading ? (
+            <div className="px-6 py-12 text-center text-sm text-gray-500">
+              Loading categories...
+            </div>
+          ) : categories === null ||
+            categories.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <FolderTree
+                size={40}
+                className="mx-auto mb-3 text-gray-300"
+              />
 
+              <h3 className="font-medium text-gray-900">
+                No categories found
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Create your first category to get started.
+              </p>
+
+              <button
+                type="button"
+                onClick={startCreate}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Plus size={18} />
+                Add Category
+              </button>
+            </div>
+          ) : (
             <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[900px]">
-
-                <thead className="border-b border-gray-200 bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
                   <tr>
-
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-black">
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Category
                     </th>
 
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-black">
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Parent
+                    </th>
+
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Description
                     </th>
 
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-black">
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Status
                     </th>
 
-                    <th className="px-6 py-4 text-right text-sm font-semibold text-black">
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Actions
                     </th>
-
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-gray-200">
-
+                <tbody className="divide-y divide-gray-200 bg-white">
                   {categories.map(
-                    (category) => {
-
-                      const isActive =
-                        category.is_active === true;
-
-                      const updating =
-                        statusUpdatingId ===
-                        category.id;
-
-                      const deleting =
-                        deletingId ===
-                        category.id;
-
-                      return (
-                        <tr
-                          key={category.id}
-                          className="transition hover:bg-gray-50"
-                        >
-
-                          {/* CATEGORY */}
-
-                          <td className="px-6 py-5">
-                            <p className="font-semibold text-black">
-                              {category.name}
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-500">
-                              ID: {category.id}
-                            </p>
-                          </td>
-
-                          {/* DESCRIPTION */}
-
-                          <td className="max-w-md px-6 py-5">
-                            <p className="text-sm text-gray-600">
-                              {category.description ||
-                                "No description"}
-                            </p>
-                          </td>
-
-                          {/* STATUS */}
-
-                          <td className="px-6 py-5">
-
-                            {isActive ? (
-                              <span className="inline-flex rounded-full border border-green-300 bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
-                                Active
-                              </span>
-                            ) : (
-                              <span className="inline-flex rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
-                                Inactive
+                    (category) => (
+                      <tr
+                        key={category.id}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {category.parent_id !==
+                              null && (
+                              <span className="text-gray-400">
+                                └─
                               </span>
                             )}
 
-                          </td>
+                            <span className="font-medium text-gray-900">
+                              {category.name}
+                            </span>
+                          </div>
+                        </td>
 
-                          {/* ACTIONS */}
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                          {getParentName(
+                            category
+                          )}
+                        </td>
 
-                          <td className="px-6 py-5">
+                        <td className="max-w-xs px-6 py-4 text-sm text-gray-600">
+                          <div className="truncate">
+                            {category.description ||
+                              "—"}
+                          </div>
+                        </td>
 
-                            <div className="flex items-center justify-end gap-2">
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                              category.is_active
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {category.is_active
+                              ? "Active"
+                              : "Inactive"}
+                          </span>
+                        </td>
 
-                              {/* EDIT */}
+                        <td className="whitespace-nowrap px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            {/* EDIT */}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  startEdit(
-                                    category
-                                  )
-                                }
-                                disabled={
-                                  updating ||
-                                  deleting
-                                }
-                                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-black transition hover:border-black disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <Edit className="h-4 w-4" />
-                                Edit
-                              </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                startEdit(
+                                  category
+                                )
+                              }
+                              disabled={
+                                saving ||
+                                statusUpdatingId !==
+                                  null ||
+                                deletingId !==
+                                  null
+                              }
+                              className="rounded-lg p-2 text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Edit"
+                            >
+                              <Edit
+                                size={17}
+                              />
+                            </button>
 
-                              {/* ACTIVATE / DEACTIVATE */}
+                            {/* STATUS */}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleToggleStatus(
-                                    category
-                                  )
-                                }
-                                disabled={
-                                  updating ||
-                                  deleting
-                                }
-                                className={`rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                                  isActive
-                                    ? "bg-red-600 hover:bg-red-700"
-                                    : "bg-green-600 hover:bg-green-700"
-                                }`}
-                              >
-                                {updating
-                                  ? "Updating..."
-                                  : isActive
-                                    ? "Deactivate"
-                                    : "Activate"}
-                              </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleStatus(
+                                  category
+                                )
+                              }
+                              disabled={
+                                statusUpdatingId ===
+                                  category.id ||
+                                deletingId !==
+                                  null
+                              }
+                              className={`rounded-lg px-3 py-2 text-xs font-medium ${
+                                category.is_active
+                                  ? "text-orange-600 hover:bg-orange-50"
+                                  : "text-green-600 hover:bg-green-50"
+                              } disabled:cursor-not-allowed disabled:opacity-50`}
+                            >
+                              {statusUpdatingId ===
+                              category.id
+                                ? "..."
+                                : category.is_active
+                                ? "Deactivate"
+                                : "Activate"}
+                            </button>
 
-                              {/* DELETE */}
+                            {/* DELETE */}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDelete(
-                                    category.id,
-                                    category.name
-                                  )
-                                }
-                                disabled={
-                                  updating ||
-                                  deleting
-                                }
-                                className="inline-flex items-center gap-2 rounded-md border border-black bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-
-                                {deleting
-                                  ? "Deleting..."
-                                  : "Delete"}
-                              </button>
-
-                            </div>
-
-                          </td>
-
-                        </tr>
-                      );
-                    }
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDelete(
+                                  category
+                                )
+                              }
+                              disabled={
+                                deletingId ===
+                                  category.id ||
+                                statusUpdatingId !==
+                                  null
+                              }
+                              className="rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <Trash2
+                                size={17}
+                              />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
                   )}
-
                 </tbody>
               </table>
-
             </div>
-          </div>
-        )}
-
+          )}
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -1,6 +1,12 @@
+
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
+
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -23,6 +29,9 @@ import {
   getProduct,
   getProductsByCategory,
   type Product,
+  type ProductOptionGroup,
+  type ProductVariant,
+  type ProductImage,
 } from "@/services/products";
 
 import { getCategory } from "@/services/categories";
@@ -50,46 +59,74 @@ export default function ProductDetailsPage() {
 
   const productSlug = String(params.id || "");
 
-  const [product, setProduct] = useState<Product | null>(null);
-  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [product, setProduct] =
+    useState<Product | null>(null);
 
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [quantity, setQuantity] = useState(1);
+  const [relatedProducts, setRelatedProducts] =
+    useState<Product[]>([]);
 
-  const [addingToCart, setAddingToCart] = useState(false);
-  const [buyingNow, setBuyingNow] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [cartMessage, setCartMessage] = useState("");
-  const [cartError, setCartError] = useState("");
+  const [error, setError] =
+    useState("");
 
-  // =====================================================
-  // WISHLIST
-  // =====================================================
+  const [selectedImageIndex, setSelectedImageIndex] =
+    useState(0);
 
-  const [isWishlisted, setIsWishlisted] = useState(false);
-  const [wishlistLoading, setWishlistLoading] = useState(false);
-  const [wishlistBusy, setWishlistBusy] = useState(false);
+  const [quantity, setQuantity] =
+    useState(1);
 
-  // =====================================================
-  // REVIEWS
-  // =====================================================
+  const [selectedOptions, setSelectedOptions] =
+    useState<Record<number, number>>({});
 
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [addingToCart, setAddingToCart] =
+    useState(false);
 
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewComment, setReviewComment] = useState("");
+  const [buyingNow, setBuyingNow] =
+    useState(false);
 
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState("");
+  const [cartMessage, setCartMessage] =
+    useState("");
+
+  const [cartError, setCartError] =
+    useState("");
+
+  const [isWishlisted, setIsWishlisted] =
+    useState(false);
+
+  const [wishlistLoading, setWishlistLoading] =
+    useState(false);
+
+  const [wishlistBusy, setWishlistBusy] =
+    useState(false);
+
+  const [reviews, setReviews] =
+    useState<Review[]>([]);
+
+  const [reviewsLoading, setReviewsLoading] =
+    useState(false);
+
+  const [reviewRating, setReviewRating] =
+    useState(5);
+
+  const [reviewComment, setReviewComment] =
+    useState("");
+
+  const [reviewSubmitting, setReviewSubmitting] =
+    useState(false);
+
+  const [reviewError, setReviewError] =
+    useState("");
 
   const [editingReviewId, setEditingReviewId] =
     useState<number | null>(null);
 
-  const [editRating, setEditRating] = useState(5);
-  const [editComment, setEditComment] = useState("");
+  const [editRating, setEditRating] =
+    useState(5);
+
+  const [editComment, setEditComment] =
+    useState("");
 
   const [reviewDeletingId, setReviewDeletingId] =
     useState<number | null>(null);
@@ -97,33 +134,35 @@ export default function ProductDetailsPage() {
   const [showReviewsModal, setShowReviewsModal] =
     useState(false);
 
-  // =====================================================
-  // CURRENT USER
-  // =====================================================
-
   const currentUser = getStoredUser();
 
-  const isCustomer = currentUser?.role === "customer";
+  const isCustomer =
+    currentUser?.role === "customer";
 
   // =====================================================
   // LOAD REVIEWS
   // =====================================================
 
-  const loadReviews = async (productId: number) => {
+  const loadReviews = async (
+    productId: number
+  ) => {
     try {
       setReviewsLoading(true);
       setReviewError("");
 
-      const reviewData = await getProductReviews(productId);
+      const reviewData =
+        await getProductReviews(productId);
 
       setReviews(reviewData);
 
-      const reviewCount = reviewData.length;
+      const reviewCount =
+        reviewData.length;
 
       const averageRating =
         reviewCount > 0
           ? reviewData.reduce(
-              (total, review) => total + review.rating,
+              (total, review) =>
+                total + review.rating,
               0
             ) / reviewCount
           : 0;
@@ -140,7 +179,10 @@ export default function ProductDetailsPage() {
         };
       });
     } catch (error) {
-      console.error("Reviews loading error:", error);
+      console.error(
+        "Reviews loading error:",
+        error
+      );
 
       setReviewError(
         error instanceof Error
@@ -172,19 +214,52 @@ export default function ProductDetailsPage() {
       }
 
       try {
+        setLoading(true);
         setError("");
         setReviewError("");
 
-        const productData = await getProduct(productSlug);
+        const productData =
+          await getProduct(productSlug);
 
         if (!isMounted) {
           return;
         }
 
         setProduct(productData);
+
         setQuantity(1);
-        setCartMessage("");
-        setCartError("");
+        const activeVariants =
+          (productData.variants ?? []).filter(
+           (variant) => variant.is_active
+          );
+        const defaultVariant =
+          activeVariants[0] ?? null;
+
+        const defaultOptions: Record<number, number> =
+          {};
+        if (defaultVariant) {
+          (productData.option_groups ?? []).forEach(
+           (group) => {
+            const defaultValue =
+              group.values.find((value) =>
+               defaultVariant.option_value_ids.includes(
+                value.id
+
+              )
+            );
+            
+            if (defaultValue) {
+              defaultOptions[group.id] =
+               defaultValue.id;
+
+            }
+            
+          }
+        );
+      }
+
+      setSelectedOptions(defaultOptions);
+      setSelectedImageIndex(0);
 
         // =================================================
         // REVIEWS
@@ -193,9 +268,10 @@ export default function ProductDetailsPage() {
         try {
           setReviewsLoading(true);
 
-          const reviewData = await getProductReviews(
-            productData.id
-          );
+          const reviewData =
+            await getProductReviews(
+              productData.id
+            );
 
           if (!isMounted) {
             return;
@@ -203,7 +279,8 @@ export default function ProductDetailsPage() {
 
           setReviews(reviewData);
 
-          const reviewCount = reviewData.length;
+          const reviewCount =
+            reviewData.length;
 
           const averageRating =
             reviewCount > 0
@@ -245,17 +322,20 @@ export default function ProductDetailsPage() {
         }
 
         // =================================================
-        // CHECK WISHLIST
+        // WISHLIST
         // =================================================
 
         try {
-          const user = getStoredUser();
+          const user =
+            getStoredUser();
 
           if (user?.role === "customer") {
             setWishlistLoading(true);
 
             const wishlistStatus =
-              await checkWishlist(productData.id);
+              await checkWishlist(
+                productData.id
+              );
 
             if (!isMounted) {
               return;
@@ -283,30 +363,36 @@ export default function ProductDetailsPage() {
         }
 
         // =================================================
-        // IMAGES
+        // INITIAL PRODUCT IMAGE
         // =================================================
 
-        const productImages = productData.images ?? [];
+        const productImages =
+          productData.images ?? [];
 
         const primaryImageIndex =
           productImages.findIndex(
-            (image) => image.is_primary
+            (image) =>
+              image.is_primary &&
+              image.variant_id == null
           );
 
-        setSelectedImageIndex(
-          primaryImageIndex >= 0
-            ? primaryImageIndex
-            : 0
-        );
+        if (isMounted) {
+          setSelectedImageIndex(
+            primaryImageIndex >= 0
+              ? primaryImageIndex
+              : 0
+          );
+        }
 
         // =================================================
         // RELATED PRODUCTS
         // =================================================
 
         try {
-          const category = await getCategory(
-            productData.category_id
-          );
+          const category =
+            await getCategory(
+              productData.category_id
+            );
 
           if (!isMounted) {
             return;
@@ -367,7 +453,7 @@ export default function ProductDetailsPage() {
   }, [productSlug]);
 
   // =====================================================
-  // CLOSE MODAL WITH ESCAPE
+  // CLOSE REVIEWS WITH ESCAPE
   // =====================================================
 
   useEffect(() => {
@@ -375,7 +461,9 @@ export default function ProductDetailsPage() {
       return;
     }
 
-    const handleEscape = (event: KeyboardEvent) => {
+    const handleEscape = (
+      event: KeyboardEvent
+    ) => {
       if (event.key === "Escape") {
         setShowReviewsModal(false);
       }
@@ -414,21 +502,30 @@ export default function ProductDetailsPage() {
       setWishlistBusy(true);
 
       if (isWishlisted) {
-        await removeFromWishlist(product.id);
+        await removeFromWishlist(
+          product.id
+        );
+
         setIsWishlisted(false);
       } else {
-        await addToWishlist(product.id);
+        await addToWishlist(
+          product.id
+        );
+
         setIsWishlisted(true);
       }
     } catch (error) {
-      console.error("Wishlist error:", error);
+      console.error(
+        "Wishlist error:",
+        error
+      );
     } finally {
       setWishlistBusy(false);
     }
   };
 
   // =====================================================
-  // SHARE PRODUCT
+  // SHARE
   // =====================================================
 
   const handleShareProduct = async () => {
@@ -442,7 +539,8 @@ export default function ProductDetailsPage() {
     try {
       if (
         navigator.share &&
-        typeof navigator.share === "function"
+        typeof navigator.share ===
+          "function"
       ) {
         await navigator.share({
           title: product.name,
@@ -462,7 +560,9 @@ export default function ProductDetailsPage() {
           productUrl
         );
 
-        window.alert("Product link copied.");
+        window.alert(
+          "Product link copied."
+        );
 
         return;
       }
@@ -561,7 +661,7 @@ export default function ProductDetailsPage() {
   };
 
   // =====================================================
-  // CANCEL EDIT
+  // CANCEL EDIT REVIEW
   // =====================================================
 
   const handleCancelEditReview = () => {
@@ -597,13 +697,10 @@ export default function ProductDetailsPage() {
       setReviewSubmitting(true);
       setReviewError("");
 
-      await updateReview(
-        reviewId,
-        {
-          rating: editRating,
-          comment: trimmedComment,
-        }
-      );
+      await updateReview(reviewId, {
+        rating: editRating,
+        comment: trimmedComment,
+      });
 
       handleCancelEditReview();
 
@@ -635,9 +732,10 @@ export default function ProductDetailsPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this review?"
-    );
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this review?"
+      );
 
     if (!confirmed) {
       return;
@@ -649,7 +747,9 @@ export default function ProductDetailsPage() {
 
       await deleteReview(reviewId);
 
-      if (editingReviewId === reviewId) {
+      if (
+        editingReviewId === reviewId
+      ) {
         handleCancelEditReview();
       }
 
@@ -738,33 +838,351 @@ export default function ProductDetailsPage() {
   }
 
   // =====================================================
-  // PRODUCT DATA
+  // PRODUCT OPTIONS
   // =====================================================
 
-  const images = product.images ?? [];
+  const optionGroups =
+    product.option_groups ?? [];
+
+  const variants =
+    (product.variants ?? []).filter(
+      (variant) =>
+        variant.is_active
+    );
+
+  const hasVariants =
+    optionGroups.length > 0 &&
+    variants.length > 0;
+
+  const allRequiredOptionsSelected =
+    hasVariants &&
+    optionGroups.every(
+      (group) =>
+        selectedOptions[group.id] !==
+        undefined
+    );
+
+  // =====================================================
+  // EXACT VARIANT MATCHING
+  // =====================================================
+
+  const selectedValueIds =
+    Object.values(
+      selectedOptions
+    );
+
+  const selectedVariant: ProductVariant | null =
+    hasVariants &&
+    allRequiredOptionsSelected
+      ? variants.find(
+          (variant) => {
+            const variantValueIds =
+              variant.option_value_ids;
+
+            if (
+              variantValueIds.length !==
+              optionGroups.length
+            ) {
+              return false;
+            }
+
+            if (
+              selectedValueIds.length !==
+              optionGroups.length
+            ) {
+              return false;
+            }
+
+            return (
+              variantValueIds.every(
+                (valueId) =>
+                  selectedValueIds.includes(
+                    valueId
+                  )
+              ) &&
+              selectedValueIds.every(
+                (valueId) =>
+                  variantValueIds.includes(
+                    valueId
+                  )
+              )
+            );
+          }
+        ) ?? null
+      : null;
+
+  // =====================================================
+  // OPTION AVAILABILITY
+  // =====================================================
+
+  const isOptionValueAvailable = (
+    groupId: number,
+    valueId: number
+  ) => {
+    if (!hasVariants) {
+      return true;
+    }
+
+    const candidateSelections = {
+      ...selectedOptions,
+      [groupId]: valueId,
+    };
+
+    const selectedEntries =
+      Object.entries(
+        candidateSelections
+      ).map(
+        ([selectedGroupId, selectedValueId]) =>
+          [
+            Number(selectedGroupId),
+            selectedValueId,
+          ] as [number, number]
+      );
+
+    return variants.some(
+      (variant) => {
+        const variantValueIds =
+          variant.option_value_ids;
+
+        if (
+          variantValueIds.length !==
+          optionGroups.length
+        ) {
+          return false;
+        }
+
+        return selectedEntries.every(
+          ([, selectedValueId]) =>
+            variantValueIds.includes(
+              selectedValueId
+            )
+        );
+      }
+    );
+  };
+
+  // =====================================================
+  // CURRENT PRICE / STOCK
+  // =====================================================
+
+  const currentPrice =
+    selectedVariant?.price ??
+    product.price;
+
+  const currentOriginalPrice =
+    selectedVariant?.original_price ??
+    product.original_price;
+
+  const currentStock =
+    selectedVariant?.stock ??
+    product.stock;
+
+  // =====================================================
+  // PRODUCT IMAGES
+  // =====================================================
+
+  const productImages =
+    product.images ?? [];
+
+  const selectedOptionEntries =
+    Object.entries(
+      selectedOptions
+    ).map(
+      ([groupId, valueId]) => [
+        Number(groupId),
+        valueId,
+      ] as [number, number]
+    );
+
+  const matchingVariants =
+    hasVariants
+      ? variants.filter(
+          (variant) =>
+            selectedOptionEntries.every(
+              ([, valueId]) =>
+                variant.option_value_ids.includes(
+                  valueId
+                )
+            )
+        )
+      : [];
+
+  let galleryImages: ProductImage[] = [];
+
+  // =====================================================
+  // SELECTED VARIANT IMAGES
+  // =====================================================
+
+  if (
+    selectedVariant &&
+    selectedVariant.images &&
+    selectedVariant.images.length > 0
+  ) {
+    galleryImages =
+      selectedVariant.images
+        .slice()
+        .sort(
+          (a, b) =>
+            a.sort_order -
+            b.sort_order
+        );
+  }
+
+  // =====================================================
+  // PARTIAL OPTION MATCHING
+  // =====================================================
+
+  if (
+    galleryImages.length === 0 &&
+    selectedOptionEntries.length > 0 &&
+    matchingVariants.length > 0
+  ) {
+    const matchingImages =
+      matchingVariants.flatMap(
+        (variant) =>
+          variant.images ?? []
+      );
+
+    const uniqueImages =
+      new Map<number, ProductImage>();
+
+    matchingImages.forEach(
+      (image) => {
+        if (!uniqueImages.has(image.id)) {
+          uniqueImages.set(
+            image.id,
+            image
+          );
+        }
+      }
+    );
+
+    galleryImages =
+      Array.from(
+        uniqueImages.values()
+      ).sort(
+        (a, b) =>
+          a.sort_order -
+          b.sort_order
+      );
+  }
+
+  // =====================================================
+  // PRODUCT LEVEL IMAGES
+  // =====================================================
+
+  if (
+    galleryImages.length === 0 &&
+    selectedOptionEntries.length === 0
+  ) {
+    galleryImages =
+      productImages
+        .filter(
+          (image) =>
+            image.variant_id == null
+        )
+        .sort(
+          (a, b) =>
+            a.sort_order -
+            b.sort_order
+        );
+  }
+
+  // =====================================================
+  // FALLBACK TO ALL VARIANT IMAGES
+  // =====================================================
+
+  if (
+    galleryImages.length === 0 &&
+    selectedOptionEntries.length === 0 &&
+    hasVariants
+  ) {
+    const allVariantImages =
+      variants.flatMap(
+        (variant) =>
+          variant.images ?? []
+      );
+
+    const uniqueImages =
+      new Map<number, ProductImage>();
+
+    allVariantImages.forEach(
+      (image) => {
+        if (!uniqueImages.has(image.id)) {
+          uniqueImages.set(
+            image.id,
+            image
+          );
+        }
+      }
+    );
+
+    galleryImages =
+      Array.from(
+        uniqueImages.values()
+      ).sort(
+        (a, b) =>
+          a.sort_order -
+          b.sort_order
+      );
+  }
+
+  // =====================================================
+  // FINAL IMAGE FALLBACK
+  // =====================================================
+
+  if (galleryImages.length === 0) {
+    galleryImages =
+      productImages
+        .slice()
+        .sort(
+          (a, b) =>
+            a.sort_order -
+            b.sort_order
+        );
+  }
+
+  const images =
+    galleryImages;
+
+  const safeImageIndex =
+    images.length > 0
+      ? Math.min(
+          selectedImageIndex,
+          images.length - 1
+        )
+      : 0;
 
   const currentImage =
-    images[selectedImageIndex]?.image_url ?? null;
+    images[safeImageIndex]
+      ?.image_url ?? null;
+
+  // =====================================================
+  // DISCOUNT
+  // =====================================================
 
   const hasDiscount =
-    product.original_price != null &&
-    product.original_price > product.price;
+    currentOriginalPrice != null &&
+    currentOriginalPrice >
+      currentPrice;
 
   const discountPercentage =
-    hasDiscount && product.original_price
+    hasDiscount &&
+    currentOriginalPrice
       ? Math.round(
-          ((product.original_price -
-            product.price) /
-            product.original_price) *
+          ((currentOriginalPrice -
+            currentPrice) /
+            currentOriginalPrice) *
             100
         )
       : 0;
 
   // =====================================================
-  // REVIEW STATISTICS
+  // REVIEWS
   // =====================================================
 
-  const reviewCount = reviews.length;
+  const reviewCount =
+    reviews.length;
 
   const averageRating =
     reviewCount > 0
@@ -775,178 +1193,268 @@ export default function ProductDetailsPage() {
         ) / reviewCount
       : 0;
 
-  const ratingDistribution = [5, 4, 3, 2, 1].map(
-    (rating) => {
-      const count = reviews.filter(
-        (review) =>
-          review.rating === rating
-      ).length;
+  const ratingDistribution =
+    [5, 4, 3, 2, 1].map(
+      (rating) => {
+        const count =
+          reviews.filter(
+            (review) =>
+              review.rating ===
+              rating
+          ).length;
 
-      const percentage =
-        reviewCount > 0
-          ? Math.round(
-              (count / reviewCount) * 100
-            )
-          : 0;
+        const percentage =
+          reviewCount > 0
+            ? Math.round(
+                (count /
+                  reviewCount) *
+                  100
+              )
+            : 0;
 
-      return {
-        rating,
-        count,
-        percentage,
-      };
+        return {
+          rating,
+          count,
+          percentage,
+        };
+      }
+    );
+
+  // =====================================================
+  // OPTION SELECTION
+  // =====================================================
+
+  const handleOptionSelect = (
+    group: ProductOptionGroup,
+    valueId: number
+  ) => {
+    if (
+      !isOptionValueAvailable(
+        group.id,
+        valueId
+      )
+    ) {
+      return;
     }
-  );
+
+    setSelectedOptions(
+      (current) => ({
+        ...current,
+        [group.id]: valueId,
+      })
+    );
+
+    setQuantity(1);
+    setSelectedImageIndex(0);
+    setCartMessage("");
+    setCartError("");
+  };
 
   // =====================================================
   // QUANTITY
   // =====================================================
 
-  const handleDecreaseQuantity = () => {
-    setQuantity((currentQuantity) =>
-      Math.max(1, currentQuantity - 1)
-    );
-  };
+  const handleDecreaseQuantity =
+    () => {
+      setQuantity(
+        (currentQuantity) =>
+          Math.max(
+            1,
+            currentQuantity - 1
+          )
+      );
+    };
 
-  const handleIncreaseQuantity = () => {
-    setQuantity((currentQuantity) =>
-      Math.min(
-        product.stock,
-        currentQuantity + 1
-      )
-    );
-  };
+  const handleIncreaseQuantity =
+    () => {
+      setQuantity(
+        (currentQuantity) =>
+          Math.min(
+            currentStock,
+            currentQuantity + 1
+          )
+      );
+    };
 
   // =====================================================
   // ADD TO CART
   // =====================================================
 
-  const handleAddToCart = async () => {
-    if (product.stock <= 0) {
-      setCartError(
-        "This product is out of stock."
-      );
+  const handleAddToCart =
+    async () => {
+      if (
+        hasVariants &&
+        (!allRequiredOptionsSelected ||
+          !selectedVariant)
+      ) {
+        setCartError(
+          allRequiredOptionsSelected
+            ? "This variant is not available."
+            : "Please select all product options."
+        );
 
-      return;
-    }
-
-    if (quantity > product.stock) {
-      setCartError(
-        `Only ${product.stock} items are available.`
-      );
-
-      return;
-    }
-
-    try {
-      setAddingToCart(true);
-      setCartMessage("");
-      setCartError("");
-
-      const response = await addToCart(
-        product.id,
-        quantity
-      );
-
-      if (response.status === 401) {
-        router.push("/login");
         return;
       }
 
-      if (!response.success) {
-        const message =
-          response.data?.detail ||
-          "Unable to add product to cart.";
+      if (currentStock <= 0) {
+        setCartError(
+          "This product is out of stock."
+        );
 
-        throw new Error(message);
+        return;
       }
 
-      setCartMessage(
-        `${quantity} ${
-          quantity === 1
-            ? "item"
-            : "items"
-        } added to cart.`
-      );
+      if (
+        quantity > currentStock
+      ) {
+        setCartError(
+          `Only ${currentStock} items are available.`
+        );
 
-      setTimeout(() => {
+        return;
+      }
+
+      try {
+        setAddingToCart(true);
         setCartMessage("");
-      }, 1000);
-    } catch (error) {
-      console.error(
-        "Add to cart error:",
-        error
-      );
+        setCartError("");
 
-      setCartError(
-        error instanceof Error
-          ? error.message
-          : "Unable to add product to cart."
-      );
-    } finally {
-      setAddingToCart(false);
-    }
-  };
+        const response =
+          await addToCart(
+            product.id,
+            quantity,
+            selectedVariant?.id ??
+              null
+          );
+
+        if (
+          response.status === 401
+        ) {
+          router.push("/login");
+          return;
+        }
+
+        if (!response.success) {
+          const message =
+            response.data?.detail ||
+            "Unable to add product to cart.";
+
+          throw new Error(
+            message
+          );
+        }
+
+        setCartMessage(
+          `${quantity} ${
+            quantity === 1
+              ? "item"
+              : "items"
+          } added to cart.`
+        );
+
+        setTimeout(() => {
+          setCartMessage("");
+        }, 1000);
+      } catch (error) {
+        console.error(
+          "Add to cart error:",
+          error
+        );
+
+        setCartError(
+          error instanceof Error
+            ? error.message
+            : "Unable to add product to cart."
+        );
+      } finally {
+        setAddingToCart(false);
+      }
+    };
 
   // =====================================================
   // BUY NOW
   // =====================================================
 
-  const handleBuyNow = async () => {
-    if (product.stock <= 0) {
-      setCartError(
-        "This product is out of stock."
-      );
+  const handleBuyNow =
+    async () => {
+      if (
+        hasVariants &&
+        (!allRequiredOptionsSelected ||
+          !selectedVariant)
+      ) {
+        setCartError(
+          allRequiredOptionsSelected
+            ? "This variant is not available."
+            : "Please select all product options."
+        );
 
-      return;
-    }
-
-    if (quantity > product.stock) {
-      setCartError(
-        `Only ${product.stock} items are available.`
-      );
-
-      return;
-    }
-
-    try {
-      setBuyingNow(true);
-      setCartMessage("");
-      setCartError("");
-
-      const response = await addToCart(
-        product.id,
-        quantity
-      );
-
-      if (response.status === 401) {
-        router.push("/login");
         return;
       }
 
-      if (!response.success) {
-        const message =
-          response.data?.detail ||
-          "Unable to proceed.";
+      if (currentStock <= 0) {
+        setCartError(
+          "This product is out of stock."
+        );
 
-        throw new Error(message);
+        return;
       }
 
-      router.push("/cart");
-    } catch (error) {
-      console.error(
-        "Buy now error:",
-        error
-      );
+      if (
+        quantity > currentStock
+      ) {
+        setCartError(
+          `Only ${currentStock} items are available.`
+        );
 
-      setCartError(
-        error instanceof Error
-          ? error.message
-          : "Unable to proceed to cart."
-      );
-    } finally {
-      setBuyingNow(false);
-    }
-  };
+        return;
+      }
+
+      try {
+        setBuyingNow(true);
+        setCartMessage("");
+        setCartError("");
+
+        const response =
+          await addToCart(
+            product.id,
+            quantity,
+            selectedVariant?.id ??
+              null
+          );
+
+        if (
+          response.status === 401
+        ) {
+          router.push("/login");
+          return;
+        }
+
+        if (!response.success) {
+          const message =
+            response.data?.detail ||
+            "Unable to proceed.";
+
+          throw new Error(
+            message
+          );
+        }
+
+        router.push("/cart");
+      } catch (error) {
+        console.error(
+          "Buy now error:",
+          error
+        );
+
+        setCartError(
+          error instanceof Error
+            ? error.message
+            : "Unable to proceed to cart."
+        );
+      } finally {
+        setBuyingNow(false);
+      }
+    };
 
   // =====================================================
   // IMAGE NAVIGATION
@@ -959,24 +1467,26 @@ export default function ProductDetailsPage() {
 
     setSelectedImageIndex(
       (currentIndex) =>
-        currentIndex === images.length - 1
+        currentIndex >=
+        images.length - 1
           ? 0
           : currentIndex + 1
     );
   };
 
-  const handlePreviousImage = () => {
-    if (images.length <= 1) {
-      return;
-    }
+  const handlePreviousImage =
+    () => {
+      if (images.length <= 1) {
+        return;
+      }
 
-    setSelectedImageIndex(
-      (currentIndex) =>
-        currentIndex === 0
-          ? images.length - 1
-          : currentIndex - 1
-    );
-  };
+      setSelectedImageIndex(
+        (currentIndex) =>
+          currentIndex <= 0
+            ? images.length - 1
+            : currentIndex - 1
+      );
+    };
 
   // =====================================================
   // PAGE
@@ -986,8 +1496,6 @@ export default function ProductDetailsPage() {
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5">
 
-        {/* BACK */}
-
         <Link
           href="/products"
           className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900"
@@ -996,22 +1504,21 @@ export default function ProductDetailsPage() {
           Back to Products
         </Link>
 
-        {/* =================================================
-            MAIN PRODUCT SECTION
-        ================================================= */}
-
         <section className="grid gap-4 lg:grid-cols-2">
 
-          {/* IMAGE */}
+          {/* GALLERY */}
 
           <div className="border border-gray-200 bg-white">
+
             <div className="relative overflow-hidden bg-white">
 
               <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
 
                 <button
                   type="button"
-                  onClick={handleWishlist}
+                  onClick={
+                    handleWishlist
+                  }
                   disabled={
                     wishlistLoading ||
                     wishlistBusy
@@ -1038,7 +1545,9 @@ export default function ProductDetailsPage() {
 
                 <button
                   type="button"
-                  onClick={handleShareProduct}
+                  onClick={
+                    handleShareProduct
+                  }
                   aria-label="Share product"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
                 >
@@ -1054,6 +1563,7 @@ export default function ProductDetailsPage() {
               )}
 
               <div className="aspect-square">
+
                 {currentImage ? (
                   <img
                     src={currentImage}
@@ -1065,13 +1575,16 @@ export default function ProductDetailsPage() {
                     <Package className="h-16 w-16 text-gray-300" />
                   </div>
                 )}
+
               </div>
 
               {images.length > 1 && (
                 <>
                   <button
                     type="button"
-                    onClick={handlePreviousImage}
+                    onClick={
+                      handlePreviousImage
+                    }
                     className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50"
                     aria-label="Previous image"
                   >
@@ -1080,7 +1593,9 @@ export default function ProductDetailsPage() {
 
                   <button
                     type="button"
-                    onClick={handleNextImage}
+                    onClick={
+                      handleNextImage
+                    }
                     className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50"
                     aria-label="Next image"
                   >
@@ -1093,6 +1608,7 @@ export default function ProductDetailsPage() {
 
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto border-t border-gray-100 p-3">
+
                 {images.map(
                   (image, index) => (
                     <button
@@ -1104,29 +1620,32 @@ export default function ProductDetailsPage() {
                         )
                       }
                       className={`h-14 w-14 shrink-0 overflow-hidden border-2 bg-gray-50 ${
-                        selectedImageIndex ===
+                        safeImageIndex ===
                         index
                           ? "border-gray-900"
                           : "border-gray-200 hover:border-gray-400"
                       }`}
                     >
                       <img
-                        src={image.image_url}
-                        alt={`${product.name} ${
-                          index + 1
-                        }`}
+                        src={
+                          image.image_url
+                        }
+                        alt={`${product.name} ${index + 1}`}
                         className="h-full w-full object-cover"
                       />
                     </button>
                   )
                 )}
+
               </div>
             )}
+
           </div>
 
           {/* PRODUCT INFORMATION */}
 
           <div className="border border-gray-200 bg-white">
+
             <div className="p-4 sm:p-5">
 
               <div className="border-b border-gray-100 pb-4">
@@ -1138,20 +1657,174 @@ export default function ProductDetailsPage() {
                 <div className="mt-2 flex items-center gap-2">
 
                   <span className="inline-flex items-center gap-1 bg-green-600 px-2 py-1 text-xs font-semibold text-white">
-                    {(product.rating ?? 0).toFixed(1)}
+                    {(product.rating ?? 0).toFixed(
+                      1
+                    )}
                     <span>★</span>
                   </span>
 
                   <span className="text-xs text-gray-500">
-                    {product.reviews_count ?? 0}{" "}
-                    {(product.reviews_count ?? 0) ===
-                    1
+                    {product.reviews_count ??
+                      0}{" "}
+                    {(product.reviews_count ??
+                      0) === 1
                       ? "Rating"
                       : "Ratings"}
                   </span>
 
                 </div>
+
               </div>
+
+              {/* OPTIONS */}
+
+              {hasVariants && (
+                <div className="border-b border-gray-100 py-4">
+
+                  <div className="space-y-5">
+
+                    {optionGroups.map(
+                      (group) => {
+
+                        const selectedValueId =
+                          selectedOptions[
+                            group.id
+                          ];
+
+                        const selectedValue =
+                          group.values.find(
+                            (value) =>
+                              value.id ===
+                              selectedValueId
+                          );
+
+                        return (
+                          <div
+                            key={group.id}
+                          >
+
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+
+                              <p className="text-sm font-semibold text-gray-900">
+                                {group.name}
+                              </p>
+
+                              {selectedValue && (
+                                <span className="text-xs text-gray-500">
+                                  :{" "}
+                                  {
+                                    selectedValue.value
+                                  }
+                                </span>
+                              )}
+
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+
+                              {group.values.map(
+                                (value) => {
+
+                                  const isSelected =
+                                    selectedValueId ===
+                                    value.id;
+
+                                  const isAvailable =
+                                    isOptionValueAvailable(
+                                      group.id,
+                                      value.id
+                                    );
+
+                                  return (
+                                    <button
+                                      key={
+                                        value.id
+                                      }
+                                      type="button"
+                                      onClick={() =>
+                                        handleOptionSelect(
+                                          group,
+                                          value.id
+                                        )
+                                      }
+                                      disabled={
+                                        !isAvailable ||
+                                        addingToCart ||
+                                        buyingNow
+                                      }
+                                      title={
+                                        !isAvailable
+                                          ? "This option combination is unavailable"
+                                          : undefined
+                                      }
+                                      className={`min-h-9 border px-4 py-2 text-xs font-medium transition ${
+                                        isSelected
+                                          ? "border-gray-900 bg-gray-900 text-white"
+                                          : isAvailable
+                                            ? "border-gray-300 bg-white text-gray-700 hover:border-gray-700"
+                                            : "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-300 line-through"
+                                      } disabled:opacity-70`}
+                                    >
+                                      {
+                                        value.value
+                                      }
+                                    </button>
+                                  );
+                                }
+                              )}
+
+                            </div>
+
+                          </div>
+                        );
+                      }
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+
+              {hasVariants &&
+                allRequiredOptionsSelected &&
+                !selectedVariant && (
+                  <div className="border-b border-gray-100 py-3">
+                    <p className="text-xs font-medium text-red-600">
+                      This combination is not available.
+                    </p>
+                  </div>
+                )}
+
+              {selectedVariant && (
+                <div className="border-b border-gray-100 py-3">
+
+                  <div className="flex flex-wrap items-center gap-3">
+
+                    {selectedVariant.sku && (
+                      <span className="text-xs text-gray-500">
+                        SKU:{" "}
+                        {selectedVariant.sku}
+                      </span>
+                    )}
+
+                    <span
+                      className={`text-xs font-medium ${
+                        currentStock > 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {currentStock > 0
+                        ? `${currentStock} units available`
+                        : "Out of stock"}
+                    </span>
+
+                  </div>
+
+                </div>
+              )}
+
+              {/* PRICE */}
 
               <div className="border-b border-gray-100 py-4">
 
@@ -1159,7 +1832,9 @@ export default function ProductDetailsPage() {
 
                   <span className="text-3xl font-semibold text-gray-900">
                     ₹
-                    {product.price.toLocaleString(
+                    {Number(
+                      currentPrice
+                    ).toLocaleString(
                       "en-IN"
                     )}
                   </span>
@@ -1167,7 +1842,9 @@ export default function ProductDetailsPage() {
                   {hasDiscount && (
                     <span className="text-sm text-gray-400 line-through">
                       ₹
-                      {product.original_price!.toLocaleString(
+                      {Number(
+                        currentOriginalPrice
+                      ).toLocaleString(
                         "en-IN"
                       )}
                     </span>
@@ -1175,7 +1852,8 @@ export default function ProductDetailsPage() {
 
                   {hasDiscount && (
                     <span className="text-sm font-semibold text-green-600">
-                      {discountPercentage}% off
+                      {discountPercentage}%
+                      off
                     </span>
                   )}
 
@@ -1184,18 +1862,21 @@ export default function ProductDetailsPage() {
                 <p className="mt-1 text-xs text-gray-500">
                   Inclusive of all taxes
                 </p>
+
               </div>
+
+              {/* STOCK */}
 
               <div className="border-b border-gray-100 py-4">
 
-                {product.stock > 0 ? (
+                {currentStock > 0 ? (
                   <>
                     <p className="text-sm font-semibold text-green-600">
                       In Stock
                     </p>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      {product.stock} units available
+                      {currentStock} units available
                     </p>
                   </>
                 ) : (
@@ -1212,6 +1893,8 @@ export default function ProductDetailsPage() {
 
               </div>
 
+              {/* DESCRIPTION */}
+
               {product.description && (
                 <div className="border-b border-gray-100 py-4">
 
@@ -1226,7 +1909,9 @@ export default function ProductDetailsPage() {
                 </div>
               )}
 
-              {product.stock > 0 && (
+              {/* QUANTITY */}
+
+              {currentStock > 0 && (
                 <div className="border-b border-gray-100 py-4">
 
                   <div className="flex items-center justify-between">
@@ -1236,7 +1921,8 @@ export default function ProductDetailsPage() {
                     </p>
 
                     <span className="text-xs text-gray-400">
-                      Max {product.stock}
+                      Max{" "}
+                      {currentStock}
                     </span>
 
                   </div>
@@ -1247,7 +1933,9 @@ export default function ProductDetailsPage() {
 
                       <button
                         type="button"
-                        onClick={handleDecreaseQuantity}
+                        onClick={
+                          handleDecreaseQuantity
+                        }
                         disabled={
                           quantity <= 1 ||
                           addingToCart ||
@@ -1264,10 +1952,12 @@ export default function ProductDetailsPage() {
 
                       <button
                         type="button"
-                        onClick={handleIncreaseQuantity}
+                        onClick={
+                          handleIncreaseQuantity
+                        }
                         disabled={
                           quantity >=
-                            product.stock ||
+                            currentStock ||
                           addingToCart ||
                           buyingNow
                         }
@@ -1283,7 +1973,7 @@ export default function ProductDetailsPage() {
                       <strong className="text-gray-900">
                         ₹
                         {(
-                          product.price *
+                          currentPrice *
                           quantity
                         ).toLocaleString(
                           "en-IN"
@@ -1292,8 +1982,11 @@ export default function ProductDetailsPage() {
                     </span>
 
                   </div>
+
                 </div>
               )}
+
+              {/* MESSAGES */}
 
               {cartMessage && (
                 <div className="mt-3 border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
@@ -1307,15 +2000,22 @@ export default function ProductDetailsPage() {
                 </div>
               )}
 
-              {product.stock > 0 && (
+              {/* ACTIONS */}
+
+              {currentStock > 0 && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
 
                   <button
                     type="button"
-                    onClick={handleAddToCart}
+                    onClick={
+                      handleAddToCart
+                    }
                     disabled={
                       addingToCart ||
-                      buyingNow
+                      buyingNow ||
+                      (hasVariants &&
+                        (!allRequiredOptionsSelected ||
+                          !selectedVariant))
                     }
                     className="flex h-11 items-center justify-center gap-2 bg-orange-500 px-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -1328,10 +2028,15 @@ export default function ProductDetailsPage() {
 
                   <button
                     type="button"
-                    onClick={handleBuyNow}
+                    onClick={
+                      handleBuyNow
+                    }
                     disabled={
                       addingToCart ||
-                      buyingNow
+                      buyingNow ||
+                      (hasVariants &&
+                        (!allRequiredOptionsSelected ||
+                          !selectedVariant))
                     }
                     className="flex h-11 items-center justify-center gap-2 bg-yellow-500 px-3 text-sm font-semibold text-gray-900 transition hover:bg-yellow-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -1366,12 +2071,12 @@ export default function ProductDetailsPage() {
 
         </section>
 
-        {/* =================================================
-            COMPACT RATINGS & REVIEWS
-        ================================================= */}
+        {/* RATINGS */}
 
         <section className="mt-6">
+
           <div className="w-fit rounded-md border border-gray-200 bg-white">
+
             <button
               type="button"
               onClick={() =>
@@ -1384,7 +2089,10 @@ export default function ProductDetailsPage() {
               </span>
 
               <span className="inline-flex items-center gap-0.5 text-gray-500">
-                {(product.rating ?? 0).toFixed(1)}
+                {(
+                  product.rating ??
+                  0
+                ).toFixed(1)}
 
                 <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
               </span>
@@ -1395,12 +2103,12 @@ export default function ProductDetailsPage() {
 
               <ChevronRight className="h-3 w-3 text-gray-400 transition group-hover:translate-x-0.5" />
             </button>
+
           </div>
+
         </section>
 
-        {/* =================================================
-            REVIEWS MODAL
-        ================================================= */}
+        {/* REVIEWS MODAL */}
 
         {showReviewsModal && (
           <div
@@ -1418,8 +2126,6 @@ export default function ProductDetailsPage() {
             }}
           >
             <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-lg">
-
-              {/* MODAL HEADER */}
 
               <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6">
 
@@ -1452,23 +2158,22 @@ export default function ProductDetailsPage() {
 
               </div>
 
-              {/* MODAL BODY */}
-
               <div className="flex-1 overflow-y-auto">
 
                 {/* REVIEW SUMMARY */}
 
                 <div className="grid border-b border-gray-200 sm:grid-cols-[190px_1fr]">
 
-                  {/* AVERAGE */}
-
                   <div className="border-b border-gray-200 px-4 py-5 text-center sm:border-b-0 sm:border-r">
 
                     <div className="text-4xl font-bold text-gray-900">
-                      {averageRating.toFixed(1)}
+                      {averageRating.toFixed(
+                        1
+                      )}
                     </div>
 
                     <div className="mt-2 flex justify-center gap-0.5">
+
                       {[1, 2, 3, 4, 5].map(
                         (star) => (
                           <Star
@@ -1484,18 +2189,19 @@ export default function ProductDetailsPage() {
                           />
                         )
                       )}
+
                     </div>
 
                     <p className="mt-1.5 text-[11px] text-gray-500">
-                      Based on {reviewCount}{" "}
-                      {reviewCount === 1
+                      Based on{" "}
+                      {reviewCount}{" "}
+                      {reviewCount ===
+                      1
                         ? "review"
                         : "reviews"}
                     </p>
 
                   </div>
-
-                  {/* RATING BREAKDOWN */}
 
                   <div className="px-4 py-5 sm:px-6">
 
@@ -1504,11 +2210,16 @@ export default function ProductDetailsPage() {
                       {ratingDistribution.map(
                         (item) => (
                           <div
-                            key={item.rating}
+                            key={
+                              item.rating
+                            }
                             className="flex items-center gap-2"
                           >
                             <span className="w-7 text-[11px] font-medium text-gray-600">
-                              {item.rating} ★
+                              {
+                                item.rating
+                              }{" "}
+                              ★
                             </span>
 
                             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
@@ -1521,7 +2232,9 @@ export default function ProductDetailsPage() {
                             </div>
 
                             <span className="w-7 text-right text-[11px] text-gray-400">
-                              {item.count}
+                              {
+                                item.count
+                              }
                             </span>
                           </div>
                         )
@@ -1585,7 +2298,8 @@ export default function ProductDetailsPage() {
                           )}
 
                           <span className="ml-1 text-xs font-medium text-gray-500">
-                            {reviewRating}/5
+                            {reviewRating}
+                            /5
                           </span>
 
                         </div>
@@ -1593,10 +2307,13 @@ export default function ProductDetailsPage() {
                       </div>
 
                       <textarea
-                        value={reviewComment}
+                        value={
+                          reviewComment
+                        }
                         onChange={(event) =>
                           setReviewComment(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         }
                         rows={3}
@@ -1608,7 +2325,10 @@ export default function ProductDetailsPage() {
                       <div className="mt-2 flex items-center justify-between">
 
                         <span className="text-[11px] text-gray-400">
-                          {reviewComment.length}/2000
+                          {
+                            reviewComment.length
+                          }
+                          /2000
                         </span>
 
                         <button
@@ -1630,8 +2350,6 @@ export default function ProductDetailsPage() {
                   </div>
                 )}
 
-                {/* REVIEW ERROR */}
-
                 {reviewError && (
                   <div className="mx-4 mt-4 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 sm:mx-6">
                     {reviewError}
@@ -1648,15 +2366,14 @@ export default function ProductDetailsPage() {
                       Customer Reviews
                     </h3>
 
-                    {reviewCount > 0 && (
+                    {reviewCount >
+                      0 && (
                       <span className="text-[11px] text-gray-400">
                         Newest first
                       </span>
                     )}
 
                   </div>
-
-                  {/* LOADING */}
 
                   {reviewsLoading ? (
                     <div className="space-y-5">
@@ -1689,10 +2406,8 @@ export default function ProductDetailsPage() {
                       )}
 
                     </div>
-                  ) : reviews.length === 0 ? (
-
-                    /* NO REVIEWS */
-
+                  ) : reviews.length ===
+                    0 ? (
                     <div className="py-10 text-center">
 
                       <Star className="mx-auto h-9 w-9 text-gray-300" />
@@ -1706,11 +2421,7 @@ export default function ProductDetailsPage() {
                       </p>
 
                     </div>
-
                   ) : (
-
-                    /* REVIEW LIST */
-
                     <div className="space-y-5">
 
                       {reviews.map(
@@ -1739,18 +2450,20 @@ export default function ProductDetailsPage() {
 
                           return (
                             <article
-                              key={review.id}
+                              key={
+                                review.id
+                              }
                               className="border-b border-gray-100 pb-5 last:border-b-0 last:pb-0"
                             >
-
-                              {/* REVIEW HEADER */}
 
                               <div className="flex items-start justify-between gap-3">
 
                                 <div className="flex min-w-0 items-start gap-3">
 
                                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
-                                    {reviewerInitial}
+                                    {
+                                      reviewerInitial
+                                    }
                                   </div>
 
                                   <div className="min-w-0">
@@ -1758,7 +2471,9 @@ export default function ProductDetailsPage() {
                                     <div className="flex flex-wrap items-center gap-2">
 
                                       <span className="truncate text-sm font-semibold text-gray-900">
-                                        {reviewerName}
+                                        {
+                                          reviewerName
+                                        }
                                       </span>
 
                                       <span className="text-[10px] text-gray-400">
@@ -1783,7 +2498,9 @@ export default function ProductDetailsPage() {
                                         {[1, 2, 3, 4, 5].map(
                                           (star) => (
                                             <Star
-                                              key={star}
+                                              key={
+                                                star
+                                              }
                                               className={`h-3.5 w-3.5 ${
                                                 star <=
                                                 review.rating
@@ -1797,7 +2514,10 @@ export default function ProductDetailsPage() {
                                       </div>
 
                                       <span className="text-[10px] text-gray-400">
-                                        {review.rating}/5
+                                        {
+                                          review.rating
+                                        }
+                                        /5
                                       </span>
 
                                     </div>
@@ -1805,8 +2525,6 @@ export default function ProductDetailsPage() {
                                   </div>
 
                                 </div>
-
-                                {/* ACTIONS */}
 
                                 {(isOwnReview ||
                                   currentUser?.role ===
@@ -1851,10 +2569,7 @@ export default function ProductDetailsPage() {
 
                               </div>
 
-                              {/* EDIT REVIEW */}
-
                               {isEditing ? (
-
                                 <div className="mt-4 ml-12 rounded border border-gray-200 bg-gray-50 p-3">
 
                                   <p className="text-xs font-semibold text-gray-700">
@@ -1866,7 +2581,9 @@ export default function ProductDetailsPage() {
                                     {[1, 2, 3, 4, 5].map(
                                       (star) => (
                                         <button
-                                          key={star}
+                                          key={
+                                            star
+                                          }
                                           type="button"
                                           onClick={() =>
                                             setEditRating(
@@ -1898,12 +2615,15 @@ export default function ProductDetailsPage() {
                                       event
                                     ) =>
                                       setEditComment(
-                                        event.target
+                                        event
+                                          .target
                                           .value
                                       )
                                     }
                                     rows={3}
-                                    maxLength={2000}
+                                    maxLength={
+                                      2000
+                                    }
                                     className="mt-2 w-full resize-none border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
                                   />
 
@@ -1942,15 +2662,12 @@ export default function ProductDetailsPage() {
                                   </div>
 
                                 </div>
-
                               ) : (
-
-                                /* REVIEW COMMENT */
-
                                 <p className="mt-3 ml-12 whitespace-pre-line text-sm leading-5 text-gray-600">
-                                  {review.comment}
+                                  {
+                                    review.comment
+                                  }
                                 </p>
-
                               )}
 
                             </article>
@@ -1968,11 +2685,10 @@ export default function ProductDetailsPage() {
           </div>
         )}
 
-        {/* =================================================
-            RELATED PRODUCTS
-        ================================================= */}
+        {/* RELATED PRODUCTS */}
 
-        {relatedProducts.length > 0 && (
+        {relatedProducts.length >
+          0 && (
           <section className="mt-8">
 
             <div className="mb-4 border-b border-gray-200 pb-3">
@@ -2035,8 +2751,12 @@ export default function ProductDetailsPage() {
 
                           {relatedImage ? (
                             <img
-                              src={relatedImage}
-                              alt={item.name}
+                              src={
+                                relatedImage
+                              }
+                              alt={
+                                item.name
+                              }
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
                           ) : (
@@ -2047,7 +2767,10 @@ export default function ProductDetailsPage() {
 
                           {itemHasDiscount && (
                             <span className="absolute left-2 top-2 bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                              {itemDiscount}% OFF
+                              {
+                                itemDiscount
+                              }
+                              % OFF
                             </span>
                           )}
 
@@ -2056,14 +2779,18 @@ export default function ProductDetailsPage() {
                         <div className="p-3">
 
                           <h3 className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-gray-900">
-                            {item.name}
+                            {
+                              item.name
+                            }
                           </h3>
 
                           <div className="mt-2 flex flex-wrap items-center gap-2">
 
                             <p className="text-base font-semibold text-gray-900">
                               ₹
-                              {item.price.toLocaleString(
+                              {Number(
+                                item.price
+                              ).toLocaleString(
                                 "en-IN"
                               )}
                             </p>
@@ -2071,7 +2798,9 @@ export default function ProductDetailsPage() {
                             {itemHasDiscount && (
                               <span className="text-xs text-gray-400 line-through">
                                 ₹
-                                {item.original_price!.toLocaleString(
+                                {Number(
+                                  item.original_price
+                                ).toLocaleString(
                                   "en-IN"
                                 )}
                               </span>
@@ -2081,7 +2810,8 @@ export default function ProductDetailsPage() {
 
                           <div className="mt-1">
 
-                            {item.stock > 0 ? (
+                            {item.stock >
+                            0 ? (
                               <span className="text-[11px] font-medium text-green-600">
                                 In stock
                               </span>

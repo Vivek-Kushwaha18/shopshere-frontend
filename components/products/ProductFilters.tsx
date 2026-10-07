@@ -10,8 +10,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 
 import type { Category } from "@/services/categories";
 
@@ -39,6 +37,20 @@ export default function ProductFilters({
   onPriceChange,
   onClear,
 }: ProductFiltersProps) {
+  // =====================================================
+  // MAIN CATEGORIES ONLY
+  // =====================================================
+
+  const mainCategories = categories
+    .filter(
+      (category) =>
+        category.parent_id === null &&
+        category.is_active
+    )
+    .sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -58,55 +70,58 @@ export default function ProductFilters({
       </CardHeader>
 
       <CardContent className="space-y-6">
-
-        {/* CATEGORY */}
+        {/* =================================================
+            CATEGORY
+        ================================================= */}
 
         <div>
           <h3 className="mb-4 font-semibold">
             Category
           </h3>
 
-          {categories.length === 0 ? (
+          {mainCategories.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No categories available.
             </p>
           ) : (
-            <div className="space-y-3">
-              {categories.map((category) => (
-                <div
-                  key={category.id}
-                  className="flex items-center gap-3"
-                >
-                  <Checkbox
-                    id={`category-${category.id}`}
-                    checked={
-                      selectedCategory ===
-                      category.id
-                    }
-                    onCheckedChange={(checked) => {
-                      onCategoryChange(
-                        checked
-                          ? category.id
-                          : null
-                      );
-                    }}
-                  />
+            <div className="space-y-2">
+              {mainCategories.map(
+                (category) => {
+                  const isSelected =
+                    selectedCategory ===
+                    category.id;
 
-                  <Label
-                    htmlFor={`category-${category.id}`}
-                    className="cursor-pointer font-normal"
-                  >
-                    {category.name}
-                  </Label>
-                </div>
-              ))}
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() =>
+                        onCategoryChange(
+                          isSelected
+                            ? null
+                            : category.id
+                        )
+                      }
+                      className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                        isSelected
+                          ? "bg-black font-semibold text-white"
+                          : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {category.name}
+                    </button>
+                  );
+                }
+              )}
             </div>
           )}
         </div>
 
         <Separator />
 
-        {/* PRICE */}
+        {/* =================================================
+            PRICE
+        ================================================= */}
 
         <div>
           <h3 className="mb-4 font-semibold">
@@ -123,7 +138,10 @@ export default function ProductFilters({
                   : "outline"
               }
               onClick={() =>
-                onPriceChange(0, 5000)
+                onPriceChange(
+                  0,
+                  5000
+                )
               }
             >
               ₹0 - ₹5,000
@@ -151,7 +169,9 @@ export default function ProductFilters({
 
         <Separator />
 
-        {/* RATING */}
+        {/* =================================================
+            RATING
+        ================================================= */}
 
         <div>
           <h3 className="mb-4 font-semibold">
@@ -164,7 +184,6 @@ export default function ProductFilters({
             connected.
           </p>
         </div>
-
       </CardContent>
     </Card>
   );

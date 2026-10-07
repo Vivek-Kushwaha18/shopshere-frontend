@@ -5,17 +5,20 @@ export interface Category {
   name: string;
   slug: string;
   description?: string | null;
+  parent_id: number | null;
   is_active: boolean;
 }
 
 export interface CategoryCreateData {
   name: string;
   description?: string | null;
+  parent_id?: number | null;
 }
 
 export interface CategoryUpdateData {
   name: string;
   description?: string | null;
+  parent_id?: number | null;
 }
 
 const ADMIN_INACTIVE_CATEGORIES_KEY =
@@ -23,9 +26,6 @@ const ADMIN_INACTIVE_CATEGORIES_KEY =
 
 // =====================================================
 // CATEGORY CACHE
-//
-// Used to avoid fetching the same active categories
-// repeatedly when navigating between pages.
 // =====================================================
 
 let categoriesCache: Category[] | null = null;
@@ -33,19 +33,13 @@ let categoriesCache: Category[] | null = null;
 let categoriesRequest: Promise<Category[]> | null =
   null;
 
-
 // =====================================================
 // CLEAR CATEGORY CACHE
-//
-// Call this after category create/update/activate/
-// deactivate/delete when the cached category list
-// needs to be refreshed.
 // =====================================================
 
 export function clearCategoriesCache(): void {
   categoriesCache = null;
 }
-
 
 // =====================================================
 // ERROR HELPER
@@ -81,12 +75,8 @@ function getErrorMessage(
   }`;
 }
 
-
 // =====================================================
 // LOCAL STORAGE
-//
-// Used only because the current backend does not expose
-// an admin endpoint returning inactive categories.
 // =====================================================
 
 function getStoredInactiveCategories(): Category[] {
@@ -121,7 +111,6 @@ function getStoredInactiveCategories(): Category[] {
   }
 }
 
-
 function saveStoredInactiveCategories(
   categories: Category[]
 ): void {
@@ -134,7 +123,6 @@ function saveStoredInactiveCategories(
     JSON.stringify(categories)
   );
 }
-
 
 function addStoredInactiveCategory(
   category: Category
@@ -154,7 +142,6 @@ function addStoredInactiveCategory(
   saveStoredInactiveCategories(updated);
 }
 
-
 function removeStoredInactiveCategory(
   categoryId: number
 ): void {
@@ -168,20 +155,10 @@ function removeStoredInactiveCategory(
   );
 }
 
-
 // =====================================================
 // GET ACTIVE CATEGORIES
 //
-// PUBLIC
-// Customer
-// Seller
-// Admin
-//
-// Backend:
 // GET /categories/
-//
-// Uses cache so navigation between pages does not
-// repeatedly fetch the same categories.
 // =====================================================
 
 export async function getCategories(): Promise<Category[]> {
@@ -226,16 +203,8 @@ export async function getCategories(): Promise<Category[]> {
   return categoriesRequest;
 }
 
-
 // =====================================================
 // GET ADMIN CATEGORIES
-//
-// Returns active categories from backend and inactive
-// categories saved locally by the admin actions.
-//
-// IMPORTANT:
-// Inactive categories are browser-local until the backend
-// provides an admin/all-categories endpoint.
 // =====================================================
 
 export async function getAdminCategories(): Promise<Category[]> {
@@ -269,15 +238,10 @@ export async function getAdminCategories(): Promise<Category[]> {
   );
 }
 
-
 // =====================================================
 // GET SINGLE CATEGORY
 //
-// Backend:
 // GET /categories/{category_id}
-//
-// NOTE:
-// Backend returns only active categories here.
 // =====================================================
 
 export async function getCategory(
@@ -299,11 +263,9 @@ export async function getCategory(
   return response.data as Category;
 }
 
-
 // =====================================================
 // CREATE CATEGORY - ADMIN
 //
-// Backend:
 // POST /categories/
 // =====================================================
 
@@ -314,6 +276,8 @@ export async function createCategory(
     name: categoryData.name.trim(),
     description:
       categoryData.description?.trim() || null,
+    parent_id:
+      categoryData.parent_id ?? null,
   };
 
   if (!cleanedData.name) {
@@ -351,11 +315,9 @@ export async function createCategory(
   return category;
 }
 
-
 // =====================================================
 // UPDATE CATEGORY - ADMIN
 //
-// Backend:
 // PUT /categories/{category_id}
 // =====================================================
 
@@ -367,6 +329,8 @@ export async function updateCategory(
     name: categoryData.name.trim(),
     description:
       categoryData.description?.trim() || null,
+    parent_id:
+      categoryData.parent_id ?? null,
   };
 
   if (!cleanedData.name) {
@@ -419,11 +383,9 @@ export async function updateCategory(
   return category;
 }
 
-
 // =====================================================
 // ACTIVATE CATEGORY - ADMIN
 //
-// Backend:
 // PATCH /categories/{category_id}/activate
 // =====================================================
 
@@ -460,11 +422,9 @@ export async function activateCategory(
   return category;
 }
 
-
 // =====================================================
 // DEACTIVATE CATEGORY - ADMIN
 //
-// Backend:
 // PATCH /categories/{category_id}/deactivate
 // =====================================================
 
@@ -501,11 +461,9 @@ export async function deactivateCategory(
   return category;
 }
 
-
 // =====================================================
 // DELETE CATEGORY - ADMIN
 //
-// Backend:
 // DELETE /categories/{category_id}
 // =====================================================
 

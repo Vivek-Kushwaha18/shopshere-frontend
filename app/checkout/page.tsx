@@ -64,7 +64,6 @@ const emptyAddressForm: AddressCreateData = {
   is_default: false,
 };
 
-
 // =====================================================
 // STRIPE PAYMENT FORM
 // =====================================================
@@ -81,8 +80,7 @@ function PaymentForm({
   const stripe = useStripe();
   const elements = useElements();
 
-  const [paymentError, setPaymentError] =
-    useState("");
+  const [paymentError, setPaymentError] = useState("");
 
   async function handlePayment(
     event: React.FormEvent<HTMLFormElement>
@@ -172,7 +170,6 @@ function PaymentForm({
     </form>
   );
 }
-
 
 // =====================================================
 // CHECKOUT PAGE
@@ -682,6 +679,9 @@ export default function CheckoutPage() {
             (item) => ({
               product_id:
                 item.product_id,
+
+              variant_id:
+                item.variant_id,
 
               quantity:
                 item.quantity,
@@ -1461,7 +1461,6 @@ export default function CheckoutPage() {
             )}
           </div>
 
-
           {/* =====================================================
               PAYMENT METHOD
           ====================================================== */}
@@ -1532,7 +1531,6 @@ export default function CheckoutPage() {
                 </div>
               </button>
 
-
               {/* COD */}
 
               <button
@@ -1581,7 +1579,6 @@ export default function CheckoutPage() {
 
             </div>
 
-
             {/* CONTINUE / PLACE ORDER */}
 
             <button
@@ -1614,7 +1611,6 @@ export default function CheckoutPage() {
           </div>
         </section>
 
-
         {/* =====================================================
             ORDER SUMMARY
         ====================================================== */}
@@ -1634,67 +1630,108 @@ export default function CheckoutPage() {
             <div className="space-y-4 border-b pb-5">
 
               {cart.items.map(
-                (item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3"
-                  >
+                (item) => {
+                  const variantImage =
+                    item.variant?.images?.find(
+                      (image) =>
+                        image.is_primary
+                    )?.image_url ??
+                    item.variant?.images?.[0]
+                      ?.image_url ??
+                    null;
 
-                    {item.product.image_url ? (
-                      <img
-                        src={
-                          item.product
-                            .image_url
-                        }
-                        alt={
-                          item.product.name
-                        }
-                        className="h-14 w-14 shrink-0 rounded-md border object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md border bg-gray-100 text-xs text-gray-500">
-                        No image
+                  const productImage =
+                    variantImage ??
+                    item.product.image_url;
+
+                  const itemPrice =
+                    item.variant?.price ??
+                    item.product.price;
+
+                  const variantOptions =
+                    item.variant?.option_values
+                      ?.map(
+                        (option) =>
+                          option.value
+                      )
+                      .filter(Boolean)
+                      .join(" • ");
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3"
+                    >
+
+                      {productImage ? (
+                        <img
+                          src={
+                            productImage
+                          }
+                          alt={
+                            item.product.name
+                          }
+                          className="h-14 w-14 shrink-0 rounded-md border object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md border bg-gray-100 text-xs text-gray-500">
+                          No image
+                        </div>
+                      )}
+
+                      <div className="min-w-0 flex-1">
+
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {
+                            item.product.name
+                          }
+                        </p>
+
+                        {variantOptions && (
+                          <p className="mt-1 text-xs font-medium text-gray-700">
+                            {variantOptions}
+                          </p>
+                        )}
+
+                        {item.variant?.sku && (
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            SKU:{" "}
+                            {
+                              item.variant.sku
+                            }
+                          </p>
+                        )}
+
+                        <p className="mt-1 text-xs text-gray-500">
+                          Qty:{" "}
+                          {
+                            item.quantity
+                          }
+                        </p>
+
+                        <p className="text-xs text-gray-500">
+                          ₹
+                          {itemPrice.toFixed(
+                            2
+                          )}{" "}
+                          each
+                        </p>
+
                       </div>
-                    )}
 
-                    <div className="min-w-0 flex-1">
-
-                      <p className="truncate text-sm font-medium text-gray-900">
-                        {
-                          item.product.name
-                        }
-                      </p>
-
-                      <p className="text-xs text-gray-500">
-                        Qty:{" "}
-                        {
-                          item.quantity
-                        }
-                      </p>
-
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm font-medium text-gray-900">
                         ₹
-                        {item.product.price.toFixed(
+                        {item.item_total.toFixed(
                           2
-                        )}{" "}
-                        each
+                        )}
                       </p>
 
                     </div>
-
-                    <p className="text-sm font-medium text-gray-900">
-                      ₹
-                      {item.item_total.toFixed(
-                        2
-                      )}
-                    </p>
-
-                  </div>
-                )
+                  );
+                }
               )}
 
             </div>
-
 
             {/* COUPON */}
 
@@ -1795,7 +1832,6 @@ export default function CheckoutPage() {
 
             </div>
 
-
             {/* PRICE SUMMARY */}
 
             <div className="space-y-4 border-b py-5">
@@ -1860,7 +1896,6 @@ export default function CheckoutPage() {
 
             </div>
 
-
             {/* FINAL TOTAL */}
 
             <div className="flex justify-between pt-5">
@@ -1877,7 +1912,6 @@ export default function CheckoutPage() {
               </span>
 
             </div>
-
 
             {/* PAYMENT SUMMARY */}
 

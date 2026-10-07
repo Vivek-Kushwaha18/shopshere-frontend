@@ -12,11 +12,38 @@ export interface CartProduct {
   reviews_count: number;
 }
 
+export interface CartVariantOptionValue {
+  id: number;
+  option_group_id: number;
+  value: string;
+}
+
+export interface CartVariantImage {
+  id: number;
+  image_url: string;
+  view_type: string | null;
+  sort_order: number;
+  is_primary: boolean;
+}
+
+export interface CartVariant {
+  id: number;
+  sku: string | null;
+  price: number;
+  original_price: number | null;
+  stock: number;
+  is_active: boolean;
+  option_values: CartVariantOptionValue[];
+  images: CartVariantImage[];
+}
+
 export interface CartItem {
   id: number;
   product_id: number;
+  variant_id: number | null;
   quantity: number;
   product: CartProduct;
+  variant: CartVariant | null;
   item_total: number;
 }
 
@@ -85,7 +112,8 @@ export async function getCart(): Promise<CartData> {
 
 export async function addToCart(
   productId: number,
-  quantity: number = 1
+  quantity: number = 1,
+  variantId: number | null = null
 ): Promise<ApiResponse> {
   if (productId <= 0) {
     throw new Error("Invalid product.");
@@ -95,8 +123,31 @@ export async function addToCart(
     throw new Error("Quantity must be at least 1.");
   }
 
+  if (variantId !== null && variantId <= 0) {
+    throw new Error("Invalid product variant.");
+  }
+
+  const params = new URLSearchParams();
+
+  params.set(
+    "product_id",
+    String(productId)
+  );
+
+  params.set(
+    "quantity",
+    String(quantity)
+  );
+
+  if (variantId !== null) {
+    params.set(
+      "variant_id",
+      String(variantId)
+    );
+  }
+
   const response = (await apiFetch(
-    `/api/cart/items?product_id=${productId}&quantity=${quantity}`,
+    `/api/cart/items?${params.toString()}`,
     {
       method: "POST",
     }

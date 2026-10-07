@@ -7,7 +7,51 @@ import { apiFetch } from "./api";
 export interface ProductImage {
   id: number;
   image_url: string;
+  variant_id?: number | null;
+  view_type?: string | null;
+  sort_order: number;
   is_primary: boolean;
+}
+
+// =====================================================
+// PRODUCT OPTION VALUE
+// =====================================================
+
+export interface ProductOptionValue {
+  id: number;
+  option_group_id: number;
+  value: string;
+  sort_order: number;
+}
+
+// =====================================================
+// PRODUCT OPTION GROUP
+// =====================================================
+
+export interface ProductOptionGroup {
+  id: number;
+  product_id: number;
+  name: string;
+  sort_order: number;
+  values: ProductOptionValue[];
+}
+
+// =====================================================
+// PRODUCT VARIANT
+// =====================================================
+
+export interface ProductVariant {
+  id: number;
+  product_id: number;
+  sku?: string | null;
+  price: number;
+  original_price?: number | null;
+  stock: number;
+  is_active: boolean;
+
+  option_value_ids: number[];
+
+  images: ProductImage[];
 }
 
 // =====================================================
@@ -39,28 +83,157 @@ export interface Product {
   created_at?: string;
   updated_at?: string;
 
-  // All product images
+  // Product-level images
   images?: ProductImage[];
+
+  // Dynamic options
+  option_groups?: ProductOptionGroup[];
+
+  // Product variants
+  variants?: ProductVariant[];
 }
 
 // =====================================================
 // NORMALIZE PRODUCT
-// Backend image_url -> frontend image
+// Backend response -> frontend Product
 // =====================================================
 
 function normalizeProduct(
   product: any
 ): Product {
+  const variants: ProductVariant[] =
+    Array.isArray(product.variants)
+      ? product.variants.map(
+          (variant: any) => ({
+            id: variant.id,
+
+            product_id:
+              variant.product_id,
+
+            sku:
+              variant.sku ?? null,
+
+            price:
+              Number(variant.price),
+
+            original_price:
+              variant.original_price != null
+                ? Number(
+                    variant.original_price
+                  )
+                : null,
+
+            stock:
+              Number(variant.stock),
+
+            is_active:
+              variant.is_active ?? true,
+
+            option_value_ids:
+              Array.isArray(
+                variant.option_value_ids
+              )
+                ? variant.option_value_ids.map(
+                    (id: any) =>
+                      Number(id)
+                  )
+                : [],
+
+            images:
+              Array.isArray(
+                variant.images
+              )
+                ? variant.images
+                : [],
+          })
+      )
+      : [];
+
+  const optionGroups: ProductOptionGroup[] =
+    Array.isArray(
+      product.option_groups
+    )
+      ? product.option_groups.map(
+          (group: any) => ({
+            id: group.id,
+
+            product_id:
+              group.product_id,
+
+            name:
+              group.name,
+
+            sort_order:
+              Number(
+                group.sort_order ?? 0
+              ),
+
+            values:
+              Array.isArray(
+                group.values
+              )
+                ? group.values.map(
+                    (value: any) => ({
+                      id: value.id,
+
+                      option_group_id:
+                        value.option_group_id,
+
+                      value:
+                        value.value,
+
+                      sort_order:
+                        Number(
+                          value.sort_order ??
+                            0
+                        ),
+                    })
+                  )
+                : [],
+          })
+      )
+      : [];
+
+  const images: ProductImage[] =
+    Array.isArray(product.images)
+      ? product.images.map(
+          (image: any) => ({
+            id: image.id,
+
+            image_url:
+              image.image_url,
+
+            variant_id:
+              image.variant_id ?? null,
+
+            view_type:
+              image.view_type ?? null,
+
+            sort_order:
+              Number(
+                image.sort_order ?? 0
+              ),
+
+            is_primary:
+              image.is_primary ?? false,
+          })
+        )
+      : [];
+
   return {
     id: product.id,
 
-    seller_id: product.seller_id,
+    seller_id:
+      product.seller_id,
 
-    category_id: product.category_id,
+    category_id:
+      product.category_id,
 
-    name: product.name,
+    name:
+      product.name,
 
-    slug: product.slug,
+    slug:
+      product.slug,
 
     description:
       product.description ?? null,
@@ -105,16 +278,17 @@ function normalizeProduct(
     updated_at:
       product.updated_at,
 
-    images:
-      Array.isArray(product.images)
-        ? product.images
-        : [],
+    images,
+
+    option_groups:
+      optionGroups,
+
+    variants,
   };
 }
 
 // =====================================================
 // PRODUCT CACHE
-// Keeps products available during navigation
 // =====================================================
 
 let productsCache: Product[] | null =
@@ -127,7 +301,9 @@ let productsRequest:
 // GET ALL PRODUCTS
 // =====================================================
 
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts(): Promise<
+  Product[]
+> {
   if (productsCache !== null) {
     return productsCache;
   }
@@ -161,7 +337,8 @@ export async function getProducts(): Promise<Product[]> {
           normalizeProduct
         );
 
-      productsCache = products;
+      productsCache =
+        products;
 
       return products;
     } finally {
@@ -200,7 +377,9 @@ export async function getProduct(
 // GET SELLER PRODUCTS
 // =====================================================
 
-export async function getMyProducts(): Promise<Product[]> {
+export async function getMyProducts(): Promise<
+  Product[]
+> {
   const response =
     await apiFetch(
       "/api/products/seller/my-products"
@@ -318,11 +497,8 @@ export interface ProductUpdateData {
 
   category_id?: number;
 
-  // Frontend field
   image?: string | null;
 
-  // Kept for compatibility with
-  // older code
   image_url?: string | null;
 }
 
@@ -336,17 +512,18 @@ export async function updateProduct(
     description:
       data.description,
 
-    price: data.price,
+    price:
+      data.price,
 
     original_price:
       data.original_price,
 
-    stock: data.stock,
+    stock:
+      data.stock,
 
     category_id:
       data.category_id,
 
-    // Backend expects image_url
     image_url:
       data.image ??
       data.image_url ??
