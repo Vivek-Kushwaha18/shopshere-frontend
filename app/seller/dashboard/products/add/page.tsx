@@ -68,11 +68,7 @@ interface VariantImageInput {
 
 interface VariantInput {
   id: string;
-
-  // Temporary frontend IDs.
-  // These are converted to real database IDs during submit.
   optionValueIds: string[];
-
   optionLabels: string[];
   sku: string;
   price: string;
@@ -204,19 +200,6 @@ export default function AddProductPage() {
   const [loadingCategories, setLoadingCategories] =
     useState(true);
 
-  /*
-   * Stores the selected category at every level.
-   *
-   * Example:
-   *
-   * [
-   *   "1",   // Electronics
-   *   "5",   // Mobile Phones
-   *   "12"   // Android Phones
-   * ]
-   *
-   * The last ID is always copied to categoryId.
-   */
   const [selectedCategoryPath, setSelectedCategoryPath] =
     useState<string[]>([]);
 
@@ -371,10 +354,6 @@ export default function AddProductPage() {
       updatedPath
     );
 
-    /*
-     * The final selected category is
-     * always the last selected category.
-     */
     setCategoryId(value);
   }
 
@@ -612,6 +591,8 @@ export default function AddProductPage() {
         },
       ]
     );
+
+    setVariants([]);
   }
 
   function removeOptionGroup(
@@ -644,6 +625,8 @@ export default function AddProductPage() {
               : group
         )
     );
+
+    setVariants([]);
   }
 
   // =====================================================
@@ -727,6 +710,8 @@ export default function AddProductPage() {
               : group
         )
     );
+
+    setVariants([]);
   }
 
   // =====================================================
@@ -744,25 +729,100 @@ export default function AddProductPage() {
       return;
     }
 
-    const invalidGroup =
-      optionGroups.find(
-        (group) =>
-          !group.name.trim() ||
-          !group.values.some(
-            (value) =>
-              value.value.trim()
+    // -------------------------------------------------
+    // CHECK DUPLICATE OPTION GROUP NAMES
+    // -------------------------------------------------
+
+    const groupNames = new Set<string>();
+
+    for (const group of optionGroups) {
+      const groupName =
+        group.name.trim();
+
+      if (!groupName) {
+        Swal.fire(
+          "Incomplete Options",
+          "Every option group must have a name.",
+          "warning"
+        );
+
+        return;
+      }
+
+      const normalizedGroupName =
+        groupName.toLowerCase();
+
+      if (
+        groupNames.has(
+          normalizedGroupName
+        )
+      ) {
+        Swal.fire(
+          "Duplicate Option",
+          `The option "${groupName}" is already added. Please use a different option name.`,
+          "warning"
+        );
+
+        return;
+      }
+
+      groupNames.add(
+        normalizedGroupName
+      );
+
+      // -------------------------------------------------
+      // CHECK DUPLICATE OPTION VALUES
+      // -------------------------------------------------
+
+      const validValues =
+        group.values.filter(
+          (value) =>
+            value.value.trim()
+        );
+
+      if (validValues.length === 0) {
+        Swal.fire(
+          "Incomplete Options",
+          `Please add at least one value for "${groupName}".`,
+          "warning"
+        );
+
+        return;
+      }
+
+      const valueNames =
+        new Set<string>();
+
+      for (const value of validValues) {
+        const valueName =
+          value.value.trim();
+
+        const normalizedValue =
+          valueName.toLowerCase();
+
+        if (
+          valueNames.has(
+            normalizedValue
           )
-      );
+        ) {
+          Swal.fire(
+            "Duplicate Option Value",
+            `"${valueName}" is repeated inside the "${groupName}" option.`,
+            "warning"
+          );
 
-    if (invalidGroup) {
-      Swal.fire(
-        "Incomplete Options",
-        "Every option group needs a name and at least one value.",
-        "warning"
-      );
+          return;
+        }
 
-      return;
+        valueNames.add(
+          normalizedValue
+        );
+      }
     }
+
+    // -------------------------------------------------
+    // GENERATE COMBINATIONS
+    // -------------------------------------------------
 
     const combinations =
       generateCombinations(
@@ -778,6 +838,10 @@ export default function AddProductPage() {
 
       return;
     }
+
+    // -------------------------------------------------
+    // PRESERVE EXISTING VARIANT DATA
+    // -------------------------------------------------
 
     const existingByKey =
       new Map<string, VariantInput>();
@@ -795,15 +859,13 @@ export default function AddProductPage() {
       );
     });
 
+    // -------------------------------------------------
+    // CREATE VARIANTS
+    // -------------------------------------------------
+
     const generated =
       combinations.map(
         (combination) => {
-          /*
-           * Keep the temporary frontend IDs
-           * as strings.
-           *
-           * Do NOT convert these IDs to Number().
-           */
           const optionValueIds =
             combination.map(
               (value) =>
@@ -877,7 +939,7 @@ export default function AddProductPage() {
   }
 
   // =====================================================
-  // VARIANT IMAGE PREVIEW
+  // VARIANT IMAGE
   // =====================================================
 
   function addVariantImages(
@@ -1203,6 +1265,101 @@ export default function AddProductPage() {
       return false;
     }
 
+    // -------------------------------------------------
+    // CHECK DUPLICATE OPTION GROUP NAMES
+    // -------------------------------------------------
+
+    const groupNames = new Set<string>();
+
+    for (const group of optionGroups) {
+      const groupName =
+        group.name.trim();
+
+      if (!groupName) {
+        await Swal.fire(
+          "Incomplete Options",
+          "Every option group must have a name.",
+          "warning"
+        );
+
+        return false;
+      }
+
+      const normalizedGroupName =
+        groupName.toLowerCase();
+
+      if (
+        groupNames.has(
+          normalizedGroupName
+        )
+      ) {
+        await Swal.fire(
+          "Duplicate Option",
+          `The option "${groupName}" is already added. Please use a different option name.`,
+          "warning"
+        );
+
+        return false;
+      }
+
+      groupNames.add(
+        normalizedGroupName
+      );
+
+      // -------------------------------------------------
+      // CHECK DUPLICATE VALUES
+      // -------------------------------------------------
+
+      const validValues =
+        group.values.filter(
+          (value) =>
+            value.value.trim()
+        );
+
+      if (validValues.length === 0) {
+        await Swal.fire(
+          "Incomplete Options",
+          `Please add at least one value for "${groupName}".`,
+          "warning"
+        );
+
+        return false;
+      }
+
+      const valueNames =
+        new Set<string>();
+
+      for (const value of validValues) {
+        const valueName =
+          value.value.trim();
+
+        const normalizedValue =
+          valueName.toLowerCase();
+
+        if (
+          valueNames.has(
+            normalizedValue
+          )
+        ) {
+          await Swal.fire(
+            "Duplicate Option Value",
+            `"${valueName}" is repeated inside the "${groupName}" option.`,
+            "warning"
+          );
+
+          return false;
+        }
+
+        valueNames.add(
+          normalizedValue
+        );
+      }
+    }
+
+    // -------------------------------------------------
+    // CHECK GENERATED VARIANTS
+    // -------------------------------------------------
+
     if (variants.length === 0) {
       await Swal.fire(
         "Variants Required",
@@ -1212,6 +1369,10 @@ export default function AddProductPage() {
 
       return false;
     }
+
+    // -------------------------------------------------
+    // VALIDATE EACH VARIANT
+    // -------------------------------------------------
 
     for (const variant of variants) {
       if (
@@ -1292,11 +1453,6 @@ export default function AddProductPage() {
       return;
     }
 
-    /*
-     * Backend requires at least one
-     * product-level image for every product,
-     * including products with variants.
-     */
     if (imageFiles.length === 0) {
       await Swal.fire(
         "Product Image Required",
@@ -1369,10 +1525,6 @@ export default function AddProductPage() {
         categoryId
       );
 
-      /*
-       * Product-level images are required
-       * for both normal and variant products.
-       */
       imageFiles.forEach(
         (file) => {
           formData.append(
@@ -1422,7 +1574,6 @@ export default function AddProductPage() {
 
       // =================================================
       // CREATE OPTION GROUPS
-      // AND MAP TEMP IDs → DATABASE IDs
       // =================================================
 
       const optionValueIdMap =
@@ -1516,10 +1667,6 @@ export default function AddProductPage() {
       for (
         const variant of variants
       ) {
-        /*
-         * Convert temporary frontend IDs
-         * directly into real database IDs.
-         */
         const databaseOptionValueIds =
           variant.optionValueIds.map(
             (temporaryId) => {
@@ -1624,7 +1771,7 @@ export default function AddProductPage() {
         }
 
         // =================================================
-        // SET CORRECT PRIMARY VARIANT IMAGE
+        // SET CORRECT PRIMARY IMAGE
         // =================================================
 
         const primaryImage =
@@ -1693,8 +1840,6 @@ export default function AddProductPage() {
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
       <div className="mx-auto max-w-6xl">
 
-        {/* BACK */}
-
         <Link
           href="/seller/dashboard"
           className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-black"
@@ -1702,8 +1847,6 @@ export default function AddProductPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Dashboard
         </Link>
-
-        {/* HEADER */}
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
@@ -1721,7 +1864,9 @@ export default function AddProductPage() {
           className="space-y-6"
         >
 
-          {/* PRODUCT INFORMATION */}
+          {/* =================================================
+              PRODUCT INFORMATION
+              ================================================= */}
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
 
@@ -1858,10 +2003,6 @@ export default function AddProductPage() {
                 />
               </div>
 
-              {/* =================================================
-                  HIERARCHICAL CATEGORY SELECTION
-                  ================================================= */}
-
               <div>
                 <label
                   htmlFor="category-level-0"
@@ -1884,11 +2025,6 @@ export default function AddProductPage() {
                           level
                         );
 
-                      /*
-                       * Do not show an empty
-                       * dropdown when the current
-                       * category has no children.
-                       */
                       if (
                         level > 0 &&
                         options.length === 0
@@ -1972,7 +2108,9 @@ export default function AddProductPage() {
             </div>
           </div>
 
-          {/* VARIANT MODE */}
+          {/* =================================================
+              VARIANT MODE
+              ================================================= */}
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
 
@@ -2067,7 +2205,9 @@ export default function AddProductPage() {
             </div>
           </div>
 
-          {/* OPTIONS */}
+          {/* =================================================
+              OPTIONS
+              ================================================= */}
 
           {hasVariants && (
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -2291,7 +2431,9 @@ export default function AddProductPage() {
             </div>
           )}
 
-          {/* VARIANTS */}
+          {/* =================================================
+              VARIANTS
+              ================================================= */}
 
           {hasVariants &&
             variants.length > 0 && (
@@ -2681,7 +2823,9 @@ export default function AddProductPage() {
               </div>
             )}
 
-          {/* PRODUCT IMAGES */}
+          {/* =================================================
+              PRODUCT IMAGES
+              ================================================= */}
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
 
@@ -2887,7 +3031,9 @@ export default function AddProductPage() {
 
           </div>
 
-          {/* BUTTONS */}
+          {/* =================================================
+              BUTTONS
+              ================================================= */}
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
 
