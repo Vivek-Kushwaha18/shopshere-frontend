@@ -1785,7 +1785,7 @@ export default function ProductDetailsPage() {
                 </div>
               )}
 
-              {hasVariants &&
+              {/*{hasVariants &&
                 allRequiredOptionsSelected &&
                 !selectedVariant && (
                   <div className="border-b border-gray-100 py-3">
@@ -1823,7 +1823,7 @@ export default function ProductDetailsPage() {
 
                 </div>
               )}
-
+*/}
               {/* PRICE */}
 
               <div className="border-b border-gray-100 py-4">
