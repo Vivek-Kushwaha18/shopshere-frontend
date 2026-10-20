@@ -1,8 +1,10 @@
+
 import type { Metadata } from "next";
 import "./globals.css";
 
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import RoleGuard from "@/components/auth/RoleGuard";
+import ChatWidget from "@/components/ai-chat/ChatWidget";
 
 export const metadata: Metadata = {
   title: "ShopSphere",
@@ -22,6 +24,8 @@ export default function RootLayout({
         <main>
           <RoleGuard>{children}</RoleGuard>
         </main>
+
+        <ChatWidget />
       </body>
     </html>
   );

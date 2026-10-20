@@ -880,16 +880,7 @@ export default function Header() {
             )
           )}
 
-          <Link
-            href="/ai-assistant"
-            className={`shrink-0 text-sm font-semibold transition ${
-              isActive("/ai-assistant")
-                ? "text-blue-600"
-                : "text-gray-700 hover:text-blue-600"
-            }`}
-          >
-            AI Assistant
-          </Link>
+          
         </div>
       </div>
 
@@ -1079,22 +1070,6 @@ export default function Header() {
                   </div>
                 )}
               </div>
-
-              <Link
-                href="/ai-assistant"
-                onClick={
-                  closeMobileMenu
-                }
-                className={`rounded-lg px-3 py-3 text-sm font-semibold transition ${
-                  isActive(
-                    "/ai-assistant"
-                  )
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                AI Assistant
-              </Link>
 
               <Link
                 href="/cart"

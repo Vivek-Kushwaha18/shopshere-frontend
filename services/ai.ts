@@ -1,37 +1,38 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export async function apiFetch(
-  endpoint: string,
-  options: RequestInit = {}
-) {
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("access_token")
-      : null;
+import { apiFetch } from "./api";
 
-  const response = await fetch(
-    `${API_URL}${endpoint}`,
-    {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
-        ...options.headers,
-      },
-    }
-  );
+export interface AIProduct {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  stock: number;
+  category_id: number;
+  image_url?: string | null;
+  slug?: string | null;
+}
 
-  const data = await response.json();
+export interface AIChatResponse {
+  reply: string;
+  products: AIProduct[];
+}
 
-  if (!response.ok) {
+export async function sendAIMessage(
+  message: string
+): Promise<AIChatResponse> {
+  const result = await apiFetch("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      message: message.trim(),
+    }),
+  });
+
+  if (!result.success) {
     throw new Error(
-      data.detail || "Something went wrong"
+      result.data?.detail ||
+        "Unable to contact the AI shopping assistant."
     );
   }
 
-  return data;
+  return result.data as AIChatResponse;
 }
