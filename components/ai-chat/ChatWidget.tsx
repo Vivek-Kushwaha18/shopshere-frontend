@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bot, X } from "lucide-react";
+import { X } from "lucide-react";
 import ChatWindow from "./ChatWindow";
 import type { ChatMessageData } from "./ChatMessage";
 import { sendAIMessage } from "@/services/ai";
@@ -48,11 +47,7 @@ export default function ChatWidget() {
       content: message,
     };
 
-    setMessages((previous) => [
-      ...previous,
-      userMessage,
-    ]);
-
+    setMessages((previous) => [...previous, userMessage]);
     setLoading(true);
     setError(null);
 
@@ -96,12 +91,56 @@ export default function ChatWidget() {
         onClick={() => setOpen((previous) => !previous)}
         aria-label={
           open
-            ? "Close AI shopping assistant"
-            : "Open AI shopping assistant"
+            ? "Close ShopSphere AI"
+            : "Open ShopSphere AI shopping assistant"
         }
-        className="fixed bottom-4 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:scale-105"
+        aria-expanded={open}
+        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-white bg-gradient-to-br from-violet-600 via-indigo-700 to-blue-800 text-white shadow-[0_6px_24px_rgba(79,70,229,0.38)] transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_32px_rgba(79,70,229,0.5)] active:scale-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-400/40 sm:bottom-7 sm:right-7 sm:h-16 sm:w-16 dark:border-slate-900"
       >
-        {open ? <X size={25} /> : <Bot size={27} />}
+        {open ? (
+          <X size={25} strokeWidth={2} />
+        ) : (
+          <svg
+            viewBox="0 0 100 100"
+            className="h-full w-full p-2.5"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient
+                id="shopsphere-logo-gradient"
+                x1="12"
+                y1="10"
+                x2="88"
+                y2="90"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stopColor="#FFFFFF" />
+                <stop offset="1" stopColor="#E0E7FF" />
+              </linearGradient>
+            </defs>
+
+            <path
+              d="M72 24H37C23 24 17 33 17 43C17 54 25 60 39 60H58C65 60 68 63 68 68C68 73 64 76 57 76H26L17 88H61C77 88 84 79 84 68C84 56 76 49 61 49H40C34 49 31 47 31 43C31 39 34 36 40 36H64L72 24Z"
+              fill="url(#shopsphere-logo-gradient)"
+            />
+
+            <path
+              d="M78 19L81 26L88 29L81 32L78 39L75 32L68 29L75 26L78 19Z"
+              fill="#C4B5FD"
+            />
+
+            <path
+              d="M88 42L90 47L95 49L90 51L88 56L86 51L81 49L86 47L88 42Z"
+              fill="#A5F3FC"
+            />
+          </svg>
+        )}
+
+        {!open && (
+          <span className="absolute right-0.5 top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-900" />
+        )}
       </button>
     </>
   );
