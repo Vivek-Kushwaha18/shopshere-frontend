@@ -173,7 +173,7 @@ export default function Home() {
               ?.querySelector("[data-product-row]")
               ?.scrollBy({ left: -600, behavior: "smooth" });
           }}
-          className="absolute left-0 top-1/2 z-10 hidden h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md hover:bg-gray-50 md:flex"
+          className="absolute left-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md transition-colors hover:bg-gray-100 md:flex"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -181,7 +181,7 @@ export default function Home() {
         <div
           key={rowId}
           data-product-row
-          className="grid grid-flow-col auto-cols-[50%] overflow-x-auto scroll-smooth sm:auto-cols-[33.333%] md:auto-cols-[25%] lg:auto-cols-[20%] xl:auto-cols-[16.6667%]"
+          className="grid grid-flow-col auto-cols-[50%] overflow-x-auto overscroll-x-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[33.333%] md:auto-cols-[25%] lg:auto-cols-[20%] xl:auto-cols-[16.6667%]"
         >
           {rowProducts.map(renderProduct)}
         </div>
@@ -194,7 +194,7 @@ export default function Home() {
               ?.querySelector("[data-product-row]")
               ?.scrollBy({ left: 600, behavior: "smooth" });
           }}
-          className="absolute right-0 top-1/2 z-10 hidden h-9 w-9 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md hover:bg-gray-50 md:flex"
+          className="absolute right-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md transition-colors hover:bg-gray-100 md:flex"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
