@@ -1,9 +1,8 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  ArrowLeft,
   MapPin,
   Package,
   Plus,
@@ -18,6 +17,11 @@ import {
   ShoppingBag,
   ChevronRight,
   LoaderCircle,
+  QrCode,
+  Wallet,
+  LockKeyhole,
+  Gift,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,7 +49,10 @@ import {
   createRazorpayOrder,
   verifyRazorpayPayment,
   getSavedCards,
+  createRazorpayQr,
+  getRazorpayQrStatus,
   type SavedCard,
+  type RazorpayQrResponse,
 } from "@/services/payments";
 
 import { loadStripe } from "@stripe/stripe-js";
@@ -57,6 +64,13 @@ import {
 } from "@stripe/react-stripe-js";
 
 const BLUE = "#2874F0";
+
+type CheckoutPaymentOption =
+  | "stripe"
+  | "upi_qr"
+  | "netbanking"
+  | "wallet"
+  | "cod";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
@@ -124,12 +138,11 @@ function loadRazorpayScript(): Promise<boolean> {
       return;
     }
 
-    const scriptUrl =
-      "https://checkout.razorpay.com/v1/checkout.js";
-
-    const existingScript = document.querySelector<HTMLScriptElement>(
-      `script[src="${scriptUrl}"]`
-    );
+    const scriptUrl = "https://checkout.razorpay.com/v1/checkout.js";
+    const existingScript =
+      document.querySelector<HTMLScriptElement>(
+        `script[src="${scriptUrl}"]`
+      );
 
     if (existingScript) {
       existingScript.addEventListener(
@@ -137,13 +150,11 @@ function loadRazorpayScript(): Promise<boolean> {
         () => resolve(Boolean(window.Razorpay)),
         { once: true }
       );
-
       existingScript.addEventListener(
         "error",
         () => resolve(false),
         { once: true }
       );
-
       return;
     }
 
@@ -152,7 +163,6 @@ function loadRazorpayScript(): Promise<boolean> {
     script.async = true;
     script.onload = () => resolve(Boolean(window.Razorpay));
     script.onerror = () => resolve(false);
-
     document.body.appendChild(script);
   });
 }
@@ -179,7 +189,6 @@ function PaymentForm({
 }) {
   const stripe = useStripe();
   const elements = useElements();
-
   const [paymentError, setPaymentError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -188,7 +197,9 @@ function PaymentForm({
   ) {
     event.preventDefault();
 
-    if (!stripe || !elements || submitting || processing) return;
+    if (!stripe || !elements || submitting || processing) {
+      return;
+    }
 
     setPaymentError("");
     setSubmitting(true);
@@ -234,15 +245,15 @@ function PaymentForm({
   }
 
   return (
-    <form onSubmit={handlePayment} className="mt-5 space-y-5">
-      <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6">
+    <form onSubmit={handlePayment} className="space-y-5">
+      <div className="border border-gray-200 bg-white p-4 sm:p-6">
         <PaymentElement />
       </div>
 
       {paymentError && (
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          className="border border-red-200 bg-red-50 p-3 text-sm text-red-700"
         >
           {paymentError}
         </div>
@@ -253,15 +264,17 @@ function PaymentForm({
           type="button"
           onClick={() => void onCancel()}
           disabled={processing || submitting}
-          className="w-full rounded-lg border border-gray-300 bg-white px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 sm:w-auto"
+          className="w-full border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 sm:w-auto"
         >
           Back
         </button>
 
         <button
           type="submit"
-          disabled={!stripe || !elements || processing || submitting}
-          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#2874F0] px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          disabled={
+            !stripe || !elements || processing || submitting
+          }
+          className="flex flex-1 items-center justify-center gap-2 bg-[#2874F0] px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
         >
           {processing || submitting ? (
             <>
@@ -279,6 +292,38 @@ function PaymentForm({
         Your payment is processed securely by Stripe.
       </p>
     </form>
+  );
+}
+
+function SectionHeading({
+  number,
+  title,
+  completed,
+}: {
+  number: string;
+  title: string;
+  completed?: boolean;
+}) {
+  return (
+    <div className="flex min-h-[58px] items-center gap-3 bg-white px-4 sm:px-6">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center bg-[#f1f3f6] text-xs font-bold text-[#2874F0]">
+        {completed ? (
+          <CheckCircle2 className="h-4 w-4" />
+        ) : (
+          number
+        )}
+      </span>
+
+      <h2 className="text-sm font-bold uppercase tracking-wide text-gray-700">
+        {title}
+      </h2>
+
+      {completed && (
+        <span className="ml-auto text-xs font-semibold text-green-600">
+          Completed
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -304,7 +349,13 @@ export default function CheckoutPage() {
     useState<number | null>(null);
 
   const [paymentMethod, setPaymentMethod] =
-    useState<PaymentMethod>("stripe");
+    useState<CheckoutPaymentOption>("upi_qr");
+
+  const [razorpayQr, setRazorpayQr] =
+    useState<RazorpayQrResponse | null>(null);
+  const [qrOrderId, setQrOrderId] = useState<number | null>(null);
+  const [qrChecking, setQrChecking] = useState(false);
+  const [qrError, setQrError] = useState("");
 
   const [saveCard, setSaveCard] = useState(false);
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
@@ -317,8 +368,9 @@ export default function CheckoutPage() {
   const [appliedCoupon, setAppliedCoupon] =
     useState<CouponValidationResponse | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
+  const [showCouponForm, setShowCouponForm] = useState(false);
 
-  async function loadCart() {
+  const loadCart = useCallback(async () => {
     try {
       setLoadingCart(true);
       setCart(await getCart());
@@ -336,9 +388,9 @@ export default function CheckoutPage() {
     } finally {
       setLoadingCart(false);
     }
-  }
+  }, []);
 
-  async function loadAddresses() {
+  const loadAddresses = useCallback(async () => {
     try {
       setLoadingAddresses(true);
 
@@ -353,7 +405,9 @@ export default function CheckoutPage() {
           (address) => address.is_default
         );
 
-        setSelectedAddressId(defaultAddress?.id ?? data[0].id);
+        setSelectedAddressId(
+          defaultAddress?.id ?? data[0].id
+        );
       }
     } catch (error) {
       console.error("Failed to load addresses:", error);
@@ -369,15 +423,17 @@ export default function CheckoutPage() {
     } finally {
       setLoadingAddresses(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void loadCart();
     void loadAddresses();
-  }, []);
+  }, [loadCart, loadAddresses]);
 
   useEffect(() => {
-    if (paymentMethod !== "stripe") return;
+    if (paymentMethod !== "stripe") {
+      return;
+    }
 
     let active = true;
 
@@ -386,13 +442,19 @@ export default function CheckoutPage() {
         setLoadingSavedCards(true);
         const cards = await getSavedCards();
 
-        if (active) setSavedCards(cards);
+        if (active) {
+          setSavedCards(cards);
+        }
       } catch (error) {
         console.error("Unable to load saved cards:", error);
 
-        if (active) setSavedCards([]);
+        if (active) {
+          setSavedCards([]);
+        }
       } finally {
-        if (active) setLoadingSavedCards(false);
+        if (active) {
+          setLoadingSavedCards(false);
+        }
       }
     }
 
@@ -434,7 +496,6 @@ export default function CheckoutPage() {
         title: "Check Your Address",
         text: "Please complete all address fields correctly.",
       });
-
       return;
     }
 
@@ -452,8 +513,9 @@ export default function CheckoutPage() {
         is_default: addressForm.is_default,
       });
 
-      await loadAddresses();
+      const updatedAddresses = await getAddresses();
 
+      setAddresses(updatedAddresses);
       setSelectedAddressId(newAddress.id);
       setShowNewAddressForm(false);
       setAddressForm({ ...emptyAddressForm });
@@ -498,7 +560,6 @@ export default function CheckoutPage() {
         title: "Enter Coupon Code",
         text: "Please enter a coupon code.",
       });
-
       return;
     }
 
@@ -540,8 +601,13 @@ export default function CheckoutPage() {
   const discountAmount = appliedCoupon?.discount_amount ?? 0;
   const finalAmount = Math.max(subtotal - discountAmount, 0);
 
-  async function handleRazorpayPayment(orderId: number) {
-    if (razorpayProcessing) return;
+  async function handleRazorpayPayment(
+    orderId: number,
+    method: "netbanking" | "wallet"
+  ) {
+    if (razorpayProcessing) {
+      return;
+    }
 
     setRazorpayProcessing(true);
 
@@ -550,7 +616,7 @@ export default function CheckoutPage() {
 
       if (!scriptLoaded || !window.Razorpay) {
         throw new Error(
-          "Unable to load Razorpay checkout. Check your internet connection and try again."
+          "Unable to load Razorpay Checkout. Check your internet connection and try again."
         );
       }
 
@@ -564,7 +630,10 @@ export default function CheckoutPage() {
         let completed = false;
 
         function finish(error?: Error) {
-          if (completed) return;
+          if (completed) {
+            return;
+          }
+
           completed = true;
 
           if (error) {
@@ -574,12 +643,15 @@ export default function CheckoutPage() {
           }
         }
 
+        const selectedMethodLabel =
+          method === "netbanking" ? "Net Banking" : "Wallet";
+
         const checkout = new RazorpayCheckout({
           key: razorpayOrder.key_id,
           amount: razorpayOrder.amount,
           currency: razorpayOrder.currency,
           name: "ShopSphere",
-          description: `Order #${orderId}`,
+          description: `${selectedMethodLabel} payment for Order #${orderId}`,
           order_id: razorpayOrder.razorpay_order_id,
 
           theme: {
@@ -590,18 +662,13 @@ export default function CheckoutPage() {
             display: {
               blocks: {
                 shopsphere: {
-                  name: "Pay Your Way",
-                  instruments: [
-                    { method: "upi" },
-                    { method: "card" },
-                    { method: "netbanking" },
-                    { method: "wallet" },
-                  ],
+                  name: selectedMethodLabel,
+                  instruments: [{ method }],
                 },
               },
               sequence: ["block.shopsphere"],
               preferences: {
-                show_default_blocks: true,
+                show_default_blocks: false,
               },
             },
           },
@@ -616,9 +683,8 @@ export default function CheckoutPage() {
               });
 
               if (
-                (verification as unknown as {
-                  verified?: boolean;
-                }).verified !== true
+                (verification as { verified?: boolean }).verified !==
+                true
               ) {
                 throw new Error(
                   "Payment has not been verified. Check My Orders before trying again."
@@ -656,7 +722,7 @@ export default function CheckoutPage() {
             ondismiss: () => {
               finish(
                 new Error(
-                  "Razorpay checkout was closed. Check My Orders before trying again."
+                  "Razorpay Checkout was closed. Check My Orders before trying again."
                 )
               );
             },
@@ -688,6 +754,120 @@ export default function CheckoutPage() {
     }
   }
 
+  async function handleRazorpayQrPayment(orderId: number) {
+    setQrError("");
+    setRazorpayQr(null);
+    setQrOrderId(null);
+
+    try {
+      const qr = await createRazorpayQr({
+        order_id: orderId,
+      });
+
+      if (!qr.image_url) {
+        throw new Error(
+          "Razorpay did not return a QR image. Check My Orders before starting another payment."
+        );
+      }
+
+      setRazorpayQr(qr);
+      setQrOrderId(orderId);
+    } catch (error) {
+      setQrError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create the UPI QR code."
+      );
+
+      throw error;
+    }
+  }
+
+  useEffect(() => {
+    if (!razorpayQr || qrOrderId === null) {
+      return;
+    }
+
+    let active = true;
+    let checking = false;
+    let finished = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    async function checkQrPayment() {
+      if (!active || checking || finished || qrOrderId === null) {
+        return;
+      }
+
+      checking = true;
+
+      try {
+        const result = await getRazorpayQrStatus({
+          order_id: qrOrderId,
+        });
+
+        if (
+          active &&
+          result.verified === true &&
+          result.payment_status === "paid"
+        ) {
+          finished = true;
+
+          if (timer) {
+            clearInterval(timer);
+          }
+
+          try {
+            await clearCart();
+          } catch (error) {
+            console.error(
+              "Unable to clear cart after QR payment:",
+              error
+            );
+          }
+
+          if (!active) {
+            return;
+          }
+
+          await Swal.fire({
+            icon: "success",
+            title: "Payment Successful",
+            text: `Your order #${qrOrderId} has been confirmed.`,
+            confirmButtonText: "View Orders",
+          });
+
+          if (active) {
+            router.push("/orders");
+          }
+        }
+      } catch (error) {
+        console.error(
+          "Unable to check Razorpay QR payment status:",
+          error
+        );
+      } finally {
+        checking = false;
+      }
+    }
+
+    setQrChecking(true);
+    void checkQrPayment();
+
+    timer = setInterval(() => {
+      void checkQrPayment();
+    }, 3000);
+
+    return () => {
+      active = false;
+
+      if (timer) {
+        clearInterval(timer);
+      }
+
+      setQrChecking(false);
+    };
+  }, [razorpayQr, qrOrderId, router]);
+
   async function handleSubmit() {
     if (
       placingOrder ||
@@ -703,7 +883,6 @@ export default function CheckoutPage() {
         title: "Your Cart Is Empty",
         text: "Please add products before checkout.",
       });
-
       return;
     }
 
@@ -715,15 +894,20 @@ export default function CheckoutPage() {
       await Swal.fire({
         icon: "warning",
         title: "Select a Delivery Address",
-        text:
-          "Please select a delivery address before placing your order.",
+        text: "Please select a delivery address before placing your order.",
       });
-
       return;
     }
 
     try {
       setPlacingOrder(true);
+
+      const orderPaymentMethod: PaymentMethod =
+        paymentMethod === "stripe"
+          ? "stripe"
+          : paymentMethod === "cod"
+            ? "cod"
+            : "razorpay";
 
       const order = await createOrder({
         shipping_address: createShippingAddress(selectedAddress),
@@ -733,7 +917,7 @@ export default function CheckoutPage() {
           quantity: item.quantity,
         })),
         coupon_code: appliedCoupon?.code,
-        payment_method: paymentMethod,
+        payment_method: orderPaymentMethod,
       });
 
       if (paymentMethod === "cod") {
@@ -754,8 +938,16 @@ export default function CheckoutPage() {
         return;
       }
 
-      if (paymentMethod === "razorpay") {
-        await handleRazorpayPayment(order.id);
+      if (paymentMethod === "upi_qr") {
+        await handleRazorpayQrPayment(order.id);
+        return;
+      }
+
+      if (
+        paymentMethod === "netbanking" ||
+        paymentMethod === "wallet"
+      ) {
+        await handleRazorpayPayment(order.id, paymentMethod);
         return;
       }
 
@@ -783,7 +975,9 @@ export default function CheckoutPage() {
   }
 
   async function handlePaymentSuccess() {
-    if (paymentOrderId === null || paymentProcessing) return;
+    if (paymentOrderId === null || paymentProcessing) {
+      return;
+    }
 
     const orderId = paymentOrderId;
     setPaymentProcessing(true);
@@ -843,7 +1037,9 @@ export default function CheckoutPage() {
   }
 
   async function handleCancelPayment() {
-    if (paymentProcessing) return;
+    if (paymentProcessing) {
+      return;
+    }
 
     setPaymentProcessing(true);
 
@@ -877,14 +1073,30 @@ export default function CheckoutPage() {
     }
   }
 
+  const selectedAddress = addresses.find(
+    (address) => address.id === selectedAddressId
+  );
+
+  const submitDisabled =
+    placingOrder ||
+    paymentProcessing ||
+    razorpayProcessing ||
+    couponLoading ||
+    loadingAddresses ||
+    addresses.length === 0 ||
+    selectedAddressId === null ||
+    showNewAddressForm;
+
   if (loadingCart) {
     return (
-      <main className="min-h-screen bg-[#f1f3f6] px-4 py-16">
-        <div className="mx-auto max-w-7xl rounded-xl bg-white p-12 text-center shadow-sm">
-          <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-[#2874F0]" />
-          <p className="mt-4 text-sm text-gray-600">
-            Loading your checkout...
-          </p>
+      <main className="min-h-screen bg-[#f1f3f6]">
+        <div className="mx-auto max-w-6xl px-4 py-16">
+          <div className="bg-white p-12 text-center shadow-sm">
+            <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-[#2874F0]" />
+            <p className="mt-4 text-sm text-gray-600">
+              Loading your checkout...
+            </p>
+          </div>
         </div>
       </main>
     );
@@ -892,22 +1104,14 @@ export default function CheckoutPage() {
 
   if (paymentClientSecret && paymentOrderId !== null) {
     return (
-      <main className="min-h-screen bg-[#f1f3f6] px-4 py-8 sm:py-12">
-        <div className="mx-auto max-w-3xl">
-          <Link
-            href="/cart"
-            className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-[#2874F0] hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Cart
-          </Link>
-
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <main className="min-h-screen bg-[#f1f3f6]">
+        <div className="mx-auto max-w-3xl px-4 py-8">
+          <div className="overflow-hidden bg-white shadow-sm">
             <div className="bg-[#2874F0] p-5 text-white sm:p-7">
               <p className="text-xs font-semibold uppercase tracking-widest text-blue-100">
                 ShopSphere Secure Payment
               </p>
-              <h1 className="mt-2 text-2xl font-bold sm:text-3xl">
+              <h1 className="mt-2 text-2xl font-bold">
                 Complete Your Payment
               </h1>
               <p className="mt-2 text-sm text-blue-100">
@@ -924,7 +1128,7 @@ export default function CheckoutPage() {
                     theme: "stripe",
                     variables: {
                       colorPrimary: BLUE,
-                      borderRadius: "8px",
+                      borderRadius: "4px",
                     },
                   },
                 }}
@@ -942,79 +1146,143 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!cart || cart.items.length === 0) {
+  if (razorpayQr && qrOrderId !== null) {
     return (
-      <main className="min-h-screen bg-[#f1f3f6] px-4 py-12">
-        <div className="mx-auto max-w-2xl rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm sm:p-12">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50">
-            <ShoppingBag className="h-10 w-10 text-[#2874F0]" />
+      <main className="min-h-screen bg-[#f1f3f6]">
+        <div className="mx-auto max-w-lg px-4 py-8">
+          <div className="overflow-hidden bg-white shadow-sm">
+            <div className="bg-[#2874F0] p-5 text-white">
+              <p className="text-xs font-semibold uppercase tracking-widest text-blue-100">
+                Secure UPI Payment
+              </p>
+              <h1 className="mt-2 text-2xl font-bold">
+                Scan and Pay
+              </h1>
+              <p className="mt-2 text-sm text-blue-100">
+                Order #{qrOrderId}
+              </p>
+            </div>
+
+            <div className="p-5 text-center sm:p-7">
+              <p className="text-sm leading-6 text-gray-600">
+                Scan this QR code using your UPI app and complete
+                the payment.
+              </p>
+
+              <div className="mx-auto mt-5 flex min-h-64 max-w-72 items-center justify-center border border-gray-200 p-4">
+                {razorpayQr.image_url ? (
+                  <img
+                    src={razorpayQr.image_url}
+                    alt="Razorpay UPI payment QR code"
+                    className="h-56 w-56 object-contain"
+                  />
+                ) : (
+                  <p className="text-sm text-red-600">
+                    QR image is unavailable.
+                  </p>
+                )}
+              </div>
+
+              <p className="mt-5 text-2xl font-extrabold text-gray-900">
+                ₹{(razorpayQr.amount / 100).toFixed(2)}
+              </p>
+
+              <div className="mt-5 bg-blue-50 p-4 text-left">
+                <p className="flex items-center gap-2 text-sm font-semibold text-[#2874F0]">
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  {qrChecking
+                    ? "Waiting for payment confirmation..."
+                    : "Checking payment status..."}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-gray-600">
+                  Keep this page open while ShopSphere checks the
+                  payment status.
+                </p>
+              </div>
+
+              {qrError && (
+                <p role="alert" className="mt-4 text-sm text-red-600">
+                  {qrError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => router.push("/orders")}
+                className="mt-5 w-full border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Check My Orders
+              </button>
+
+              <p className="mt-4 text-xs text-gray-500">
+                Never share your UPI PIN with anyone.
+              </p>
+            </div>
           </div>
-
-          <h1 className="mt-5 text-2xl font-bold text-gray-900">
-            Your Cart Is Empty
-          </h1>
-          <p className="mt-2 text-sm text-gray-500">
-            Your next favourite purchase is waiting for you.
-          </p>
-
-          <Link
-            href="/products"
-            className="mt-6 inline-flex items-center justify-center gap-2 rounded-lg bg-[#2874F0] px-6 py-3 font-semibold text-white hover:bg-blue-700"
-          >
-            Continue Shopping
-            <ChevronRight className="h-4 w-4" />
-          </Link>
         </div>
       </main>
     );
   }
 
-  const selectedAddress = addresses.find(
-    (address) => address.id === selectedAddressId
-  );
+  if (!cart || cart.items.length === 0) {
+    return (
+      <main className="min-h-screen bg-[#f1f3f6]">
+        <div className="mx-auto max-w-2xl px-4 py-12">
+          <div className="bg-white p-8 text-center shadow-sm sm:p-12">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center bg-blue-50">
+              <ShoppingBag className="h-10 w-10 text-[#2874F0]" />
+            </div>
 
-  const submitDisabled =
-    placingOrder ||
-    paymentProcessing ||
-    razorpayProcessing ||
-    couponLoading ||
-    loadingAddresses ||
-    addresses.length === 0 ||
-    selectedAddressId === null ||
-    showNewAddressForm;
+            <h1 className="mt-5 text-2xl font-bold text-gray-900">
+              Your Cart Is Empty
+            </h1>
+            <p className="mt-2 text-sm text-gray-500">
+              Your next favourite purchase is waiting for you.
+            </p>
+
+            <Link
+              href="/products"
+              className="mt-6 inline-flex items-center justify-center gap-2 bg-[#2874F0] px-6 py-3 text-sm font-bold text-white hover:bg-blue-700"
+            >
+              Continue Shopping
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-[#f1f3f6] pb-28 sm:pb-12">
-      <div className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">
-        <div className="grid items-start gap-6 lg:grid-cols-3 lg:gap-8">
-          <section className="min-w-0 space-y-6 lg:col-span-2">
+    <main className="min-h-screen bg-[#f1f3f6] pb-24">
+      <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5 sm:py-6">
+        <div className="mb-4 flex items-center gap-2 text-xs text-gray-500">
+          <Link href="/" className="hover:text-[#2874F0]">
+            Home
+          </Link>
+          <ChevronRight className="h-3 w-3" />
+          <Link href="/cart" className="hover:text-[#2874F0]">
+            Cart
+          </Link>
+          <ChevronRight className="h-3 w-3" />
+          <span className="font-semibold text-gray-800">
+            Checkout
+          </span>
+        </div>
+
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="min-w-0 space-y-3">
             {/* Delivery address */}
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between gap-3 border-b border-gray-100 p-4 sm:p-6">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#2874F0]">
-                    <MapPin className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">
-                      Delivery Address
-                    </h2>
-                    <p className="text-xs text-gray-500">
-                      Where should we deliver your order?
-                    </p>
-                  </div>
-                </div>
+            <div className="overflow-hidden bg-white shadow-sm">
+              <SectionHeading
+                number="1"
+                title="Delivery Address"
+                completed={Boolean(selectedAddress)}
+              />
 
-                {addresses.length > 0 && !showNewAddressForm && (
-                  <span className="hidden rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 sm:inline-block">
-                    {addresses.length} saved
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-4 p-4 sm:p-6">
+              <div className="border-t border-gray-100 p-4 sm:p-5">
                 {loadingAddresses ? (
-                  <div className="flex items-center gap-2 py-5 text-sm text-gray-500">
+                  <div className="flex items-center gap-2 py-4 text-sm text-gray-500">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                     Loading saved addresses...
                   </div>
@@ -1022,88 +1290,85 @@ export default function CheckoutPage() {
                   <>
                     {addresses.length === 0 && !showNewAddressForm && (
                       <p className="text-sm text-gray-500">
-                        You have no saved delivery addresses. Add one
-                        to continue.
+                        Add a delivery address to continue.
                       </p>
                     )}
 
-                    {addresses.map((address) => {
-                      const isSelected =
-                        selectedAddressId === address.id;
+                    <div className="space-y-3">
+                      {addresses.map((address) => {
+                        const isSelected =
+                          selectedAddressId === address.id;
 
-                      return (
-                        <button
-                          key={address.id}
-                          type="button"
-                          onClick={() =>
-                            setSelectedAddressId(address.id)
-                          }
-                          disabled={placingOrder}
-                          className={`w-full rounded-xl border p-4 text-left transition sm:p-5 ${
-                            isSelected
-                              ? "border-[#2874F0] bg-blue-50/60 ring-1 ring-[#2874F0]"
-                              : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <span
-                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                                isSelected
-                                  ? "border-[#2874F0]"
-                                  : "border-gray-300"
-                              }`}
-                            >
-                              {isSelected && (
-                                <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />
-                              )}
-                            </span>
+                        return (
+                          <button
+                            key={address.id}
+                            type="button"
+                            onClick={() =>
+                              setSelectedAddressId(address.id)
+                            }
+                            disabled={placingOrder}
+                            className={`w-full border p-3 text-left transition sm:p-4 ${
+                              isSelected
+                                ? "border-[#2874F0] bg-[#f5f9ff]"
+                                : "border-gray-200 hover:border-blue-300"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                                  isSelected
+                                    ? "border-[#2874F0]"
+                                    : "border-gray-400"
+                                }`}
+                              >
+                                {isSelected && (
+                                  <span className="h-2 w-2 rounded-full bg-[#2874F0]" />
+                                )}
+                              </span>
 
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-bold text-gray-900">
-                                  {address.full_name}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-bold text-gray-900">
+                                    {address.full_name}
+                                  </span>
+
+                                  <span className="bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-gray-600">
+                                    {address.address_type}
+                                  </span>
+
+                                  {address.is_default && (
+                                    <span className="bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="mt-2 break-words text-sm leading-5 text-gray-600">
+                                  {address.address_line},{" "}
+                                  {address.city}, {address.state} -{" "}
+                                  {address.postal_code}
                                 </p>
 
-                                <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-600">
-                                  {address.address_type}
-                                </span>
-
-                                {address.is_default && (
-                                  <span className="rounded bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700">
-                                    Default
-                                  </span>
-                                )}
-
-                                {isSelected && (
-                                  <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                                    Selected
-                                  </span>
-                                )}
+                                <p className="mt-1 text-xs text-gray-500">
+                                  Phone: {address.phone}
+                                </p>
                               </div>
 
-                              <p className="mt-2 break-words text-sm leading-6 text-gray-600">
-                                {address.address_line}, {address.city},{" "}
-                                {address.state} - {address.postal_code}
-                              </p>
-
-                              <p className="mt-1 text-sm text-gray-600">
-                                Phone:{" "}
-                                <span className="font-semibold text-gray-800">
-                                  {address.phone}
-                                </span>
-                              </p>
+                              {isSelected && (
+                                <CheckCircle2 className="h-5 w-5 shrink-0 text-[#2874F0]" />
+                              )}
                             </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
 
                     {addresses.length > 0 && (
                       <Link
                         href="/addresses"
-                        className="inline-flex items-center gap-2 text-sm font-semibold text-[#2874F0] hover:underline"
+                        className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-[#2874F0] hover:underline"
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-3.5 w-3.5" />
                         Manage saved addresses
                       </Link>
                     )}
@@ -1112,23 +1377,22 @@ export default function CheckoutPage() {
                       <button
                         type="button"
                         onClick={() => setShowNewAddressForm(true)}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[#2874F0] bg-blue-50/50 px-4 py-3 text-sm font-bold text-[#2874F0] transition hover:bg-blue-50"
+                        className="mt-4 flex w-full items-center justify-center gap-2 border border-dashed border-[#2874F0] px-4 py-3 text-sm font-semibold text-[#2874F0] hover:bg-blue-50"
                       >
                         <Plus className="h-4 w-4" />
-                        Add a New Delivery Address
+                        Add a New Address
                       </button>
                     )}
 
                     {showNewAddressForm && (
-                      <div className="rounded-xl border border-blue-100 bg-gray-50 p-4 sm:p-5">
-                        <div className="mb-5 flex items-center justify-between gap-3">
+                      <div className="mt-4 border border-gray-200 bg-white p-4">
+                        <div className="mb-4 flex items-center justify-between">
                           <div>
-                            <h3 className="font-bold text-gray-900">
+                            <h3 className="text-sm font-bold text-gray-900">
                               Add Delivery Address
                             </h3>
                             <p className="mt-1 text-xs text-gray-500">
-                              Enter the address where you want your
-                              order delivered.
+                              Enter the complete delivery details.
                             </p>
                           </div>
 
@@ -1139,61 +1403,63 @@ export default function CheckoutPage() {
                                 setShowNewAddressForm(false);
                                 setAddressForm({ ...emptyAddressForm });
                               }}
-                              className="rounded-lg p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-900"
                               aria-label="Close address form"
+                              className="p-2 text-gray-500 hover:bg-gray-100"
                             >
-                              <X className="h-5 w-5" />
+                              <X className="h-4 w-4" />
                             </button>
                           )}
                         </div>
 
                         <form
                           onSubmit={handleCreateAddress}
-                          className="space-y-4"
+                          className="space-y-3"
                         >
-                          <div>
-                            <label
-                              htmlFor="full_name"
-                              className="mb-1.5 block text-sm font-semibold text-gray-700"
-                            >
-                              Full Name
-                            </label>
-                            <input
-                              id="full_name"
-                              name="full_name"
-                              value={addressForm.full_name}
-                              onChange={handleAddressChange}
-                              required
-                              minLength={2}
-                              placeholder="Enter full name"
-                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
-                            />
-                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <label
+                                htmlFor="full_name"
+                                className="mb-1 block text-xs font-semibold text-gray-700"
+                              >
+                                Full Name
+                              </label>
+                              <input
+                                id="full_name"
+                                name="full_name"
+                                value={addressForm.full_name}
+                                onChange={handleAddressChange}
+                                required
+                                minLength={2}
+                                placeholder="Full name"
+                                className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
+                              />
+                            </div>
 
-                          <div>
-                            <label
-                              htmlFor="phone"
-                              className="mb-1.5 block text-sm font-semibold text-gray-700"
-                            >
-                              Phone Number
-                            </label>
-                            <input
-                              id="phone"
-                              name="phone"
-                              type="tel"
-                              value={addressForm.phone}
-                              onChange={handleAddressChange}
-                              required
-                              minLength={5}
-                              placeholder="Enter phone number"
-                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
-                            />
+                            <div>
+                              <label
+                                htmlFor="phone"
+                                className="mb-1 block text-xs font-semibold text-gray-700"
+                              >
+                                Phone Number
+                              </label>
+                              <input
+                                id="phone"
+                                name="phone"
+                                type="tel"
+                                value={addressForm.phone}
+                                onChange={handleAddressChange}
+                                required
+                                minLength={5}
+                                placeholder="Phone number"
+                                className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
+                              />
+                            </div>
                           </div>
 
                           <div>
                             <label
                               htmlFor="address_line"
-                              className="mb-1.5 block text-sm font-semibold text-gray-700"
+                              className="mb-1 block text-xs font-semibold text-gray-700"
                             >
                               House No., Building, Street, Area
                             </label>
@@ -1204,17 +1470,17 @@ export default function CheckoutPage() {
                               onChange={handleAddressChange}
                               required
                               minLength={5}
-                              rows={3}
-                              placeholder="Enter complete address"
-                              className="w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
+                              rows={2}
+                              placeholder="Complete address"
+                              className="w-full resize-y border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
                             />
                           </div>
 
-                          <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <label
                                 htmlFor="city"
-                                className="mb-1.5 block text-sm font-semibold text-gray-700"
+                                className="mb-1 block text-xs font-semibold text-gray-700"
                               >
                                 City
                               </label>
@@ -1226,14 +1492,14 @@ export default function CheckoutPage() {
                                 required
                                 minLength={2}
                                 placeholder="City"
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
+                                className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
                               />
                             </div>
 
                             <div>
                               <label
                                 htmlFor="state"
-                                className="mb-1.5 block text-sm font-semibold text-gray-700"
+                                className="mb-1 block text-xs font-semibold text-gray-700"
                               >
                                 State
                               </label>
@@ -1245,51 +1511,53 @@ export default function CheckoutPage() {
                                 required
                                 minLength={2}
                                 placeholder="State"
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
+                                className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
                               />
                             </div>
                           </div>
 
-                          <div>
-                            <label
-                              htmlFor="postal_code"
-                              className="mb-1.5 block text-sm font-semibold text-gray-700"
-                            >
-                              PIN Code
-                            </label>
-                            <input
-                              id="postal_code"
-                              name="postal_code"
-                              value={addressForm.postal_code}
-                              onChange={handleAddressChange}
-                              required
-                              minLength={3}
-                              placeholder="Enter PIN code"
-                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
-                            />
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <label
+                                htmlFor="postal_code"
+                                className="mb-1 block text-xs font-semibold text-gray-700"
+                              >
+                                PIN Code
+                              </label>
+                              <input
+                                id="postal_code"
+                                name="postal_code"
+                                value={addressForm.postal_code}
+                                onChange={handleAddressChange}
+                                required
+                                minLength={3}
+                                placeholder="PIN code"
+                                className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
+                              />
+                            </div>
+
+                            <div>
+                              <label
+                                htmlFor="address_type"
+                                className="mb-1 block text-xs font-semibold text-gray-700"
+                              >
+                                Address Type
+                              </label>
+                              <select
+                                id="address_type"
+                                name="address_type"
+                                value={addressForm.address_type}
+                                onChange={handleAddressChange}
+                                className="w-full border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
+                              >
+                                <option value="Home">Home</option>
+                                <option value="Work">Work</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
                           </div>
 
-                          <div>
-                            <label
-                              htmlFor="address_type"
-                              className="mb-1.5 block text-sm font-semibold text-gray-700"
-                            >
-                              Address Type
-                            </label>
-                            <select
-                              id="address_type"
-                              name="address_type"
-                              value={addressForm.address_type}
-                              onChange={handleAddressChange}
-                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm outline-none focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
-                            >
-                              <option value="Home">Home</option>
-                              <option value="Work">Work</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          </div>
-
-                          <label className="flex items-center gap-3 text-sm text-gray-700">
+                          <label className="flex items-center gap-2 text-xs text-gray-600">
                             <input
                               type="checkbox"
                               checked={addressForm.is_default}
@@ -1304,17 +1572,17 @@ export default function CheckoutPage() {
                             Make this my default address
                           </label>
 
-                          <div className="flex flex-col gap-3 sm:flex-row">
+                          <div className="flex flex-col gap-2 sm:flex-row">
                             <button
                               type="submit"
                               disabled={savingAddress}
-                              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#2874F0] px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                              className="flex flex-1 items-center justify-center gap-2 bg-[#2874F0] px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
                             >
                               {savingAddress && (
                                 <LoaderCircle className="h-4 w-4 animate-spin" />
                               )}
                               {savingAddress
-                                ? "Saving Address..."
+                                ? "Saving..."
                                 : "Save Address"}
                             </button>
 
@@ -1325,7 +1593,7 @@ export default function CheckoutPage() {
                                   setShowNewAddressForm(false);
                                   setAddressForm({ ...emptyAddressForm });
                                 }}
-                                className="rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                                className="border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                               >
                                 Cancel
                               </button>
@@ -1339,280 +1607,214 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment options */}
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-100 p-4 sm:p-6">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#2874F0]">
-                    <CreditCard className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">
-                      Payment Options
-                    </h2>
-                    <p className="text-xs text-gray-500">
-                      Choose your preferred payment method.
-                    </p>
-                  </div>
-                </div>
-              </div>
+            {/* Payment methods: all options are directly selectable */}
+            <div className="overflow-hidden bg-white shadow-sm">
+              <SectionHeading
+                number="2"
+                title="Payment Options"
+              />
 
-              <div className="space-y-3 p-4 sm:p-6">
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("razorpay")}
-                  disabled={placingOrder || razorpayProcessing}
-                  className={`w-full rounded-xl border p-4 text-left transition sm:p-5 ${
-                    paymentMethod === "razorpay"
-                      ? "border-[#2874F0] bg-blue-50/70 ring-1 ring-[#2874F0]"
-                      : "border-gray-200 hover:border-blue-300"
-                  }`}
-                >
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <span
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                        paymentMethod === "razorpay"
-                          ? "bg-blue-100 text-[#2874F0]"
-                          : "bg-gray-100 text-gray-600"
+              <div className="border-t border-gray-100">
+                {(
+                  [
+                    {
+                      id: "stripe",
+                      title: "Credit / Debit Card",
+                      description: "",
+                      icon: CreditCard,
+                    },
+                    {
+                      id: "upi_qr",
+                      title: "UPI QR Code",
+                      description: "",
+                      icon: QrCode,
+                    },
+                    {
+                      id: "netbanking",
+                      title: "Net Banking",
+                      description: "",
+                      icon: Banknote,
+                    },
+                    {
+                      id: "wallet",
+                      title: "Wallet",
+                      description: "",
+                      icon: Wallet,
+                    },
+                    {
+                      id: "cod",
+                      title: "Cash on Delivery",
+                      description: "",
+                      icon: Truck,
+                    },
+                  ] as const
+                ).map((option) => {
+                  const Icon = option.icon;
+                  const selected = paymentMethod === option.id;
+
+                  return (
+                    <div
+                      key={option.id}
+                      className={`border-b border-gray-100 ${
+                        selected ? "bg-[#f5f9ff]" : "bg-white"
                       }`}
                     >
-                      <CreditCard className="h-5 w-5" />
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-gray-900">
-                          UPI & Online Payments
-                        </p>
-                        <span className="rounded bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase text-green-700">
-                          Recommended
-                        </span>
-                      </div>
-
-                      <p className="mt-1 text-sm leading-5 text-gray-500">
-                        Pay through Razorpay using available payment
-                        methods.
-                      </p>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {[
-                          "UPI",
-                          "Credit/Debit Card",
-                          "Net Banking",
-                          "Wallets",
-                        ].map((method) => (
-                          <span
-                            key={method}
-                            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600"
-                          >
-                            {method}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <span
-                      className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        paymentMethod === "razorpay"
-                          ? "border-[#2874F0]"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      {paymentMethod === "razorpay" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />
-                      )}
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("stripe")}
-                  disabled={placingOrder || razorpayProcessing}
-                  className={`w-full rounded-xl border p-4 text-left transition sm:p-5 ${
-                    paymentMethod === "stripe"
-                      ? "border-[#2874F0] bg-blue-50/70 ring-1 ring-[#2874F0]"
-                      : "border-gray-200 hover:border-blue-300"
-                  }`}
-                >
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <span
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                        paymentMethod === "stripe"
-                          ? "bg-blue-100 text-[#2874F0]"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      <CreditCard className="h-5 w-5" />
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-gray-900">
-                        Credit / Debit Card
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Secure card payment using Stripe.
-                      </p>
-                    </div>
-
-                    <span
-                      className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        paymentMethod === "stripe"
-                          ? "border-[#2874F0]"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      {paymentMethod === "stripe" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />
-                      )}
-                    </span>
-                  </div>
-                </button>
-
-                {paymentMethod === "stripe" && (
-                  <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 sm:ml-14">
-                    <label className="flex items-start gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={saveCard}
-                        onChange={(event) =>
-                          setSaveCard(event.target.checked)
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod(option.id)}
+                        disabled={
+                          placingOrder ||
+                          paymentProcessing ||
+                          razorpayProcessing
                         }
-                        disabled={placingOrder}
-                        className="mt-1 h-4 w-4 accent-[#2874F0]"
-                      />
-                      <span>
-                        <span className="font-semibold text-gray-800">
-                          Save my card for future payments
+                        aria-pressed={selected}
+                        className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-gray-50 disabled:opacity-60 sm:px-6"
+                      >
+                        <span
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                            selected
+                              ? "border-[#2874F0]"
+                              : "border-gray-400"
+                          }`}
+                        >
+                          {selected && (
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />
+                          )}
                         </span>
-                        <span className="mt-1 block text-xs leading-5 text-gray-500">
-                          Your card details are handled securely by
-                          Stripe.
+
+                        <span
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center ${
+                            selected
+                              ? "bg-blue-100 text-[#2874F0]"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5" />
                         </span>
-                      </span>
-                    </label>
 
-                    <div className="mt-4 border-t border-blue-100 pt-4">
-                      <p className="text-sm font-bold text-gray-800">
-                        Saved Cards
-                      </p>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-gray-900">
+                            {option.title}
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-gray-500">
+                            {option.description}
+                          </span>
+                        </span>
 
-                      {loadingSavedCards ? (
-                        <p className="mt-2 text-sm text-gray-500">
-                          Loading saved cards...
-                        </p>
-                      ) : savedCards.length === 0 ? (
-                        <p className="mt-2 text-sm text-gray-500">
-                          No saved cards found.
-                        </p>
-                      ) : (
-                        <div className="mt-3 space-y-2">
-                          {savedCards.map((card) => (
-                            <div
-                              key={card.id}
-                              className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3"
-                            >
-                              <div className="flex items-center gap-3">
-                                <CreditCard className="h-5 w-5 text-gray-500" />
-                                <div>
-                                  <p className="text-sm font-semibold capitalize text-gray-800">
-                                    {card.brand} ending in {card.last4}
-                                  </p>
-                                  <p className="mt-1 text-xs text-gray-500">
-                                    Expires{" "}
-                                    {String(card.exp_month).padStart(2, "0")}
-                                    /{card.exp_year}
-                                  </p>
-                                </div>
+                        {selected && (
+                          <CheckCircle2 className="h-5 w-5 shrink-0 text-[#2874F0]" />
+                        )}
+                      </button>
+
+                      {selected && option.id === "stripe" && (
+                        <div className="border-t border-blue-100 px-4 py-4 sm:px-6 sm:pl-[88px]">
+                          <label className="flex items-start gap-3 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={saveCard}
+                              onChange={(event) =>
+                                setSaveCard(event.target.checked)
+                              }
+                              disabled={placingOrder}
+                              className="mt-0.5 h-4 w-4 accent-[#2874F0]"
+                            />
+
+                            <span>
+                              <span className="font-semibold text-gray-800">
+                                Save my card for future payments
+                              </span>
+                              
+                            </span>
+                          </label>
+
+                          <div className="mt-4 border-t border-blue-100 pt-4">
+                            <p className="text-xs font-bold text-gray-800">
+                              Saved Cards
+                            </p>
+
+                            {loadingSavedCards ? (
+                              <p className="mt-2 text-xs text-gray-500">
+                                Loading saved cards...
+                              </p>
+                            ) : savedCards.length === 0 ? (
+                              <p className="mt-2 text-xs text-gray-500">
+                                No saved cards found.
+                              </p>
+                            ) : (
+                              <div className="mt-3 space-y-2">
+                                {savedCards.map((card) => (
+                                  <div
+                                    key={card.id}
+                                    className="flex items-center gap-3 border border-gray-200 bg-white p-3"
+                                  >
+                                    <CreditCard className="h-5 w-5 text-gray-500" />
+                                    <div>
+                                      <p className="text-xs font-semibold capitalize text-gray-800">
+                                        {card.brand} ending in {card.last4}
+                                      </p>
+                                      <p className="mt-1 text-[11px] text-gray-500">
+                                        Expires{" "}
+                                        {String(card.exp_month).padStart(2, "0")}
+                                        /{card.exp_year}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                          ))}
+                            )}
+
+                            <p className="mt-3 text-[11px] leading-5 text-gray-500">
+                              Saved cards are displayed for reference. Direct
+                              saved-card payment is not supported by the current
+                              backend.
+                            </p>
+                          </div>
                         </div>
                       )}
 
-                      <p className="mt-3 text-xs leading-5 text-gray-500">
-                        Saved cards are shown for reference. Selecting
-                        a saved card for direct payment is not yet
-                        supported by the current backend.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("cod")}
-                  disabled={placingOrder || razorpayProcessing}
-                  className={`w-full rounded-xl border p-4 text-left transition sm:p-5 ${
-                    paymentMethod === "cod"
-                      ? "border-[#2874F0] bg-blue-50/70 ring-1 ring-[#2874F0]"
-                      : "border-gray-200 hover:border-blue-300"
-                  }`}
-                >
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <span
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                        paymentMethod === "cod"
-                          ? "bg-blue-100 text-[#2874F0]"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      <Banknote className="h-5 w-5" />
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-gray-900">
-                        Cash on Delivery
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Pay when your order arrives.
-                      </p>
-                    </div>
-
-                    <span
-                      className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        paymentMethod === "cod"
-                          ? "border-[#2874F0]"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      {paymentMethod === "cod" && (
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />
+                      {selected && option.id === "upi_qr" && (
+                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
+                          <p className="text-xs leading-5 text-gray-600">
+                            A UPI QR code will be generated after you continue.
+                            Scan it using your UPI app and keep this page open
+                            while the payment is verified.
+                          </p>
+                        </div>
                       )}
-                    </span>
-                  </div>
-                </button>
 
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="flex items-start gap-2 text-xs leading-5 text-gray-500">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-                    Never share your card PIN or UPI PIN with anyone.
-                    Payments are handled by the selected payment
-                    provider.
+                      {selected && option.id === "netbanking" && (
+                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
+                          
+                        </div>
+                      )}
+
+                      {selected && option.id === "wallet" && (
+                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
+                          
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-start gap-2 border-t border-gray-100 bg-gray-50 px-4 py-3 sm:px-6">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                  <p className="text-[11px] leading-5 text-gray-500">
+                    Never share your card PIN or UPI PIN. Payments are
+                    processed through your selected payment provider.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Order review */}
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-100 p-4 sm:p-6">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-[#2874F0]">
-                    <Package className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">
-                      Review Your Order
-                    </h2>
-                    <p className="text-xs text-gray-500">
-                      Check products, sizes, options, and quantities.
-                    </p>
-                  </div>
-                </div>
-              </div>
+            {/* Order items */}
+            <div className="overflow-hidden bg-white shadow-sm">
+              <SectionHeading
+                number="3"
+                title={`Order Summary (${cart.total_items} items)`}
+              />
 
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-100 border-t border-gray-100">
                 {cart.items.map((item) => {
                   const variantImage =
                     item.variant?.images?.find(
@@ -1636,9 +1838,9 @@ export default function CheckoutPage() {
                   return (
                     <div
                       key={item.id}
-                      className="flex gap-3 p-4 sm:gap-5 sm:p-5"
+                      className="flex gap-3 p-4 sm:gap-4 sm:p-5"
                     >
-                      <div className="flex h-24 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-gray-50 sm:h-28 sm:w-24">
+                      <div className="flex h-24 w-20 shrink-0 items-center justify-center border border-gray-100 bg-gray-50 sm:h-28 sm:w-24">
                         {productImage ? (
                           <img
                             src={productImage}
@@ -1651,38 +1853,31 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="line-clamp-2 text-sm font-bold leading-5 text-gray-900 sm:text-base">
+                        <p className="line-clamp-2 text-sm font-semibold leading-5 text-gray-900">
                           {item.product.name}
                         </p>
 
-                        {variantOptions ? (
-                          <p className="mt-2 text-xs text-gray-600">
-                            Size / Options:{" "}
-                            <span className="font-semibold text-gray-800">
+                        {variantOptions && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            Options:{" "}
+                            <span className="font-semibold text-gray-700">
                               {variantOptions}
                             </span>
                           </p>
-                        ) : (
-                          <p className="mt-2 text-xs text-gray-500">
-                            Product variant as selected in your cart
-                          </p>
                         )}
 
-                        <p className="mt-2 text-xs text-gray-500">
-                          Quantity:{" "}
-                          <span className="font-semibold text-gray-800">
-                            {item.quantity}
-                          </span>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Qty: {item.quantity}
                         </p>
 
-                        <p className="mt-2 text-sm font-semibold text-gray-800">
+                        <p className="mt-2 text-sm font-bold text-gray-900">
                           ₹{itemPrice.toFixed(2)}{" "}
                           <span className="font-normal text-gray-500">
                             each
                           </span>
                         </p>
 
-                        <p className="mt-1 text-sm font-bold text-gray-900">
+                        <p className="mt-1 text-xs text-gray-600">
                           Item total: ₹{item.item_total.toFixed(2)}
                         </p>
                       </div>
@@ -1691,81 +1886,75 @@ export default function CheckoutPage() {
                 })}
               </div>
 
-              <div className="border-t border-gray-100 bg-gray-50 p-4 sm:p-5">
+              <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
                 <Link
                   href="/cart"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-[#2874F0] hover:underline"
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-[#2874F0] hover:underline"
                 >
-                  <Pencil className="h-4 w-4" />
-                  Review or change cart
+                  <Pencil className="h-3.5 w-3.5" />
+                  Change items or quantities in cart
                 </Link>
-                <p className="mt-2 text-xs leading-5 text-gray-500">
-                  Size, color, and other options are displayed when
-                  provided by your cart data. Use your cart to change
-                  products or quantities.
-                </p>
               </div>
             </div>
           </section>
 
-          {/* Price summary */}
-          <aside className="min-w-0 lg:sticky lg:top-6">
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-100 p-5">
-                <h2 className="text-lg font-extrabold text-gray-900">
+          {/* Price details sidebar */}
+          <aside className="min-w-0 lg:sticky lg:top-20">
+            <div className="overflow-hidden bg-white shadow-sm">
+              <div className="border-b border-gray-100 px-4 py-4 sm:px-5">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">
                   Price Details
                 </h2>
-                <p className="mt-1 text-xs text-gray-500">
-                  {cart.total_items} item(s) in your order
-                </p>
               </div>
 
-              <div className="space-y-4 p-5">
+              <div className="space-y-4 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium tabular-nums text-gray-900">
+                  <span className="text-gray-600">
+                    Price ({cart.total_items} items)
+                  </span>
+                  <span className="tabular-nums text-gray-800">
                     ₹{subtotal.toFixed(2)}
                   </span>
                 </div>
 
                 {appliedCoupon && (
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-green-700">
+                    <span className="text-gray-600">
                       Coupon discount
                     </span>
-                    <span className="font-semibold tabular-nums text-green-700">
+                    <span className="font-semibold tabular-nums text-green-600">
                       −₹{discountAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-gray-600">Delivery charges</span>
-                  <span className="font-semibold text-green-700">
+                  <span className="text-gray-600">Delivery</span>
+                  <span className="font-semibold text-green-600">
                     FREE
                   </span>
                 </div>
 
-                <div className="border-t border-dashed border-gray-200 pt-4">
+                <div className="border-t border-dashed border-gray-300 pt-4">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-base font-bold text-gray-900">
+                    <span className="text-sm font-bold text-gray-900">
                       Total Payable
                     </span>
-                    <span className="text-xl font-extrabold tabular-nums text-gray-900">
+                    <span className="text-lg font-extrabold tabular-nums text-gray-900">
                       ₹{finalAmount.toFixed(2)}
                     </span>
                   </div>
                 </div>
 
                 {appliedCoupon && (
-                  <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-3">
+                  <div className="flex items-start gap-2 border border-green-200 bg-green-50 p-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
                     <div>
-                      <p className="text-sm font-bold text-green-800">
-                        You saved ₹{discountAmount.toFixed(2)}
+                      <p className="text-xs font-bold text-green-800">
+                        Coupon applied successfully
                       </p>
                       <p className="mt-1 text-xs text-green-700">
-                        Coupon {appliedCoupon.code} applied
+                        You saved ₹{discountAmount.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -1773,19 +1962,37 @@ export default function CheckoutPage() {
               </div>
 
               {/* Coupon */}
-              <div className="border-t border-gray-100 p-5">
-                <div className="mb-3 flex items-center gap-2">
-                  <Tag className="h-4 w-4 text-[#2874F0]" />
-                  <h3 className="text-sm font-bold text-gray-900">
-                    Apply Coupon
-                  </h3>
-                </div>
+              <div className="border-t border-gray-100 p-4 sm:p-5">
+                <button
+                  type="button"
+                  onClick={() => setShowCouponForm((value) => !value)}
+                  className="flex w-full items-center gap-3 text-left"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-blue-50 text-[#2874F0]">
+                    <Tag className="h-4 w-4" />
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-gray-800">
+                      Apply Coupon
+                    </span>
+                    <span className="mt-1 block text-xs text-gray-500">
+                      Save more on your order
+                    </span>
+                  </span>
+
+                  <ChevronDown
+                    className={`h-4 w-4 text-gray-500 transition ${
+                      showCouponForm ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
                 {appliedCoupon ? (
-                  <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="mt-3 border border-green-200 bg-green-50 p-3">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-green-800">
+                        <p className="text-sm font-bold text-green-800">
                           {appliedCoupon.code}
                         </p>
                         <p className="mt-1 text-xs text-green-700">
@@ -1801,30 +2008,32 @@ export default function CheckoutPage() {
                           setCouponCode("");
                         }}
                         disabled={couponLoading || placingOrder}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-green-300 bg-white px-2 py-1.5 text-xs font-semibold text-green-800 hover:bg-green-100 disabled:opacity-60"
+                        className="flex shrink-0 items-center gap-1 text-xs font-semibold text-red-600 hover:underline"
                       >
                         <X className="h-3 w-3" />
                         Remove
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : showCouponForm ? (
                   <form
                     onSubmit={(event) => {
                       event.preventDefault();
                       void handleApplyCoupon();
                     }}
-                    className="space-y-2"
+                    className="mt-3 space-y-2"
                   >
                     <input
                       type="text"
                       value={couponCode}
                       onChange={(event) =>
-                        setCouponCode(event.target.value.toUpperCase())
+                        setCouponCode(
+                          event.target.value.toUpperCase()
+                        )
                       }
                       placeholder="Enter coupon code"
                       disabled={couponLoading || placingOrder}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-3 text-sm uppercase outline-none focus:border-[#2874F0] focus:ring-2 focus:ring-blue-100"
+                      className="w-full border border-gray-300 px-3 py-2.5 text-sm uppercase outline-none focus:border-[#2874F0]"
                     />
 
                     <button
@@ -1834,99 +2043,82 @@ export default function CheckoutPage() {
                         placingOrder ||
                         !couponCode.trim()
                       }
-                      className="w-full rounded-lg border border-[#2874F0] bg-white px-4 py-2.5 text-sm font-bold text-[#2874F0] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="w-full border border-[#2874F0] bg-white px-4 py-2.5 text-sm font-bold text-[#2874F0] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {couponLoading ? (
                         <span className="inline-flex items-center justify-center gap-2">
                           <LoaderCircle className="h-4 w-4 animate-spin" />
-                          Applying Coupon...
+                          Applying...
                         </span>
                       ) : (
                         "Apply Coupon"
                       )}
                     </button>
                   </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowCouponForm(true)}
+                    className="mt-3 w-full border border-gray-200 px-3 py-2.5 text-xs font-semibold text-[#2874F0] hover:bg-blue-50"
+                  >
+                    Enter Coupon Code
+                  </button>
                 )}
               </div>
 
-              {/* Delivery address summary */}
-              <div className="border-t border-gray-100 p-5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Delivering to
-                </p>
+              {/* Selected address */}
+              <div className="border-t border-gray-100 p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                    Delivering To
+                  </p>
+                  <MapPin className="h-4 w-4 text-[#2874F0]" />
+                </div>
 
                 {selectedAddress ? (
-                  <div className="flex items-start gap-3">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#2874F0]" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-gray-900">
-                        {selectedAddress.full_name}
-                      </p>
-                      <p className="mt-1 break-words text-xs leading-5 text-gray-600">
-                        {selectedAddress.address_line},{" "}
-                        {selectedAddress.city},{" "}
-                        {selectedAddress.state}{" "}
-                        {selectedAddress.postal_code}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {selectedAddress.phone}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">
+                      {selectedAddress.full_name}
+                    </p>
+                    <p className="mt-1 break-words text-xs leading-5 text-gray-600">
+                      {selectedAddress.address_line},{" "}
+                      {selectedAddress.city},{" "}
+                      {selectedAddress.state}{" "}
+                      {selectedAddress.postal_code}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {selectedAddress.phone}
+                    </p>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs text-gray-500">
                     Select a delivery address to continue.
                   </p>
                 )}
+
+                <Link
+                  href="/addresses"
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#2874F0] hover:underline"
+                >
+                  Change Address
+                  <ChevronRight className="h-3 w-3" />
+                </Link>
               </div>
 
-              {/* Selected payment summary */}
-              <div className="border-t border-gray-100 bg-gray-50 p-5">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Selected payment
-                </p>
-
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-[#2874F0] shadow-sm">
-                    {paymentMethod === "cod" ? (
-                      <Banknote className="h-5 w-5" />
-                    ) : (
-                      <CreditCard className="h-5 w-5" />
-                    )}
-                  </span>
-
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900">
-                      {paymentMethod === "cod"
-                        ? "Cash on Delivery"
-                        : paymentMethod === "razorpay"
-                          ? "UPI / Online Payment"
-                          : "Credit / Debit Card"}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {paymentMethod === "cod"
-                        ? "Pay upon delivery"
-                        : paymentMethod === "razorpay"
-                          ? "Processed through Razorpay"
-                          : "Processed through Stripe"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="hidden p-5 pt-0 lg:block">
+              {/* Place order */}
+              <div className="border-t border-gray-100 p-4 sm:p-5">
                 <button
                   type="button"
                   onClick={() => void handleSubmit()}
                   disabled={submitDisabled}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#2874F0] px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex min-h-12 w-full items-center justify-center gap-2 bg-[#fb641b] px-4 py-3 text-sm font-bold uppercase text-white transition hover:bg-[#e85a15] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {placingOrder || razorpayProcessing ? (
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                   ) : paymentMethod === "cod" ? (
                     <Truck className="h-4 w-4" />
                   ) : (
-                    <ShieldCheck className="h-4 w-4" />
+                    <LockKeyhole className="h-4 w-4" />
                   )}
 
                   {placingOrder
@@ -1935,7 +2127,13 @@ export default function CheckoutPage() {
                       ? "Waiting for Payment..."
                       : paymentMethod === "cod"
                         ? "Place Order"
-                        : "Continue to Payment"}
+                        : paymentMethod === "upi_qr"
+                          ? "Generate UPI QR"
+                          : paymentMethod === "netbanking"
+                            ? "Continue to Net Banking"
+                            : paymentMethod === "wallet"
+                              ? "Continue to Wallet"
+                              : "Continue to Card Payment"}
                 </button>
 
                 <p className="mt-3 text-center text-[11px] leading-5 text-gray-500">
@@ -1945,27 +2143,59 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            <div className="mt-4 hidden items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 lg:flex">
-              <ShieldCheck className="h-5 w-5 shrink-0 text-green-600" />
-              <div>
-                <p className="text-sm font-bold text-gray-800">
-                  Safe and Secure Shopping
-                </p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Your checkout uses your selected payment provider
-                  and ShopSphere order services.
-                </p>
+            <div className="mt-3 space-y-3">
+              <div className="flex items-start gap-3 bg-white p-4 shadow-sm">
+                <ShieldCheck className="h-5 w-5 shrink-0 text-green-600" />
+                <div>
+                  <p className="text-xs font-bold text-gray-800">
+                    Safe and Secure Payments
+                  </p>
+                  <p className="mt-1 text-[11px] leading-5 text-gray-500">
+                    Payment processing is handled by your selected
+                    payment provider.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 border border-blue-100 bg-white p-4">
+                <Gift className="h-5 w-5 shrink-0 text-[#2874F0]" />
+                <div>
+                  <p className="text-xs font-bold text-gray-800">
+                    Offers and Savings
+                  </p>
+                  <p className="mt-1 text-[11px] leading-5 text-gray-500">
+                    Apply a valid ShopSphere coupon to see your
+                    available discount reflected in the total.
+                  </p>
+                </div>
               </div>
             </div>
           </aside>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-gray-200 py-5 text-[11px] text-gray-500">
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-green-600" />
+            Secure payments
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Truck className="h-4 w-4 text-gray-500" />
+            Delivery information
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <LockKeyhole className="h-4 w-4 text-gray-500" />
+            Protected checkout
+          </span>
         </div>
       </div>
 
       {/* Mobile sticky checkout bar */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] lg:hidden">
-        <div className="mx-auto flex max-w-7xl items-center gap-3">
+        <div className="mx-auto flex max-w-6xl items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-gray-500">Total Payable</p>
+            <p className="text-[11px] text-gray-500">
+              Total Payable
+            </p>
             <p className="truncate text-lg font-extrabold text-gray-900">
               ₹{finalAmount.toFixed(2)}
             </p>
@@ -1980,12 +2210,14 @@ export default function CheckoutPage() {
             type="button"
             onClick={() => void handleSubmit()}
             disabled={submitDisabled}
-            className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#2874F0] px-3 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-h-12 flex-1 items-center justify-center gap-2 bg-[#fb641b] px-3 py-3 text-sm font-bold uppercase text-white hover:bg-[#e85a15] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {placingOrder || razorpayProcessing ? (
               <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : paymentMethod === "cod" ? (
+              <Truck className="h-4 w-4" />
             ) : (
-              <ShieldCheck className="h-4 w-4" />
+              <LockKeyhole className="h-4 w-4" />
             )}
 
             {placingOrder
@@ -1994,7 +2226,13 @@ export default function CheckoutPage() {
                 ? "Processing..."
                 : paymentMethod === "cod"
                   ? "Place Order"
-                  : "Continue"}
+                  : paymentMethod === "upi_qr"
+                    ? "Generate QR"
+                    : paymentMethod === "netbanking"
+                      ? "Net Banking"
+                      : paymentMethod === "wallet"
+                        ? "Continue to Wallet"
+                        : "Continue to Card"}
           </button>
         </div>
       </div>

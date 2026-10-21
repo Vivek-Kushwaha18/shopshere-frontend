@@ -91,11 +91,6 @@ export async function createPaymentIntent(
     typeof result.payment_id !== "number" ||
     typeof result.order_id !== "number"
   ) {
-    console.error(
-      "Stripe payment response is missing required fields:",
-      response.data
-    );
-
     throw new Error(
       "The server returned an invalid Stripe payment response."
     );
@@ -126,17 +121,12 @@ export async function getSavedCards(): Promise<SavedCard[]> {
   });
 
   if (!response.success) {
-    const message = getApiErrorMessage(
-      response.data,
-      "Unable to load saved cards."
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to load saved cards."
+      )
     );
-
-    console.error("Saved cards request failed:", {
-      message,
-      response: response.data,
-    });
-
-    throw new Error(message);
   }
 
   const result = response.data as SavedCardsResponse;
@@ -168,17 +158,12 @@ export async function createSavedCardPaymentIntent(
   );
 
   if (!response.success) {
-    const message = getApiErrorMessage(
-      response.data,
-      "Unable to prepare payment with the saved card."
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to prepare payment with the saved card."
+      )
     );
-
-    console.error("Saved-card payment creation failed:", {
-      message,
-      response: response.data,
-    });
-
-    throw new Error(message);
   }
 
   const result = response.data as PaymentIntentResponse;
@@ -190,11 +175,6 @@ export async function createSavedCardPaymentIntent(
     typeof result.payment_id !== "number" ||
     typeof result.order_id !== "number"
   ) {
-    console.error(
-      "Saved-card payment response is missing required fields:",
-      response.data
-    );
-
     throw new Error(
       "The server returned an invalid saved-card payment response."
     );
@@ -204,7 +184,7 @@ export async function createSavedCardPaymentIntent(
 }
 
 // =====================================================
-// RAZORPAY ORDER
+// RAZORPAY CHECKOUT ORDER
 // =====================================================
 
 export interface RazorpayOrderCreateData {
@@ -234,17 +214,12 @@ export async function createRazorpayOrder(
   );
 
   if (!response.success) {
-    const message = getApiErrorMessage(
-      response.data,
-      "Unable to create Razorpay order."
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to create Razorpay order."
+      )
     );
-
-    console.error("Razorpay order creation failed:", {
-      message,
-      response: response.data,
-    });
-
-    throw new Error(message);
   }
 
   const result = response.data as RazorpayOrderResponse;
@@ -254,13 +229,10 @@ export async function createRazorpayOrder(
     typeof result.payment_id !== "number" ||
     typeof result.order_id !== "number" ||
     typeof result.razorpay_order_id !== "string" ||
-    typeof result.key_id !== "string"
+    !result.razorpay_order_id ||
+    typeof result.key_id !== "string" ||
+    !result.key_id
   ) {
-    console.error(
-      "Razorpay order response is missing required fields:",
-      response.data
-    );
-
     throw new Error(
       "The server returned an invalid Razorpay order response."
     );
@@ -270,7 +242,7 @@ export async function createRazorpayOrder(
 }
 
 // =====================================================
-// RAZORPAY PAYMENT VERIFICATION
+// RAZORPAY CHECKOUT PAYMENT VERIFICATION
 // =====================================================
 
 export interface RazorpayPaymentVerifyData {
@@ -302,17 +274,12 @@ export async function verifyRazorpayPayment(
   );
 
   if (!response.success) {
-    const message = getApiErrorMessage(
-      response.data,
-      "Unable to verify Razorpay payment."
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to verify Razorpay payment."
+      )
     );
-
-    console.error("Razorpay payment verification failed:", {
-      message,
-      response: response.data,
-    });
-
-    throw new Error(message);
   }
 
   const result =
@@ -323,13 +290,125 @@ export async function verifyRazorpayPayment(
     result.verified !== true ||
     typeof result.order_id !== "number"
   ) {
-    console.error(
-      "Razorpay verification response is invalid:",
-      response.data
-    );
-
     throw new Error(
       "The server could not confirm the Razorpay payment."
+    );
+  }
+
+  return result;
+}
+
+// =====================================================
+// RAZORPAY UPI QR CODE CREATION
+// =====================================================
+
+export interface RazorpayQrCreateData {
+  order_id: number;
+}
+
+export interface RazorpayQrResponse {
+  payment_id: number;
+  order_id: number;
+  qr_code_id: string;
+  image_url: string | null;
+  amount: number;
+  currency: string;
+  key_id: string;
+  status: string;
+}
+
+export async function createRazorpayQr(
+  data: RazorpayQrCreateData
+): Promise<RazorpayQrResponse> {
+  const response = await apiFetch(
+    "/payments/razorpay/qr/create",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        order_id: data.order_id,
+      }),
+    }
+  );
+
+  if (!response.success) {
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to create the UPI QR code."
+      )
+    );
+  }
+
+  const result = response.data as RazorpayQrResponse;
+
+  if (
+    !result ||
+    typeof result.payment_id !== "number" ||
+    typeof result.order_id !== "number" ||
+    typeof result.qr_code_id !== "string" ||
+    !result.qr_code_id ||
+    (typeof result.image_url !== "string" &&
+      result.image_url !== null) ||
+    typeof result.amount !== "number" ||
+    typeof result.currency !== "string" ||
+    typeof result.status !== "string"
+  ) {
+    throw new Error(
+      "The server returned an invalid UPI QR response."
+    );
+  }
+
+  return result;
+}
+
+// =====================================================
+// RAZORPAY UPI QR PAYMENT VERIFICATION
+// =====================================================
+
+export interface RazorpayQrStatusData {
+  order_id: number;
+}
+
+export interface RazorpayQrStatusResponse {
+  verified: boolean;
+  order_id: number;
+  payment_status: string;
+  message?: string;
+}
+
+export async function getRazorpayQrStatus(
+  data: RazorpayQrStatusData
+): Promise<RazorpayQrStatusResponse> {
+  const response = await apiFetch(
+    "/payments/razorpay/qr/verify",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        order_id: data.order_id,
+      }),
+    }
+  );
+
+  if (!response.success) {
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to check UPI payment status."
+      )
+    );
+  }
+
+  const result =
+    response.data as RazorpayQrStatusResponse;
+
+  if (
+    !result ||
+    typeof result.verified !== "boolean" ||
+    typeof result.order_id !== "number" ||
+    typeof result.payment_status !== "string"
+  ) {
+    throw new Error(
+      "The server returned an invalid UPI payment status."
     );
   }
 
