@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -20,19 +20,14 @@ function getStatusClass(status: string) {
   switch (status) {
     case "pending":
       return "bg-yellow-100 text-yellow-800";
-
     case "processing":
       return "bg-blue-100 text-blue-800";
-
     case "shipped":
       return "bg-purple-100 text-purple-800";
-
     case "delivered":
       return "bg-green-100 text-green-800";
-
     case "cancelled":
       return "bg-red-100 text-red-800";
-
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -50,43 +45,69 @@ export default function OrderDetailsPage() {
   const params = useParams();
   const router = useRouter();
 
+  const orderId = Number(params.id);
+
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadOrder() {
-    try {
-      setLoading(true);
-
-      const orderId = Number(params.id);
-
-      if (!Number.isInteger(orderId) || orderId <= 0) {
-        throw new Error("Invalid order ID.");
-      }
-
-      const data = await getOrder(orderId);
-
-      setOrder(data);
-    } catch (error) {
-      console.error("Failed to load order:", error);
-
-      await Swal.fire({
-        icon: "error",
-        title: "Unable to load order",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Something went wrong.",
-      });
-
-      router.push("/orders");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const requestedOrderId = useRef<number | null>(null);
 
   useEffect(() => {
-    loadOrder();
-  }, [params.id]);
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      setOrder(null);
+      setLoading(false);
+      return;
+    }
+
+    if (requestedOrderId.current === orderId) {
+      return;
+    }
+
+    requestedOrderId.current = orderId;
+
+    let cancelled = false;
+
+    async function loadOrder() {
+      setLoading(true);
+
+      try {
+        const data = await getOrder(orderId);
+
+        if (!cancelled) {
+          setOrder(data);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error("Failed to load order:", error);
+
+        await Swal.fire({
+          icon: "error",
+          title: "Unable to load order",
+          text:
+            error instanceof Error
+              ? error.message
+              : "Something went wrong.",
+        });
+
+        if (!cancelled) {
+          router.push("/orders");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadOrder();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, router]);
 
   if (loading) {
     return (
@@ -111,15 +132,30 @@ export default function OrderDetailsPage() {
   }
 
   if (!order) {
-    return null;
+    return (
+      <main className="min-h-screen bg-gray-50 px-4 py-8">
+        <div className="mx-auto max-w-5xl">
+          <Link
+            href="/orders"
+            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Orders
+          </Link>
+
+          <div className="mt-8 rounded-lg border bg-white p-10 text-center">
+            <p className="text-gray-500">
+              Unable to display this order.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8">
       <div className="mx-auto max-w-5xl">
-
-        {/* BACK */}
-
         <Link
           href="/orders"
           className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black"
@@ -127,8 +163,6 @@ export default function OrderDetailsPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Orders
         </Link>
-
-        {/* HEADER */}
 
         <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
@@ -159,14 +193,11 @@ export default function OrderDetailsPage() {
                     : "bg-yellow-100 text-yellow-800"
                 }`}
               >
-                Payment:{" "}
-                {formatStatus(order.payment_status)}
+                Payment: {formatStatus(order.payment_status)}
               </span>
             </div>
           </div>
         </div>
-
-        {/* ORDER STATUS */}
 
         <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
           <div className="flex items-center gap-3">
@@ -196,15 +227,11 @@ export default function OrderDetailsPage() {
           </div>
         </div>
 
-        {/* PRODUCTS */}
-
         <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <Package className="h-5 w-5 text-gray-700" />
 
-            <h2 className="text-xl font-semibold">
-              Products
-            </h2>
+            <h2 className="text-xl font-semibold">Products</h2>
           </div>
 
           <div className="space-y-4">
@@ -253,12 +280,7 @@ export default function OrderDetailsPage() {
           </div>
         </div>
 
-        {/* DELIVERY + PAYMENT */}
-
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-
-          {/* DELIVERY */}
-
           <div className="rounded-lg border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <MapPin className="h-5 w-5 text-gray-700" />
@@ -273,15 +295,11 @@ export default function OrderDetailsPage() {
             </p>
           </div>
 
-          {/* PAYMENT */}
-
           <div className="rounded-lg border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <CreditCard className="h-5 w-5 text-gray-700" />
 
-              <h2 className="text-lg font-semibold">
-                Payment
-              </h2>
+              <h2 className="text-lg font-semibold">Payment</h2>
             </div>
 
             <div className="mt-4">
@@ -306,8 +324,6 @@ export default function OrderDetailsPage() {
           </div>
         </div>
 
-        {/* TOTAL */}
-
         <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-lg font-semibold">
@@ -319,7 +335,6 @@ export default function OrderDetailsPage() {
             </span>
           </div>
         </div>
-
       </div>
     </main>
   );

@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MapPin,
   Package,
@@ -145,16 +144,26 @@ function loadRazorpayScript(): Promise<boolean> {
       );
 
     if (existingScript) {
-      existingScript.addEventListener(
-        "load",
-        () => resolve(Boolean(window.Razorpay)),
-        { once: true }
-      );
-      existingScript.addEventListener(
-        "error",
-        () => resolve(false),
-        { once: true }
-      );
+      const handleLoad = () => {
+        resolve(Boolean(window.Razorpay));
+      };
+
+      const handleError = () => {
+        resolve(false);
+      };
+
+      existingScript.addEventListener("load", handleLoad, {
+        once: true,
+      });
+
+      existingScript.addEventListener("error", handleError, {
+        once: true,
+      });
+
+      if (window.Razorpay) {
+        resolve(true);
+      }
+
       return;
     }
 
@@ -163,6 +172,7 @@ function loadRazorpayScript(): Promise<boolean> {
     script.async = true;
     script.onload = () => resolve(Boolean(window.Razorpay));
     script.onerror = () => resolve(false);
+
     document.body.appendChild(script);
   });
 }
@@ -189,18 +199,28 @@ function PaymentForm({
 }) {
   const stripe = useStripe();
   const elements = useElements();
+
   const [paymentError, setPaymentError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const paymentSubmitInProgress = useRef(false);
 
   async function handlePayment(
     event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    if (!stripe || !elements || submitting || processing) {
+    if (
+      !stripe ||
+      !elements ||
+      paymentSubmitInProgress.current ||
+      submitting ||
+      processing
+    ) {
       return;
     }
 
+    paymentSubmitInProgress.current = true;
     setPaymentError("");
     setSubmitting(true);
 
@@ -240,6 +260,7 @@ function PaymentForm({
           : "Unable to process payment."
       );
     } finally {
+      paymentSubmitInProgress.current = false;
       setSubmitting(false);
     }
   }
@@ -271,9 +292,7 @@ function PaymentForm({
 
         <button
           type="submit"
-          disabled={
-            !stripe || !elements || processing || submitting
-          }
+          disabled={!stripe || !elements || processing || submitting}
           className="flex flex-1 items-center justify-center gap-2 bg-[#2874F0] px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
         >
           {processing || submitting ? (
@@ -329,6 +348,16 @@ function SectionHeading({
 
 export default function CheckoutPage() {
   const router = useRouter();
+
+  const initialLoadStarted = useRef(false);
+
+  const orderSubmissionInProgress = useRef(false);
+  const addressSaveInProgress = useRef(false);
+  const couponValidationInProgress = useRef(false);
+  const razorpayPaymentInProgress = useRef(false);
+  const razorpayQrCreationInProgress = useRef(false);
+  const qrStatusCheckInProgress = useRef(false);
+  const paymentSuccessInProgress = useRef(false);
 
   const [cart, setCart] = useState<CartData | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -426,6 +455,12 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
+    if (initialLoadStarted.current) {
+      return;
+    }
+
+    initialLoadStarted.current = true;
+
     void loadCart();
     void loadAddresses();
   }, [loadCart, loadAddresses]);
@@ -440,6 +475,7 @@ export default function CheckoutPage() {
     async function loadCards() {
       try {
         setLoadingSavedCards(true);
+
         const cards = await getSavedCards();
 
         if (active) {
@@ -483,6 +519,10 @@ export default function CheckoutPage() {
   ) {
     event.preventDefault();
 
+    if (addressSaveInProgress.current) {
+      return;
+    }
+
     if (
       addressForm.full_name.trim().length < 2 ||
       addressForm.phone.trim().length < 5 ||
@@ -498,6 +538,8 @@ export default function CheckoutPage() {
       });
       return;
     }
+
+    addressSaveInProgress.current = true;
 
     try {
       setSavingAddress(true);
@@ -538,6 +580,7 @@ export default function CheckoutPage() {
             : "Please try again.",
       });
     } finally {
+      addressSaveInProgress.current = false;
       setSavingAddress(false);
     }
   }
@@ -554,6 +597,10 @@ export default function CheckoutPage() {
   }
 
   async function handleApplyCoupon() {
+    if (couponValidationInProgress.current || couponLoading) {
+      return;
+    }
+
     if (!cart || !couponCode.trim()) {
       await Swal.fire({
         icon: "warning",
@@ -562,6 +609,8 @@ export default function CheckoutPage() {
       });
       return;
     }
+
+    couponValidationInProgress.current = true;
 
     try {
       setCouponLoading(true);
@@ -593,6 +642,7 @@ export default function CheckoutPage() {
             : "Unable to apply coupon.",
       });
     } finally {
+      couponValidationInProgress.current = false;
       setCouponLoading(false);
     }
   }
@@ -605,10 +655,14 @@ export default function CheckoutPage() {
     orderId: number,
     method: "netbanking" | "wallet"
   ) {
-    if (razorpayProcessing) {
+    if (
+      razorpayPaymentInProgress.current ||
+      razorpayProcessing
+    ) {
       return;
     }
 
+    razorpayPaymentInProgress.current = true;
     setRazorpayProcessing(true);
 
     try {
@@ -628,6 +682,7 @@ export default function CheckoutPage() {
 
       await new Promise<void>((resolve, reject) => {
         let completed = false;
+        let verificationStarted = false;
 
         function finish(error?: Error) {
           if (completed) {
@@ -674,6 +729,12 @@ export default function CheckoutPage() {
           },
 
           handler: async (result) => {
+            if (verificationStarted || completed) {
+              return;
+            }
+
+            verificationStarted = true;
+
             try {
               const verification = await verifyRazorpayPayment({
                 order_id: orderId,
@@ -750,11 +811,18 @@ export default function CheckoutPage() {
             : "Check My Orders before trying again.",
       });
     } finally {
+      razorpayPaymentInProgress.current = false;
       setRazorpayProcessing(false);
     }
   }
 
   async function handleRazorpayQrPayment(orderId: number) {
+    if (razorpayQrCreationInProgress.current) {
+      return;
+    }
+
+    razorpayQrCreationInProgress.current = true;
+
     setQrError("");
     setRazorpayQr(null);
     setQrOrderId(null);
@@ -780,6 +848,8 @@ export default function CheckoutPage() {
       );
 
       throw error;
+    } finally {
+      razorpayQrCreationInProgress.current = false;
     }
   }
 
@@ -789,16 +859,20 @@ export default function CheckoutPage() {
     }
 
     let active = true;
-    let checking = false;
     let finished = false;
     let timer: ReturnType<typeof setInterval> | undefined;
 
     async function checkQrPayment() {
-      if (!active || checking || finished || qrOrderId === null) {
+      if (
+        !active ||
+        qrStatusCheckInProgress.current ||
+        finished ||
+        qrOrderId === null
+      ) {
         return;
       }
 
-      checking = true;
+      qrStatusCheckInProgress.current = true;
 
       try {
         const result = await getRazorpayQrStatus({
@@ -846,11 +920,12 @@ export default function CheckoutPage() {
           error
         );
       } finally {
-        checking = false;
+        qrStatusCheckInProgress.current = false;
       }
     }
 
     setQrChecking(true);
+
     void checkQrPayment();
 
     timer = setInterval(() => {
@@ -870,6 +945,7 @@ export default function CheckoutPage() {
 
   async function handleSubmit() {
     if (
+      orderSubmissionInProgress.current ||
       placingOrder ||
       paymentProcessing ||
       razorpayProcessing
@@ -898,6 +974,8 @@ export default function CheckoutPage() {
       });
       return;
     }
+
+    orderSubmissionInProgress.current = true;
 
     try {
       setPlacingOrder(true);
@@ -970,46 +1048,35 @@ export default function CheckoutPage() {
             : "Check My Orders before retrying if an order may already have been created.",
       });
     } finally {
+      orderSubmissionInProgress.current = false;
       setPlacingOrder(false);
     }
   }
 
+  // FIX: Confirm the Stripe order with one API request.
+  // The ref prevents duplicate confirmation requests.
   async function handlePaymentSuccess() {
-    if (paymentOrderId === null || paymentProcessing) {
+    if (
+      paymentOrderId === null ||
+      paymentSuccessInProgress.current
+    ) {
       return;
     }
+
+    paymentSuccessInProgress.current = true;
 
     const orderId = paymentOrderId;
     setPaymentProcessing(true);
 
     try {
-      let confirmed = false;
+      const order = await getOrder(orderId);
 
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        try {
-          const order = await getOrder(orderId);
-
-          if (order.payment_status === "paid") {
-            confirmed = true;
-            break;
-          }
-        } catch (error) {
-          console.error("Unable to verify payment:", error);
-        }
-
-        if (attempt < 19) {
-          await new Promise<void>((resolve) =>
-            setTimeout(resolve, 1500)
-          );
-        }
-      }
-
-      if (!confirmed) {
+      if (order.payment_status !== "paid") {
         await Swal.fire({
           icon: "info",
           title: "Payment Confirmation Pending",
           text:
-            "ShopSphere has not confirmed your payment yet. Your cart has been preserved. Check My Orders before trying again.",
+            "Your payment has not been confirmed yet. Your cart has been preserved. Please check My Orders before attempting another payment.",
           confirmButtonText: "View Orders",
         });
 
@@ -1020,13 +1087,28 @@ export default function CheckoutPage() {
       try {
         await clearCart();
       } catch (error) {
-        console.error("Unable to clear cart after payment:", error);
+        console.error(
+          "Unable to clear cart after payment:",
+          error
+        );
       }
 
       await Swal.fire({
         icon: "success",
         title: "Payment Successful",
         text: `Your order #${orderId} has been confirmed.`,
+        confirmButtonText: "View Orders",
+      });
+
+      router.push("/orders");
+    } catch (error) {
+      console.error("Payment confirmation failed:", error);
+
+      await Swal.fire({
+        icon: "warning",
+        title: "Payment Status Could Not Be Verified",
+        text:
+          "We could not verify your payment status. Please check My Orders before attempting another payment. Your cart has been preserved.",
         confirmButtonText: "View Orders",
       });
 
@@ -1050,6 +1132,8 @@ export default function CheckoutPage() {
 
       setPaymentClientSecret(null);
       setPaymentOrderId(null);
+
+      paymentSuccessInProgress.current = false;
 
       await Swal.fire({
         icon: "info",
@@ -1575,7 +1659,10 @@ export default function CheckoutPage() {
                           <div className="flex flex-col gap-2 sm:flex-row">
                             <button
                               type="submit"
-                              disabled={savingAddress}
+                              disabled={
+                                savingAddress ||
+                                addressSaveInProgress.current
+                              }
                               className="flex flex-1 items-center justify-center gap-2 bg-[#2874F0] px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
                             >
                               {savingAddress && (
@@ -1607,12 +1694,9 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment methods: all options are directly selectable */}
+            {/* Payment methods */}
             <div className="overflow-hidden bg-white shadow-sm">
-              <SectionHeading
-                number="2"
-                title="Payment Options"
-              />
+              <SectionHeading number="2" title="Payment Options" />
 
               <div className="border-t border-gray-100">
                 {(
@@ -1723,7 +1807,6 @@ export default function CheckoutPage() {
                               <span className="font-semibold text-gray-800">
                                 Save my card for future payments
                               </span>
-                              
                             </span>
                           </label>
 
@@ -1783,15 +1866,11 @@ export default function CheckoutPage() {
                       )}
 
                       {selected && option.id === "netbanking" && (
-                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
-                          
-                        </div>
+                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]"></div>
                       )}
 
                       {selected && option.id === "wallet" && (
-                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
-                          
-                        </div>
+                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]"></div>
                       )}
                     </div>
                   );
@@ -2110,7 +2189,10 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => void handleSubmit()}
-                  disabled={submitDisabled}
+                  disabled={
+                    submitDisabled ||
+                    orderSubmissionInProgress.current
+                  }
                   className="flex min-h-12 w-full items-center justify-center gap-2 bg-[#fb641b] px-4 py-3 text-sm font-bold uppercase text-white transition hover:bg-[#e85a15] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {placingOrder || razorpayProcessing ? (
@@ -2209,7 +2291,10 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={submitDisabled}
+            disabled={
+              submitDisabled ||
+              orderSubmissionInProgress.current
+            }
             className="flex min-h-12 flex-1 items-center justify-center gap-2 bg-[#fb641b] px-3 py-3 text-sm font-bold uppercase text-white hover:bg-[#e85a15] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {placingOrder || razorpayProcessing ? (
