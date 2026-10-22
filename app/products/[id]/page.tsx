@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -217,10 +216,78 @@ export default function ProductDetailsPage() {
       }
     }
 
-    loadProduct();
+    void loadProduct();
 
     return () => {
       isMounted = false;
+    };
+  }, [productSlug]);
+
+  // =====================================================
+  // REFRESH RATING WHEN THE USER RETURNS TO THIS PAGE
+  // =====================================================
+
+  useEffect(() => {
+    let isMounted = true;
+    let isRefreshing = false;
+
+    async function refreshProductRating() {
+      if (!productSlug.trim() || isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+
+      try {
+        const latestProduct = await getProduct(productSlug);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProduct((currentProduct) => {
+          if (
+            !currentProduct ||
+            Number(currentProduct.id) !== Number(latestProduct.id)
+          ) {
+            return currentProduct;
+          }
+
+          return {
+            ...currentProduct,
+            rating: latestProduct.rating,
+            reviews_count: latestProduct.reviews_count,
+          };
+        });
+      } catch (refreshError) {
+        console.error("Product rating refresh error:", refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshProductRating();
+      }
+    }
+
+    window.addEventListener("focus", refreshProductRating);
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+
+    return () => {
+      isMounted = false;
+
+      window.removeEventListener("focus", refreshProductRating);
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
     };
   }, [productSlug]);
 
@@ -266,7 +333,7 @@ export default function ProductDetailsPage() {
       }
     }
 
-    checkProductInCart();
+    void checkProductInCart();
 
     return () => {
       isMounted = false;
@@ -665,6 +732,11 @@ export default function ProductDetailsPage() {
     Math.max(0, Number(product.rating ?? 0))
   );
 
+  const productReviewsCount = Math.max(
+    0,
+    Number(product.reviews_count ?? 0)
+  );
+
   // =====================================================
   // OPTION SELECTION
   // =====================================================
@@ -1021,7 +1093,8 @@ export default function ProductDetailsPage() {
                   </span>
 
                   <span className="text-xs text-gray-500">
-                    Product rating
+                    {productReviewsCount}{" "}
+                    {productReviewsCount === 1 ? "review" : "reviews"}
                   </span>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -18,11 +18,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 
-import {
-  getOrder,
-  type Order,
-} from "@/services/orders";
-
+import { getOrder, type Order } from "@/services/orders";
 import {
   getProductReviews,
   createReview,
@@ -39,6 +35,8 @@ function getStatusClass(status: string) {
       return "bg-blue-100 text-blue-800";
     case "shipped":
       return "bg-purple-100 text-purple-800";
+    case "out_for_delivery":
+      return "bg-indigo-100 text-indigo-800";
     case "delivered":
       return "bg-green-100 text-green-800";
     case "cancelled":
@@ -51,7 +49,9 @@ function getStatusClass(status: string) {
 function formatStatus(status: string) {
   if (!status) return "";
 
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function formatDate(date: string) {
@@ -93,6 +93,7 @@ function StarRating({
             type="button"
             onClick={() => onChange?.(star)}
             aria-label={`Rate ${star} out of 5 stars`}
+            aria-pressed={rating === star}
             className="rounded-sm transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <Star
@@ -122,7 +123,10 @@ export default function OrderDetailsPage() {
   const params = useParams();
   const router = useRouter();
 
-  const orderId = Number(params.id);
+  const rawOrderId = params.id;
+  const orderId = Number(
+    Array.isArray(rawOrderId) ? rawOrderId[0] : rawOrderId
+  );
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,15 +159,12 @@ export default function OrderDetailsPage() {
     number | null
   >(null);
 
-  const requestedOrderId = useRef<number | null>(null);
-
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem("user");
 
       if (storedUser) {
         const user = JSON.parse(storedUser);
-
         const userId = user?.id ?? user?.user_id;
 
         if (userId !== undefined && userId !== null) {
@@ -175,34 +176,25 @@ export default function OrderDetailsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!Number.isInteger(orderId) || orderId <= 0) {
-      setOrder(null);
-      setLoading(false);
-      return;
-    }
+  const loadOrder = useCallback(
+    async (showLoader = true) => {
+      if (!Number.isInteger(orderId) || orderId <= 0) {
+        setOrder(null);
+        setLoading(false);
+        return;
+      }
 
-    if (requestedOrderId.current === orderId) {
-      return;
-    }
-
-    requestedOrderId.current = orderId;
-
-    let cancelled = false;
-
-    async function loadOrder() {
-      setLoading(true);
+      if (showLoader) {
+        setLoading(true);
+      }
 
       try {
         const data = await getOrder(orderId);
-
-        if (!cancelled) {
-          setOrder(data);
-        }
+        setOrder(data);
       } catch (error) {
-        if (cancelled) return;
-
         console.error("Failed to load order:", error);
+
+        if (!showLoader) return;
 
         await Swal.fire({
           icon: "error",
@@ -210,79 +202,84 @@ export default function OrderDetailsPage() {
           text: getErrorMessage(error),
         });
 
-        if (!cancelled) {
-          router.push("/orders");
-        }
+        router.push("/orders");
       } finally {
-        if (!cancelled) {
+        if (showLoader) {
           setLoading(false);
         }
       }
+    },
+    [orderId, router]
+  );
+
+  useEffect(() => {
+    void loadOrder();
+  }, [loadOrder]);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void loadOrder(false);
+      }
     }
 
-    void loadOrder();
+    function handleWindowFocus() {
+      void loadOrder(false);
+    }
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
+    window.addEventListener("focus", handleWindowFocus);
 
     return () => {
-      cancelled = true;
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+      window.removeEventListener("focus", handleWindowFocus);
     };
-  }, [orderId, router]);
+  }, [loadOrder]);
+
+  const loadReviews = useCallback(async (productIds: number[]) => {
+    for (const productId of [...new Set(productIds)]) {
+      setReviewsLoading((previous) => ({
+        ...previous,
+        [productId]: true,
+      }));
+
+      try {
+        const reviews = await getProductReviews(productId);
+
+        setReviewsByProduct((previous) => ({
+          ...previous,
+          [productId]: Array.isArray(reviews) ? reviews : [],
+        }));
+      } catch (error) {
+        console.error(
+          `Failed to load reviews for product ${productId}:`,
+          error
+        );
+
+        setReviewsByProduct((previous) => ({
+          ...previous,
+          [productId]: previous[productId] ?? [],
+        }));
+      } finally {
+        setReviewsLoading((previous) => ({
+          ...previous,
+          [productId]: false,
+        }));
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!order?.items?.length) return;
 
-    let cancelled = false;
-
-    async function loadReviews() {
-      const productIds = [
-        ...new Set(order!.items.map((item) => item.product_id)),
-      ];
-
-      for (const productId of productIds) {
-        if (cancelled) return;
-
-        setReviewsLoading((previous) => ({
-          ...previous,
-          [productId]: true,
-        }));
-
-        try {
-          const reviews = await getProductReviews(productId);
-
-          if (!cancelled) {
-            setReviewsByProduct((previous) => ({
-              ...previous,
-              [productId]: Array.isArray(reviews) ? reviews : [],
-            }));
-          }
-        } catch (error) {
-          if (!cancelled) {
-            console.error(
-              `Failed to load reviews for product ${productId}:`,
-              error
-            );
-
-            setReviewsByProduct((previous) => ({
-              ...previous,
-              [productId]: previous[productId] ?? [],
-            }));
-          }
-        } finally {
-          if (!cancelled) {
-            setReviewsLoading((previous) => ({
-              ...previous,
-              [productId]: false,
-            }));
-          }
-        }
-      }
-    }
-
-    void loadReviews();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [order]);
+    void loadReviews(order.items.map((item) => item.product_id));
+  }, [order, loadReviews]);
 
   function getMyReview(productId: number) {
     if (!currentUserId) return undefined;
@@ -318,7 +315,7 @@ export default function OrderDetailsPage() {
   ) {
     event.preventDefault();
 
-    if (reviewFormProductId === null) return;
+    if (reviewFormProductId === null || savingReview) return;
 
     if (!currentUserId) {
       await Swal.fire({
@@ -363,6 +360,9 @@ export default function OrderDetailsPage() {
     setSavingReview(true);
 
     try {
+      const productId = reviewFormProductId;
+      const wasEditing = editingReviewId !== null;
+
       if (editingReviewId !== null) {
         await updateReview(editingReviewId, {
           rating: reviewRating,
@@ -370,19 +370,17 @@ export default function OrderDetailsPage() {
         });
       } else {
         await createReview({
-          product_id: reviewFormProductId,
+          product_id: productId,
           rating: reviewRating,
           comment,
         });
       }
 
-      const refreshedReviews = await getProductReviews(
-        reviewFormProductId
-      );
+      const refreshedReviews = await getProductReviews(productId);
 
       setReviewsByProduct((previous) => ({
         ...previous,
-        [reviewFormProductId]: Array.isArray(refreshedReviews)
+        [productId]: Array.isArray(refreshedReviews)
           ? refreshedReviews
           : [],
       }));
@@ -391,14 +389,10 @@ export default function OrderDetailsPage() {
 
       await Swal.fire({
         icon: "success",
-        title:
-          editingReviewId !== null
-            ? "Review updated"
-            : "Review submitted",
-        text:
-          editingReviewId !== null
-            ? "Your review has been updated successfully."
-            : "Thank you for sharing your experience.",
+        title: wasEditing ? "Review updated" : "Review submitted",
+        text: wasEditing
+          ? "Your review has been updated successfully."
+          : "Thank you for sharing your experience.",
         timer: 1800,
         showConfirmButton: false,
       });
@@ -416,6 +410,8 @@ export default function OrderDetailsPage() {
   }
 
   async function handleDeleteReview(review: Review) {
+    if (deletingReviewId !== null) return;
+
     const result = await Swal.fire({
       icon: "warning",
       title: "Delete your review?",
@@ -533,10 +529,8 @@ export default function OrderDetailsPage() {
               <h1 className="text-2xl font-semibold text-gray-900">
                 Order #{order.id}
               </h1>
-
               <p className="mt-2 text-sm text-gray-500">
-                Placed on{" "}
-                {new Date(order.created_at).toLocaleString()}
+                Placed on {new Date(order.created_at).toLocaleString()}
               </p>
             </div>
 
@@ -551,7 +545,7 @@ export default function OrderDetailsPage() {
 
               <span
                 className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  order.payment_status === "paid"
+                  order.payment_status?.toLowerCase() === "paid"
                     ? "bg-green-100 text-green-800"
                     : "bg-yellow-100 text-yellow-800"
                 }`}
@@ -567,7 +561,6 @@ export default function OrderDetailsPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black text-white">
               <Package className="h-5 w-5" />
             </div>
-
             <div>
               <h2 className="font-semibold text-gray-900">
                 Order Status
@@ -592,7 +585,9 @@ export default function OrderDetailsPage() {
         <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
             <Package className="h-5 w-5 text-gray-700" />
-            <h2 className="text-xl font-semibold">Products & Reviews</h2>
+            <h2 className="text-xl font-semibold">
+              Products &amp; Reviews
+            </h2>
           </div>
 
           <div className="space-y-6">
@@ -635,18 +630,18 @@ export default function OrderDetailsPage() {
                       <h3 className="font-semibold text-gray-900">
                         {item.product_name}
                       </h3>
-
                       <p className="mt-1 text-sm text-gray-500">
                         Product #{item.product_id}
                       </p>
-
                       <p className="mt-2 text-sm text-gray-600">
                         Quantity: {item.quantity}
                       </p>
 
                       <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <StarRating rating={Math.round(averageRating)} size="h-4 w-4" />
-
+                        <StarRating
+                          rating={Math.round(averageRating)}
+                          size="h-4 w-4"
+                        />
                         <span className="text-sm font-medium text-gray-700">
                           {productReviews.length > 0
                             ? `${averageRating.toFixed(1)} / 5`
@@ -668,7 +663,6 @@ export default function OrderDetailsPage() {
                       <p className="text-sm text-gray-500">
                         ₹{item.price.toFixed(2)} × {item.quantity}
                       </p>
-
                       <p className="mt-1 text-lg font-semibold text-gray-900">
                         ₹{item.total.toFixed(2)}
                       </p>
@@ -696,12 +690,23 @@ export default function OrderDetailsPage() {
                           Write a Review
                         </button>
                       )}
+
+                      {orderDelivered && myReview && !formIsOpen && (
+                        <button
+                          type="button"
+                          onClick={() => openEditReview(myReview)}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit Your Review
+                        </button>
+                      )}
                     </div>
 
                     {!orderDelivered && (
                       <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-                        You can write a review after this order has
-                        been delivered.
+                        You can write a review after this order has been
+                        delivered.
                       </p>
                     )}
 
@@ -733,7 +738,6 @@ export default function OrderDetailsPage() {
                                       ? "Your review"
                                       : review.user_name || "Customer"}
                                   </p>
-
                                   <div className="mt-2 flex flex-wrap items-center gap-2">
                                     <StarRating
                                       rating={review.rating}
@@ -746,10 +750,13 @@ export default function OrderDetailsPage() {
                                 </div>
 
                                 <p className="text-xs text-gray-500">
-                                  {formatDate(review.updated_at || review.created_at)}
+                                  {formatDate(
+                                    review.updated_at ||
+                                      review.created_at
+                                  )}
                                   {review.updated_at &&
-                                    review.created_at &&
-                                    review.updated_at !== review.created_at
+                                  review.created_at &&
+                                  review.updated_at !== review.created_at
                                     ? " · Edited"
                                     : ""}
                                 </p>
@@ -763,9 +770,7 @@ export default function OrderDetailsPage() {
                                 <div className="mt-4 flex flex-wrap gap-2">
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      openEditReview(review)
-                                    }
+                                    onClick={() => openEditReview(review)}
                                     className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
                                   >
                                     <Pencil className="h-4 w-4" />
@@ -777,9 +782,7 @@ export default function OrderDetailsPage() {
                                     onClick={() =>
                                       void handleDeleteReview(review)
                                     }
-                                    disabled={
-                                      deletingReviewId === review.id
-                                    }
+                                    disabled={deletingReviewId !== null}
                                     className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {deletingReviewId === review.id ? (
@@ -809,7 +812,6 @@ export default function OrderDetailsPage() {
                                 ? "Edit your review"
                                 : "Write a review"}
                             </h5>
-
                             <p className="mt-1 text-sm text-gray-500">
                               Share your experience with this product.
                             </p>
@@ -820,7 +822,7 @@ export default function OrderDetailsPage() {
                             onClick={closeReviewForm}
                             disabled={savingReview}
                             aria-label="Close review form"
-                            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                            className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
                           >
                             <X className="h-5 w-5" />
                           </button>
@@ -830,7 +832,6 @@ export default function OrderDetailsPage() {
                           <label className="block text-sm font-medium text-gray-700">
                             Your rating
                           </label>
-
                           <div className="mt-2 flex items-center gap-3">
                             <StarRating
                               rating={reviewRating}
@@ -838,7 +839,6 @@ export default function OrderDetailsPage() {
                               onChange={setReviewRating}
                               size="h-7 w-7"
                             />
-
                             <span className="text-sm font-medium text-gray-700">
                               {reviewRating}/5
                             </span>
@@ -852,7 +852,6 @@ export default function OrderDetailsPage() {
                           >
                             Your review
                           </label>
-
                           <textarea
                             id={`review-comment-${item.product_id}`}
                             value={reviewComment}
@@ -865,7 +864,6 @@ export default function OrderDetailsPage() {
                             placeholder="What did you like or dislike about this product?"
                             className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-black focus:ring-1 focus:ring-black"
                           />
-
                           <p className="mt-1 text-right text-xs text-gray-500">
                             {reviewComment.length}/2000
                           </p>
@@ -911,11 +909,8 @@ export default function OrderDetailsPage() {
           <div className="rounded-lg border bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
               <MapPin className="h-5 w-5 text-gray-700" />
-              <h2 className="text-lg font-semibold">
-                Delivery Address
-              </h2>
+              <h2 className="text-lg font-semibold">Delivery Address</h2>
             </div>
-
             <p className="mt-4 whitespace-pre-line text-sm leading-6 text-gray-600">
               {order.shipping_address}
             </p>
@@ -928,20 +923,16 @@ export default function OrderDetailsPage() {
             </div>
 
             <div className="mt-4">
-              <p className="text-sm text-gray-500">
-                Payment Status
-              </p>
-
+              <p className="text-sm text-gray-500">Payment Status</p>
               <span
                 className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-medium ${
-                  order.payment_status === "paid"
+                  order.payment_status?.toLowerCase() === "paid"
                     ? "bg-green-100 text-green-800"
                     : "bg-yellow-100 text-yellow-800"
                 }`}
               >
                 {formatStatus(order.payment_status)}
               </span>
-
               <p className="mt-3 text-sm text-gray-500">
                 Payment is currently not required.
               </p>
@@ -952,7 +943,6 @@ export default function OrderDetailsPage() {
         <div className="mt-6 rounded-lg border bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-4">
             <span className="text-lg font-semibold">Order Total</span>
-
             <span className="text-2xl font-bold text-gray-900">
               ₹{order.total_amount.toFixed(2)}
             </span>
