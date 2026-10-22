@@ -1,4 +1,15 @@
+
 import { apiFetch } from "./api";
+
+export const CART_UPDATED_EVENT = "shopsphere-cart-updated";
+
+function notifyCartUpdated() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(CART_UPDATED_EVENT)
+    );
+  }
+}
 
 export interface CartProduct {
   id: number;
@@ -129,21 +140,11 @@ export async function addToCart(
 
   const params = new URLSearchParams();
 
-  params.set(
-    "product_id",
-    String(productId)
-  );
-
-  params.set(
-    "quantity",
-    String(quantity)
-  );
+  params.set("product_id", String(productId));
+  params.set("quantity", String(quantity));
 
   if (variantId !== null) {
-    params.set(
-      "variant_id",
-      String(variantId)
-    );
+    params.set("variant_id", String(variantId));
   }
 
   const response = (await apiFetch(
@@ -160,6 +161,8 @@ export async function addToCart(
         "Unable to add product to cart."
     );
   }
+
+  notifyCartUpdated();
 
   return response;
 }
@@ -191,6 +194,8 @@ export async function updateCartItem(
     );
   }
 
+  notifyCartUpdated();
+
   return response;
 }
 
@@ -216,6 +221,8 @@ export async function removeCartItem(
     );
   }
 
+  notifyCartUpdated();
+
   return response;
 }
 
@@ -234,6 +241,8 @@ export async function clearCart(): Promise<ApiResponse> {
         "Unable to clear cart."
     );
   }
+
+  notifyCartUpdated();
 
   return response;
 }
