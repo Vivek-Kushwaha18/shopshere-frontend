@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -35,7 +34,7 @@ import {
 } from "@/services/products";
 
 import { getCategory } from "@/services/categories";
-import { addToCart } from "@/services/cart";
+import { addToCart, getCart } from "@/services/cart";
 
 import {
   addToWishlist,
@@ -59,112 +58,61 @@ export default function ProductDetailsPage() {
 
   const productSlug = String(params.id || "");
 
-  const [product, setProduct] =
-    useState<Product | null>(null);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [relatedProducts, setRelatedProducts] =
-    useState<Product[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedOptions, setSelectedOptions] = useState<Record<number, number>>({});
 
-  const [loading, setLoading] =
-    useState(true);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [isProductInCart, setIsProductInCart] = useState(false);
+  const [buyingNow, setBuyingNow] = useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [cartMessage, setCartMessage] = useState("");
+  const [cartError, setCartError] = useState("");
 
-  const [selectedImageIndex, setSelectedImageIndex] =
-    useState(0);
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [wishlistBusy, setWishlistBusy] = useState(false);
 
-  const [quantity, setQuantity] =
-    useState(1);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState("");
 
-  const [selectedOptions, setSelectedOptions] =
-    useState<Record<number, number>>({});
-
-  const [addingToCart, setAddingToCart] =
-    useState(false);
-
-  const [buyingNow, setBuyingNow] =
-    useState(false);
-
-  const [cartMessage, setCartMessage] =
-    useState("");
-
-  const [cartError, setCartError] =
-    useState("");
-
-  const [isWishlisted, setIsWishlisted] =
-    useState(false);
-
-  const [wishlistLoading, setWishlistLoading] =
-    useState(false);
-
-  const [wishlistBusy, setWishlistBusy] =
-    useState(false);
-
-  const [reviews, setReviews] =
-    useState<Review[]>([]);
-
-  const [reviewsLoading, setReviewsLoading] =
-    useState(false);
-
-  const [reviewRating, setReviewRating] =
-    useState(5);
-
-  const [reviewComment, setReviewComment] =
-    useState("");
-
-  const [reviewSubmitting, setReviewSubmitting] =
-    useState(false);
-
-  const [reviewError, setReviewError] =
-    useState("");
-
-  const [editingReviewId, setEditingReviewId] =
-    useState<number | null>(null);
-
-  const [editRating, setEditRating] =
-    useState(5);
-
-  const [editComment, setEditComment] =
-    useState("");
-
-  const [reviewDeletingId, setReviewDeletingId] =
-    useState<number | null>(null);
-
-  const [showReviewsModal, setShowReviewsModal] =
-    useState(false);
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+  const [editRating, setEditRating] = useState(5);
+  const [editComment, setEditComment] = useState("");
+  const [reviewDeletingId, setReviewDeletingId] = useState<number | null>(null);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
 
   const currentUser = getStoredUser();
-
-  const isCustomer =
-    currentUser?.role === "customer";
+  const isCustomer = currentUser?.role === "customer";
 
   // =====================================================
   // LOAD REVIEWS
   // =====================================================
 
-  const loadReviews = async (
-    productId: number
-  ) => {
+  const loadReviews = async (productId: number) => {
     try {
       setReviewsLoading(true);
       setReviewError("");
 
-      const reviewData =
-        await getProductReviews(productId);
+      const reviewData = await getProductReviews(productId);
 
       setReviews(reviewData);
 
-      const reviewCount =
-        reviewData.length;
+      const reviewCount = reviewData.length;
 
       const averageRating =
         reviewCount > 0
-          ? reviewData.reduce(
-              (total, review) =>
-                total + review.rating,
-              0
-            ) / reviewCount
+          ? reviewData.reduce((total, review) => total + review.rating, 0) /
+            reviewCount
           : 0;
 
       setProduct((currentProduct) => {
@@ -179,10 +127,7 @@ export default function ProductDetailsPage() {
         };
       });
     } catch (error) {
-      console.error(
-        "Reviews loading error:",
-        error
-      );
+      console.error("Reviews loading error:", error);
 
       setReviewError(
         error instanceof Error
@@ -203,12 +148,10 @@ export default function ProductDetailsPage() {
 
     async function loadProduct() {
       if (!productSlug.trim()) {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setError("Invalid product.");
+          setLoading(false);
         }
-
-        setError("Invalid product.");
-        setLoading(false);
 
         return;
       }
@@ -218,48 +161,39 @@ export default function ProductDetailsPage() {
         setError("");
         setReviewError("");
 
-        const productData =
-          await getProduct(productSlug);
+        const productData = await getProduct(productSlug);
 
         if (!isMounted) {
           return;
         }
 
         setProduct(productData);
-
         setQuantity(1);
-        const activeVariants =
-          (productData.variants ?? []).filter(
-           (variant) => variant.is_active
-          );
-        const defaultVariant =
-          activeVariants[0] ?? null;
 
-        const defaultOptions: Record<number, number> =
-          {};
-        if (defaultVariant) {
-          (productData.option_groups ?? []).forEach(
-           (group) => {
-            const defaultValue =
-              group.values.find((value) =>
-               defaultVariant.option_value_ids.includes(
-                value.id
-
-              )
-            );
-            
-            if (defaultValue) {
-              defaultOptions[group.id] =
-               defaultValue.id;
-
-            }
-            
-          }
+        const activeVariants = (productData.variants ?? []).filter(
+          (variant) => variant.is_active
         );
-      }
 
-      setSelectedOptions(defaultOptions);
-      setSelectedImageIndex(0);
+        const defaultVariant = activeVariants[0] ?? null;
+        const defaultOptions: Record<number, number> = {};
+
+        if (defaultVariant) {
+          (productData.option_groups ?? []).forEach((group) => {
+            const defaultValue = group.values.find((value) =>
+              defaultVariant.option_value_ids.includes(value.id)
+            );
+
+            if (defaultValue) {
+              defaultOptions[group.id] = defaultValue.id;
+            }
+          });
+        }
+
+        setSelectedOptions(defaultOptions);
+        setSelectedImageIndex(0);
+        setIsProductInCart(false);
+        setCartMessage("");
+        setCartError("");
 
         // =================================================
         // REVIEWS
@@ -268,10 +202,7 @@ export default function ProductDetailsPage() {
         try {
           setReviewsLoading(true);
 
-          const reviewData =
-            await getProductReviews(
-              productData.id
-            );
+          const reviewData = await getProductReviews(productData.id);
 
           if (!isMounted) {
             return;
@@ -279,14 +210,12 @@ export default function ProductDetailsPage() {
 
           setReviews(reviewData);
 
-          const reviewCount =
-            reviewData.length;
+          const reviewCount = reviewData.length;
 
           const averageRating =
             reviewCount > 0
               ? reviewData.reduce(
-                  (total, review) =>
-                    total + review.rating,
+                  (total, review) => total + review.rating,
                   0
                 ) / reviewCount
               : 0;
@@ -303,10 +232,7 @@ export default function ProductDetailsPage() {
             };
           });
         } catch (reviewError) {
-          console.error(
-            "Reviews loading error:",
-            reviewError
-          );
+          console.error("Reviews loading error:", reviewError);
 
           if (isMounted) {
             setReviewError(
@@ -326,32 +252,23 @@ export default function ProductDetailsPage() {
         // =================================================
 
         try {
-          const user =
-            getStoredUser();
+          const user = getStoredUser();
 
           if (user?.role === "customer") {
             setWishlistLoading(true);
 
-            const wishlistStatus =
-              await checkWishlist(
-                productData.id
-              );
+            const wishlistStatus = await checkWishlist(productData.id);
 
             if (!isMounted) {
               return;
             }
 
-            setIsWishlisted(
-              wishlistStatus.is_wishlisted
-            );
+            setIsWishlisted(wishlistStatus.is_wishlisted);
           } else {
             setIsWishlisted(false);
           }
         } catch (wishlistError) {
-          console.error(
-            "Wishlist check error:",
-            wishlistError
-          );
+          console.error("Wishlist check error:", wishlistError);
 
           if (isMounted) {
             setIsWishlisted(false);
@@ -366,21 +283,16 @@ export default function ProductDetailsPage() {
         // INITIAL PRODUCT IMAGE
         // =================================================
 
-        const productImages =
-          productData.images ?? [];
+        const productImages = productData.images ?? [];
 
-        const primaryImageIndex =
-          productImages.findIndex(
-            (image) =>
-              image.is_primary &&
-              image.variant_id == null
-          );
+        const primaryImageIndex = productImages.findIndex(
+          (image) =>
+            image.is_primary && image.variant_id == null
+        );
 
         if (isMounted) {
           setSelectedImageIndex(
-            primaryImageIndex >= 0
-              ? primaryImageIndex
-              : 0
+            primaryImageIndex >= 0 ? primaryImageIndex : 0
           );
         }
 
@@ -389,55 +301,38 @@ export default function ProductDetailsPage() {
         // =================================================
 
         try {
-          const category =
-            await getCategory(
-              productData.category_id
-            );
+          const category = await getCategory(productData.category_id);
 
           if (!isMounted) {
             return;
           }
 
-          const categoryProducts =
-            await getProductsByCategory(
-              category.slug
-            );
+          const categoryProducts = await getProductsByCategory(category.slug);
 
           if (!isMounted) {
             return;
           }
 
           setRelatedProducts(
-            categoryProducts.filter(
-              (item) =>
-                item.id !== productData.id
-            )
+            categoryProducts.filter((item) => item.id !== productData.id)
           );
         } catch (relatedError) {
-          console.error(
-            "Related products error:",
-            relatedError
-          );
+          console.error("Related products error:", relatedError);
 
           if (isMounted) {
             setRelatedProducts([]);
           }
         }
       } catch (error) {
-        console.error(
-          "Product details error:",
-          error
-        );
+        console.error("Product details error:", error);
 
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load product."
+          );
         }
-
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load product."
-        );
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -453,6 +348,56 @@ export default function ProductDetailsPage() {
   }, [productSlug]);
 
   // =====================================================
+  // CHECK WHETHER THIS PRODUCT IS ALREADY IN THE CART
+  // =====================================================
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkProductInCart() {
+      if (!product) {
+        return;
+      }
+
+      const user = getStoredUser();
+
+      if (user?.role !== "customer") {
+        setIsProductInCart(false);
+        return;
+      }
+
+      try {
+        const cart = await getCart();
+
+        if (!isMounted) {
+          return;
+        }
+
+        const alreadyInCart =
+          Array.isArray(cart.items) &&
+          cart.items.some(
+            (item) =>
+              Number(item.product_id) === Number(product.id)
+          );
+
+        setIsProductInCart(alreadyInCart);
+      } catch (error) {
+        console.error("Product cart check error:", error);
+
+        if (isMounted) {
+          setIsProductInCart(false);
+        }
+      }
+    }
+
+    checkProductInCart();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [product?.id]);
+
+  // =====================================================
   // CLOSE REVIEWS WITH ESCAPE
   // =====================================================
 
@@ -461,24 +406,16 @@ export default function ProductDetailsPage() {
       return;
     }
 
-    const handleEscape = (
-      event: KeyboardEvent
-    ) => {
+    const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setShowReviewsModal(false);
       }
     };
 
-    document.addEventListener(
-      "keydown",
-      handleEscape
-    );
+    document.addEventListener("keydown", handleEscape);
 
     return () => {
-      document.removeEventListener(
-        "keydown",
-        handleEscape
-      );
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [showReviewsModal]);
 
@@ -502,23 +439,14 @@ export default function ProductDetailsPage() {
       setWishlistBusy(true);
 
       if (isWishlisted) {
-        await removeFromWishlist(
-          product.id
-        );
-
+        await removeFromWishlist(product.id);
         setIsWishlisted(false);
       } else {
-        await addToWishlist(
-          product.id
-        );
-
+        await addToWishlist(product.id);
         setIsWishlisted(true);
       }
     } catch (error) {
-      console.error(
-        "Wishlist error:",
-        error
-      );
+      console.error("Wishlist error:", error);
     } finally {
       setWishlistBusy(false);
     }
@@ -539,8 +467,7 @@ export default function ProductDetailsPage() {
     try {
       if (
         navigator.share &&
-        typeof navigator.share ===
-          "function"
+        typeof navigator.share === "function"
       ) {
         await navigator.share({
           title: product.name,
@@ -553,24 +480,14 @@ export default function ProductDetailsPage() {
 
       if (
         navigator.clipboard &&
-        typeof navigator.clipboard.writeText ===
-          "function"
+        typeof navigator.clipboard.writeText === "function"
       ) {
-        await navigator.clipboard.writeText(
-          productUrl
-        );
-
-        window.alert(
-          "Product link copied."
-        );
-
+        await navigator.clipboard.writeText(productUrl);
+        window.alert("Product link copied.");
         return;
       }
 
-      window.prompt(
-        "Copy this product link:",
-        productUrl
-      );
+      window.prompt("Copy this product link:", productUrl);
     } catch (error) {
       if (
         error instanceof DOMException &&
@@ -579,10 +496,7 @@ export default function ProductDetailsPage() {
         return;
       }
 
-      console.error(
-        "Share product error:",
-        error
-      );
+      console.error("Share product error:", error);
     }
   };
 
@@ -606,14 +520,10 @@ export default function ProductDetailsPage() {
       return;
     }
 
-    const trimmedComment =
-      reviewComment.trim();
+    const trimmedComment = reviewComment.trim();
 
     if (!trimmedComment) {
-      setReviewError(
-        "Please write a review."
-      );
-
+      setReviewError("Please write a review.");
       return;
     }
 
@@ -632,10 +542,7 @@ export default function ProductDetailsPage() {
 
       await loadReviews(product.id);
     } catch (error) {
-      console.error(
-        "Create review error:",
-        error
-      );
+      console.error("Create review error:", error);
 
       setReviewError(
         error instanceof Error
@@ -651,9 +558,7 @@ export default function ProductDetailsPage() {
   // START EDIT REVIEW
   // =====================================================
 
-  const handleStartEditReview = (
-    review: Review
-  ) => {
+  const handleStartEditReview = (review: Review) => {
     setEditingReviewId(review.id);
     setEditRating(review.rating);
     setEditComment(review.comment);
@@ -675,21 +580,15 @@ export default function ProductDetailsPage() {
   // UPDATE REVIEW
   // =====================================================
 
-  const handleUpdateReview = async (
-    reviewId: number
-  ) => {
+  const handleUpdateReview = async (reviewId: number) => {
     if (!product) {
       return;
     }
 
-    const trimmedComment =
-      editComment.trim();
+    const trimmedComment = editComment.trim();
 
     if (!trimmedComment) {
-      setReviewError(
-        "Please write a review."
-      );
-
+      setReviewError("Please write a review.");
       return;
     }
 
@@ -706,10 +605,7 @@ export default function ProductDetailsPage() {
 
       await loadReviews(product.id);
     } catch (error) {
-      console.error(
-        "Update review error:",
-        error
-      );
+      console.error("Update review error:", error);
 
       setReviewError(
         error instanceof Error
@@ -725,17 +621,14 @@ export default function ProductDetailsPage() {
   // DELETE REVIEW
   // =====================================================
 
-  const handleDeleteReview = async (
-    reviewId: number
-  ) => {
+  const handleDeleteReview = async (reviewId: number) => {
     if (!product) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to delete this review?"
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this review?"
+    );
 
     if (!confirmed) {
       return;
@@ -747,18 +640,13 @@ export default function ProductDetailsPage() {
 
       await deleteReview(reviewId);
 
-      if (
-        editingReviewId === reviewId
-      ) {
+      if (editingReviewId === reviewId) {
         handleCancelEditReview();
       }
 
       await loadReviews(product.id);
     } catch (error) {
-      console.error(
-        "Delete review error:",
-        error
-      );
+      console.error("Delete review error:", error);
 
       setReviewError(
         error instanceof Error
@@ -815,9 +703,7 @@ export default function ProductDetailsPage() {
                 Unable to load product
               </h1>
 
-              <p className="mt-1 text-sm">
-                {error}
-              </p>
+              <p className="mt-1 text-sm">{error}</p>
             </div>
 
             <Link
@@ -841,74 +727,48 @@ export default function ProductDetailsPage() {
   // PRODUCT OPTIONS
   // =====================================================
 
-  const optionGroups =
-    product.option_groups ?? [];
+  const optionGroups = product.option_groups ?? [];
 
-  const variants =
-    (product.variants ?? []).filter(
-      (variant) =>
-        variant.is_active
-    );
+  const variants = (product.variants ?? []).filter(
+    (variant) => variant.is_active
+  );
 
   const hasVariants =
-    optionGroups.length > 0 &&
-    variants.length > 0;
+    optionGroups.length > 0 && variants.length > 0;
 
   const allRequiredOptionsSelected =
     hasVariants &&
     optionGroups.every(
-      (group) =>
-        selectedOptions[group.id] !==
-        undefined
+      (group) => selectedOptions[group.id] !== undefined
     );
 
   // =====================================================
   // EXACT VARIANT MATCHING
   // =====================================================
 
-  const selectedValueIds =
-    Object.values(
-      selectedOptions
-    );
+  const selectedValueIds = Object.values(selectedOptions);
 
   const selectedVariant: ProductVariant | null =
-    hasVariants &&
-    allRequiredOptionsSelected
-      ? variants.find(
-          (variant) => {
-            const variantValueIds =
-              variant.option_value_ids;
+    hasVariants && allRequiredOptionsSelected
+      ? variants.find((variant) => {
+          const variantValueIds = variant.option_value_ids;
 
-            if (
-              variantValueIds.length !==
-              optionGroups.length
-            ) {
-              return false;
-            }
-
-            if (
-              selectedValueIds.length !==
-              optionGroups.length
-            ) {
-              return false;
-            }
-
-            return (
-              variantValueIds.every(
-                (valueId) =>
-                  selectedValueIds.includes(
-                    valueId
-                  )
-              ) &&
-              selectedValueIds.every(
-                (valueId) =>
-                  variantValueIds.includes(
-                    valueId
-                  )
-              )
-            );
+          if (
+            variantValueIds.length !== optionGroups.length ||
+            selectedValueIds.length !== optionGroups.length
+          ) {
+            return false;
           }
-        ) ?? null
+
+          return (
+            variantValueIds.every((valueId) =>
+              selectedValueIds.includes(valueId)
+            ) &&
+            selectedValueIds.every((valueId) =>
+              variantValueIds.includes(valueId)
+            )
+          );
+        }) ?? null
       : null;
 
   // =====================================================
@@ -928,37 +788,27 @@ export default function ProductDetailsPage() {
       [groupId]: valueId,
     };
 
-    const selectedEntries =
-      Object.entries(
-        candidateSelections
-      ).map(
-        ([selectedGroupId, selectedValueId]) =>
-          [
-            Number(selectedGroupId),
-            selectedValueId,
-          ] as [number, number]
-      );
-
-    return variants.some(
-      (variant) => {
-        const variantValueIds =
-          variant.option_value_ids;
-
-        if (
-          variantValueIds.length !==
-          optionGroups.length
-        ) {
-          return false;
-        }
-
-        return selectedEntries.every(
-          ([, selectedValueId]) =>
-            variantValueIds.includes(
-              selectedValueId
-            )
-        );
-      }
+    const selectedEntries = Object.entries(
+      candidateSelections
+    ).map(
+      ([selectedGroupId, selectedValueId]) =>
+        [Number(selectedGroupId), selectedValueId] as [
+          number,
+          number
+        ]
     );
+
+    return variants.some((variant) => {
+      const variantValueIds = variant.option_value_ids;
+
+      if (variantValueIds.length !== optionGroups.length) {
+        return false;
+      }
+
+      return selectedEntries.every(([, selectedValueId]) =>
+        variantValueIds.includes(selectedValueId)
+      );
+    });
   };
 
   // =====================================================
@@ -966,46 +816,34 @@ export default function ProductDetailsPage() {
   // =====================================================
 
   const currentPrice =
-    selectedVariant?.price ??
-    product.price;
+    selectedVariant?.price ?? product.price;
 
   const currentOriginalPrice =
-    selectedVariant?.original_price ??
-    product.original_price;
+    selectedVariant?.original_price ?? product.original_price;
 
   const currentStock =
-    selectedVariant?.stock ??
-    product.stock;
+    selectedVariant?.stock ?? product.stock;
 
   // =====================================================
   // PRODUCT IMAGES
   // =====================================================
 
-  const productImages =
-    product.images ?? [];
+  const productImages = product.images ?? [];
 
-  const selectedOptionEntries =
-    Object.entries(
-      selectedOptions
-    ).map(
-      ([groupId, valueId]) => [
-        Number(groupId),
-        valueId,
-      ] as [number, number]
-    );
+  const selectedOptionEntries = Object.entries(
+    selectedOptions
+  ).map(
+    ([groupId, valueId]) =>
+      [Number(groupId), valueId] as [number, number]
+  );
 
-  const matchingVariants =
-    hasVariants
-      ? variants.filter(
-          (variant) =>
-            selectedOptionEntries.every(
-              ([, valueId]) =>
-                variant.option_value_ids.includes(
-                  valueId
-                )
-            )
+  const matchingVariants = hasVariants
+    ? variants.filter((variant) =>
+        selectedOptionEntries.every(([, valueId]) =>
+          variant.option_value_ids.includes(valueId)
         )
-      : [];
+      )
+    : [];
 
   let galleryImages: ProductImage[] = [];
 
@@ -1018,14 +856,9 @@ export default function ProductDetailsPage() {
     selectedVariant.images &&
     selectedVariant.images.length > 0
   ) {
-    galleryImages =
-      selectedVariant.images
-        .slice()
-        .sort(
-          (a, b) =>
-            a.sort_order -
-            b.sort_order
-        );
+    galleryImages = selectedVariant.images
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order);
   }
 
   // =====================================================
@@ -1037,34 +870,21 @@ export default function ProductDetailsPage() {
     selectedOptionEntries.length > 0 &&
     matchingVariants.length > 0
   ) {
-    const matchingImages =
-      matchingVariants.flatMap(
-        (variant) =>
-          variant.images ?? []
-      );
-
-    const uniqueImages =
-      new Map<number, ProductImage>();
-
-    matchingImages.forEach(
-      (image) => {
-        if (!uniqueImages.has(image.id)) {
-          uniqueImages.set(
-            image.id,
-            image
-          );
-        }
-      }
+    const matchingImages = matchingVariants.flatMap(
+      (variant) => variant.images ?? []
     );
 
-    galleryImages =
-      Array.from(
-        uniqueImages.values()
-      ).sort(
-        (a, b) =>
-          a.sort_order -
-          b.sort_order
-      );
+    const uniqueImages = new Map<number, ProductImage>();
+
+    matchingImages.forEach((image) => {
+      if (!uniqueImages.has(image.id)) {
+        uniqueImages.set(image.id, image);
+      }
+    });
+
+    galleryImages = Array.from(uniqueImages.values()).sort(
+      (a, b) => a.sort_order - b.sort_order
+    );
   }
 
   // =====================================================
@@ -1075,17 +895,9 @@ export default function ProductDetailsPage() {
     galleryImages.length === 0 &&
     selectedOptionEntries.length === 0
   ) {
-    galleryImages =
-      productImages
-        .filter(
-          (image) =>
-            image.variant_id == null
-        )
-        .sort(
-          (a, b) =>
-            a.sort_order -
-            b.sort_order
-        );
+    galleryImages = productImages
+      .filter((image) => image.variant_id == null)
+      .sort((a, b) => a.sort_order - b.sort_order);
   }
 
   // =====================================================
@@ -1097,34 +909,21 @@ export default function ProductDetailsPage() {
     selectedOptionEntries.length === 0 &&
     hasVariants
   ) {
-    const allVariantImages =
-      variants.flatMap(
-        (variant) =>
-          variant.images ?? []
-      );
-
-    const uniqueImages =
-      new Map<number, ProductImage>();
-
-    allVariantImages.forEach(
-      (image) => {
-        if (!uniqueImages.has(image.id)) {
-          uniqueImages.set(
-            image.id,
-            image
-          );
-        }
-      }
+    const allVariantImages = variants.flatMap(
+      (variant) => variant.images ?? []
     );
 
-    galleryImages =
-      Array.from(
-        uniqueImages.values()
-      ).sort(
-        (a, b) =>
-          a.sort_order -
-          b.sort_order
-      );
+    const uniqueImages = new Map<number, ProductImage>();
+
+    allVariantImages.forEach((image) => {
+      if (!uniqueImages.has(image.id)) {
+        uniqueImages.set(image.id, image);
+      }
+    });
+
+    galleryImages = Array.from(uniqueImages.values()).sort(
+      (a, b) => a.sort_order - b.sort_order
+    );
   }
 
   // =====================================================
@@ -1132,30 +931,19 @@ export default function ProductDetailsPage() {
   // =====================================================
 
   if (galleryImages.length === 0) {
-    galleryImages =
-      productImages
-        .slice()
-        .sort(
-          (a, b) =>
-            a.sort_order -
-            b.sort_order
-        );
+    galleryImages = productImages
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order);
   }
 
-  const images =
-    galleryImages;
+  const images = galleryImages;
 
   const safeImageIndex =
     images.length > 0
-      ? Math.min(
-          selectedImageIndex,
-          images.length - 1
-        )
+      ? Math.min(selectedImageIndex, images.length - 1)
       : 0;
 
-  const currentImage =
-    images[safeImageIndex]
-      ?.image_url ?? null;
+  const currentImage = images[safeImageIndex]?.image_url ?? null;
 
   // =====================================================
   // DISCOUNT
@@ -1163,15 +951,12 @@ export default function ProductDetailsPage() {
 
   const hasDiscount =
     currentOriginalPrice != null &&
-    currentOriginalPrice >
-      currentPrice;
+    currentOriginalPrice > currentPrice;
 
   const discountPercentage =
-    hasDiscount &&
-    currentOriginalPrice
+    hasDiscount && currentOriginalPrice
       ? Math.round(
-          ((currentOriginalPrice -
-            currentPrice) /
+          ((currentOriginalPrice - currentPrice) /
             currentOriginalPrice) *
             100
         )
@@ -1181,44 +966,30 @@ export default function ProductDetailsPage() {
   // REVIEWS
   // =====================================================
 
-  const reviewCount =
-    reviews.length;
+  const reviewCount = reviews.length;
 
   const averageRating =
     reviewCount > 0
       ? reviews.reduce(
-          (total, review) =>
-            total + review.rating,
+          (total, review) => total + review.rating,
           0
         ) / reviewCount
       : 0;
 
-  const ratingDistribution =
-    [5, 4, 3, 2, 1].map(
-      (rating) => {
-        const count =
-          reviews.filter(
-            (review) =>
-              review.rating ===
-              rating
-          ).length;
+  const ratingDistribution = [5, 4, 3, 2, 1].map(
+    (rating) => {
+      const count = reviews.filter(
+        (review) => review.rating === rating
+      ).length;
 
-        const percentage =
-          reviewCount > 0
-            ? Math.round(
-                (count /
-                  reviewCount) *
-                  100
-              )
-            : 0;
+      const percentage =
+        reviewCount > 0
+          ? Math.round((count / reviewCount) * 100)
+          : 0;
 
-        return {
-          rating,
-          count,
-          percentage,
-        };
-      }
-    );
+      return { rating, count, percentage };
+    }
+  );
 
   // =====================================================
   // OPTION SELECTION
@@ -1228,21 +999,14 @@ export default function ProductDetailsPage() {
     group: ProductOptionGroup,
     valueId: number
   ) => {
-    if (
-      !isOptionValueAvailable(
-        group.id,
-        valueId
-      )
-    ) {
+    if (!isOptionValueAvailable(group.id, valueId)) {
       return;
     }
 
-    setSelectedOptions(
-      (current) => ({
-        ...current,
-        [group.id]: valueId,
-      })
-    );
+    setSelectedOptions((current) => ({
+      ...current,
+      [group.id]: valueId,
+    }));
 
     setQuantity(1);
     setSelectedImageIndex(0);
@@ -1254,207 +1018,166 @@ export default function ProductDetailsPage() {
   // QUANTITY
   // =====================================================
 
-  const handleDecreaseQuantity =
-    () => {
-      setQuantity(
-        (currentQuantity) =>
-          Math.max(
-            1,
-            currentQuantity - 1
-          )
-      );
-    };
+  const handleDecreaseQuantity = () => {
+    setQuantity((currentQuantity) =>
+      Math.max(1, currentQuantity - 1)
+    );
+  };
 
-  const handleIncreaseQuantity =
-    () => {
-      setQuantity(
-        (currentQuantity) =>
-          Math.min(
-            currentStock,
-            currentQuantity + 1
-          )
-      );
-    };
+  const handleIncreaseQuantity = () => {
+    setQuantity((currentQuantity) =>
+      Math.min(currentStock, currentQuantity + 1)
+    );
+  };
 
   // =====================================================
   // ADD TO CART
   // =====================================================
 
-  const handleAddToCart =
-    async () => {
-      if (
-        hasVariants &&
-        (!allRequiredOptionsSelected ||
-          !selectedVariant)
-      ) {
-        setCartError(
-          allRequiredOptionsSelected
-            ? "This variant is not available."
-            : "Please select all product options."
-        );
+  const handleAddToCart = async () => {
+    if (
+      hasVariants &&
+      (!allRequiredOptionsSelected || !selectedVariant)
+    ) {
+      setCartError(
+        allRequiredOptionsSelected
+          ? "This variant is not available."
+          : "Please select all product options."
+      );
 
+      return;
+    }
+
+    if (currentStock <= 0) {
+      setCartError("This product is out of stock.");
+      return;
+    }
+
+    if (quantity > currentStock) {
+      setCartError(
+        `Only ${currentStock} items are available.`
+      );
+
+      return;
+    }
+
+    try {
+      setAddingToCart(true);
+      setCartMessage("");
+      setCartError("");
+
+      const response = await addToCart(
+        product.id,
+        quantity,
+        selectedVariant?.id ?? null
+      );
+
+      if (response.status === 401) {
+        router.push("/login");
         return;
       }
 
-      if (currentStock <= 0) {
-        setCartError(
-          "This product is out of stock."
-        );
+      if (!response.success) {
+        const message =
+          response.data?.detail ||
+          "Unable to add product to cart.";
 
-        return;
+        throw new Error(message);
       }
 
-      if (
-        quantity > currentStock
-      ) {
-        setCartError(
-          `Only ${currentStock} items are available.`
-        );
+      // Immediately change the button after successful addition.
+      setIsProductInCart(true);
 
-        return;
-      }
+      setCartMessage(
+        `${quantity} ${
+          quantity === 1 ? "item" : "items"
+        } added to cart.`
+      );
 
-      try {
-        setAddingToCart(true);
+      window.setTimeout(() => {
         setCartMessage("");
-        setCartError("");
+      }, 3000);
+    } catch (error) {
+      console.error("Add to cart error:", error);
 
-        const response =
-          await addToCart(
-            product.id,
-            quantity,
-            selectedVariant?.id ??
-              null
-          );
-
-        if (
-          response.status === 401
-        ) {
-          router.push("/login");
-          return;
-        }
-
-        if (!response.success) {
-          const message =
-            response.data?.detail ||
-            "Unable to add product to cart.";
-
-          throw new Error(
-            message
-          );
-        }
-
-        setCartMessage(
-          `${quantity} ${
-            quantity === 1
-              ? "item"
-              : "items"
-          } added to cart.`
-        );
-
-        setTimeout(() => {
-          setCartMessage("");
-        }, 1000);
-      } catch (error) {
-        console.error(
-          "Add to cart error:",
-          error
-        );
-
-        setCartError(
-          error instanceof Error
-            ? error.message
-            : "Unable to add product to cart."
-        );
-      } finally {
-        setAddingToCart(false);
-      }
-    };
+      setCartError(
+        error instanceof Error
+          ? error.message
+          : "Unable to add product to cart."
+      );
+    } finally {
+      setAddingToCart(false);
+    }
+  };
 
   // =====================================================
   // BUY NOW
   // =====================================================
 
-  const handleBuyNow =
-    async () => {
-      if (
-        hasVariants &&
-        (!allRequiredOptionsSelected ||
-          !selectedVariant)
-      ) {
-        setCartError(
-          allRequiredOptionsSelected
-            ? "This variant is not available."
-            : "Please select all product options."
-        );
+  const handleBuyNow = async () => {
+    if (
+      hasVariants &&
+      (!allRequiredOptionsSelected || !selectedVariant)
+    ) {
+      setCartError(
+        allRequiredOptionsSelected
+          ? "This variant is not available."
+          : "Please select all product options."
+      );
 
+      return;
+    }
+
+    if (currentStock <= 0) {
+      setCartError("This product is out of stock.");
+      return;
+    }
+
+    if (quantity > currentStock) {
+      setCartError(
+        `Only ${currentStock} items are available.`
+      );
+
+      return;
+    }
+
+    try {
+      setBuyingNow(true);
+      setCartMessage("");
+      setCartError("");
+
+      const response = await addToCart(
+        product.id,
+        quantity,
+        selectedVariant?.id ?? null
+      );
+
+      if (response.status === 401) {
+        router.push("/login");
         return;
       }
 
-      if (currentStock <= 0) {
-        setCartError(
-          "This product is out of stock."
-        );
+      if (!response.success) {
+        const message =
+          response.data?.detail || "Unable to proceed.";
 
-        return;
+        throw new Error(message);
       }
 
-      if (
-        quantity > currentStock
-      ) {
-        setCartError(
-          `Only ${currentStock} items are available.`
-        );
+      setIsProductInCart(true);
+      router.push("/cart");
+    } catch (error) {
+      console.error("Buy now error:", error);
 
-        return;
-      }
-
-      try {
-        setBuyingNow(true);
-        setCartMessage("");
-        setCartError("");
-
-        const response =
-          await addToCart(
-            product.id,
-            quantity,
-            selectedVariant?.id ??
-              null
-          );
-
-        if (
-          response.status === 401
-        ) {
-          router.push("/login");
-          return;
-        }
-
-        if (!response.success) {
-          const message =
-            response.data?.detail ||
-            "Unable to proceed.";
-
-          throw new Error(
-            message
-          );
-        }
-
-        router.push("/cart");
-      } catch (error) {
-        console.error(
-          "Buy now error:",
-          error
-        );
-
-        setCartError(
-          error instanceof Error
-            ? error.message
-            : "Unable to proceed to cart."
-        );
-      } finally {
-        setBuyingNow(false);
-      }
-    };
+      setCartError(
+        error instanceof Error
+          ? error.message
+          : "Unable to proceed to cart."
+      );
+    } finally {
+      setBuyingNow(false);
+    }
+  };
 
   // =====================================================
   // IMAGE NAVIGATION
@@ -1465,28 +1188,24 @@ export default function ProductDetailsPage() {
       return;
     }
 
-    setSelectedImageIndex(
-      (currentIndex) =>
-        currentIndex >=
-        images.length - 1
-          ? 0
-          : currentIndex + 1
+    setSelectedImageIndex((currentIndex) =>
+      currentIndex >= images.length - 1
+        ? 0
+        : currentIndex + 1
     );
   };
 
-  const handlePreviousImage =
-    () => {
-      if (images.length <= 1) {
-        return;
-      }
+  const handlePreviousImage = () => {
+    if (images.length <= 1) {
+      return;
+    }
 
-      setSelectedImageIndex(
-        (currentIndex) =>
-          currentIndex <= 0
-            ? images.length - 1
-            : currentIndex - 1
-      );
-    };
+    setSelectedImageIndex((currentIndex) =>
+      currentIndex <= 0
+        ? images.length - 1
+        : currentIndex - 1
+    );
+  };
 
   // =====================================================
   // PAGE
@@ -1495,7 +1214,6 @@ export default function ProductDetailsPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5">
-
         <Link
           href="/products"
           className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900"
@@ -1505,24 +1223,15 @@ export default function ProductDetailsPage() {
         </Link>
 
         <section className="grid gap-4 lg:grid-cols-2">
-
           {/* GALLERY */}
 
           <div className="border border-gray-200 bg-white">
-
             <div className="relative overflow-hidden bg-white">
-
               <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
-
                 <button
                   type="button"
-                  onClick={
-                    handleWishlist
-                  }
-                  disabled={
-                    wishlistLoading ||
-                    wishlistBusy
-                  }
+                  onClick={handleWishlist}
+                  disabled={wishlistLoading || wishlistBusy}
                   aria-label={
                     isWishlisted
                       ? "Remove from wishlist"
@@ -1545,15 +1254,12 @@ export default function ProductDetailsPage() {
 
                 <button
                   type="button"
-                  onClick={
-                    handleShareProduct
-                  }
+                  onClick={handleShareProduct}
                   aria-label="Share product"
                   className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
                 >
                   <Share2 className="h-5 w-5" />
                 </button>
-
               </div>
 
               {hasDiscount && (
@@ -1563,7 +1269,6 @@ export default function ProductDetailsPage() {
               )}
 
               <div className="aspect-square">
-
                 {currentImage ? (
                   <img
                     src={currentImage}
@@ -1575,16 +1280,13 @@ export default function ProductDetailsPage() {
                     <Package className="h-16 w-16 text-gray-300" />
                   </div>
                 )}
-
               </div>
 
               {images.length > 1 && (
                 <>
                   <button
                     type="button"
-                    onClick={
-                      handlePreviousImage
-                    }
+                    onClick={handlePreviousImage}
                     className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50"
                     aria-label="Previous image"
                   >
@@ -1593,9 +1295,7 @@ export default function ProductDetailsPage() {
 
                   <button
                     type="button"
-                    onClick={
-                      handleNextImage
-                    }
+                    onClick={handleNextImage}
                     className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50"
                     aria-label="Next image"
                   >
@@ -1603,248 +1303,147 @@ export default function ProductDetailsPage() {
                   </button>
                 </>
               )}
-
             </div>
 
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto border-t border-gray-100 p-3">
-
-                {images.map(
-                  (image, index) => (
-                    <button
-                      key={image.id}
-                      type="button"
-                      onClick={() =>
-                        setSelectedImageIndex(
-                          index
-                        )
-                      }
-                      className={`h-14 w-14 shrink-0 overflow-hidden border-2 bg-gray-50 ${
-                        safeImageIndex ===
-                        index
-                          ? "border-gray-900"
-                          : "border-gray-200 hover:border-gray-400"
-                      }`}
-                    >
-                      <img
-                        src={
-                          image.image_url
-                        }
-                        alt={`${product.name} ${index + 1}`}
-                        className="h-full w-full object-cover"
-                      />
-                    </button>
-                  )
-                )}
-
+                {images.map((image, index) => (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() => setSelectedImageIndex(index)}
+                    className={`h-14 w-14 shrink-0 overflow-hidden border-2 bg-gray-50 ${
+                      safeImageIndex === index
+                        ? "border-gray-900"
+                        : "border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    <img
+                      src={image.image_url}
+                      alt={`${product.name} ${index + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
               </div>
             )}
-
           </div>
 
           {/* PRODUCT INFORMATION */}
 
           <div className="border border-gray-200 bg-white">
-
             <div className="p-4 sm:p-5">
-
               <div className="border-b border-gray-100 pb-4">
-
                 <h1 className="text-xl font-medium leading-7 text-gray-900 sm:text-2xl">
                   {product.name}
                 </h1>
 
                 <div className="mt-2 flex items-center gap-2">
-
                   <span className="inline-flex items-center gap-1 bg-green-600 px-2 py-1 text-xs font-semibold text-white">
-                    {(product.rating ?? 0).toFixed(
-                      1
-                    )}
+                    {(product.rating ?? 0).toFixed(1)}
                     <span>★</span>
                   </span>
 
                   <span className="text-xs text-gray-500">
-                    {product.reviews_count ??
-                      0}{" "}
-                    {(product.reviews_count ??
-                      0) === 1
+                    {product.reviews_count ?? 0}{" "}
+                    {(product.reviews_count ?? 0) === 1
                       ? "Rating"
                       : "Ratings"}
                   </span>
-
                 </div>
-
               </div>
 
               {/* OPTIONS */}
 
               {hasVariants && (
                 <div className="border-b border-gray-100 py-4">
-
                   <div className="space-y-5">
+                    {optionGroups.map((group) => {
+                      const selectedValueId =
+                        selectedOptions[group.id];
 
-                    {optionGroups.map(
-                      (group) => {
+                      const selectedValue = group.values.find(
+                        (value) => value.id === selectedValueId
+                      );
 
-                        const selectedValueId =
-                          selectedOptions[
-                            group.id
-                          ];
+                      return (
+                        <div key={group.id}>
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {group.name}
+                            </p>
 
-                        const selectedValue =
-                          group.values.find(
-                            (value) =>
-                              value.id ===
-                              selectedValueId
-                          );
-
-                        return (
-                          <div
-                            key={group.id}
-                          >
-
-                            <div className="mb-2 flex flex-wrap items-center gap-2">
-
-                              <p className="text-sm font-semibold text-gray-900">
-                                {group.name}
-                              </p>
-
-                              {selectedValue && (
-                                <span className="text-xs text-gray-500">
-                                  :{" "}
-                                  {
-                                    selectedValue.value
-                                  }
-                                </span>
-                              )}
-
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-
-                              {group.values.map(
-                                (value) => {
-
-                                  const isSelected =
-                                    selectedValueId ===
-                                    value.id;
-
-                                  const isAvailable =
-                                    isOptionValueAvailable(
-                                      group.id,
-                                      value.id
-                                    );
-
-                                  return (
-                                    <button
-                                      key={
-                                        value.id
-                                      }
-                                      type="button"
-                                      onClick={() =>
-                                        handleOptionSelect(
-                                          group,
-                                          value.id
-                                        )
-                                      }
-                                      disabled={
-                                        !isAvailable ||
-                                        addingToCart ||
-                                        buyingNow
-                                      }
-                                      title={
-                                        !isAvailable
-                                          ? "This option combination is unavailable"
-                                          : undefined
-                                      }
-                                      className={`min-h-9 border px-4 py-2 text-xs font-medium transition ${
-                                        isSelected
-                                          ? "border-gray-900 bg-gray-900 text-white"
-                                          : isAvailable
-                                            ? "border-gray-300 bg-white text-gray-700 hover:border-gray-700"
-                                            : "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-300 line-through"
-                                      } disabled:opacity-70`}
-                                    >
-                                      {
-                                        value.value
-                                      }
-                                    </button>
-                                  );
-                                }
-                              )}
-
-                            </div>
-
+                            {selectedValue && (
+                              <span className="text-xs text-gray-500">
+                                : {selectedValue.value}
+                              </span>
+                            )}
                           </div>
-                        );
-                      }
-                    )}
 
+                          <div className="flex flex-wrap gap-2">
+                            {group.values.map((value) => {
+                              const isSelected =
+                                selectedValueId === value.id;
+
+                              const isAvailable =
+                                isOptionValueAvailable(
+                                  group.id,
+                                  value.id
+                                );
+
+                              return (
+                                <button
+                                  key={value.id}
+                                  type="button"
+                                  onClick={() =>
+                                    handleOptionSelect(
+                                      group,
+                                      value.id
+                                    )
+                                  }
+                                  disabled={
+                                    !isAvailable ||
+                                    addingToCart ||
+                                    buyingNow
+                                  }
+                                  title={
+                                    !isAvailable
+                                      ? "This option combination is unavailable"
+                                      : undefined
+                                  }
+                                  className={`min-h-9 border px-4 py-2 text-xs font-medium transition ${
+                                    isSelected
+                                      ? "border-gray-900 bg-gray-900 text-white"
+                                      : isAvailable
+                                        ? "border-gray-300 bg-white text-gray-700 hover:border-gray-700"
+                                        : "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-300 line-through"
+                                  } disabled:opacity-70`}
+                                >
+                                  {value.value}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-
                 </div>
               )}
 
-              {/*{hasVariants &&
-                allRequiredOptionsSelected &&
-                !selectedVariant && (
-                  <div className="border-b border-gray-100 py-3">
-                    <p className="text-xs font-medium text-red-600">
-                      This combination is not available.
-                    </p>
-                  </div>
-                )}
-
-              {selectedVariant && (
-                <div className="border-b border-gray-100 py-3">
-
-                  <div className="flex flex-wrap items-center gap-3">
-
-                    {selectedVariant.sku && (
-                      <span className="text-xs text-gray-500">
-                        SKU:{" "}
-                        {selectedVariant.sku}
-                      </span>
-                    )}
-
-                    <span
-                      className={`text-xs font-medium ${
-                        currentStock > 0
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {currentStock > 0
-                        ? `${currentStock} units available`
-                        : "Out of stock"}
-                    </span>
-
-                  </div>
-
-                </div>
-              )}
-*/}
               {/* PRICE */}
 
               <div className="border-b border-gray-100 py-4">
-
                 <div className="flex flex-wrap items-center gap-2">
-
                   <span className="text-3xl font-semibold text-gray-900">
                     ₹
-                    {Number(
-                      currentPrice
-                    ).toLocaleString(
-                      "en-IN"
-                    )}
+                    {Number(currentPrice).toLocaleString("en-IN")}
                   </span>
 
                   {hasDiscount && (
                     <span className="text-sm text-gray-400 line-through">
                       ₹
-                      {Number(
-                        currentOriginalPrice
-                      ).toLocaleString(
+                      {Number(currentOriginalPrice).toLocaleString(
                         "en-IN"
                       )}
                     </span>
@@ -1852,23 +1451,19 @@ export default function ProductDetailsPage() {
 
                   {hasDiscount && (
                     <span className="text-sm font-semibold text-green-600">
-                      {discountPercentage}%
-                      off
+                      {discountPercentage}% off
                     </span>
                   )}
-
                 </div>
 
                 <p className="mt-1 text-xs text-gray-500">
                   Inclusive of all taxes
                 </p>
-
               </div>
 
               {/* STOCK */}
 
               <div className="border-b border-gray-100 py-4">
-
                 {currentStock > 0 ? (
                   <>
                     <p className="text-sm font-semibold text-green-600">
@@ -1890,14 +1485,12 @@ export default function ProductDetailsPage() {
                     </p>
                   </>
                 )}
-
               </div>
 
               {/* DESCRIPTION */}
 
               {product.description && (
                 <div className="border-b border-gray-100 py-4">
-
                   <h2 className="text-sm font-semibold text-gray-900">
                     Product Description
                   </h2>
@@ -1905,7 +1498,6 @@ export default function ProductDetailsPage() {
                   <p className="mt-2 whitespace-pre-line text-sm leading-5 text-gray-600">
                     {product.description}
                   </p>
-
                 </div>
               )}
 
@@ -1913,29 +1505,21 @@ export default function ProductDetailsPage() {
 
               {currentStock > 0 && (
                 <div className="border-b border-gray-100 py-4">
-
                   <div className="flex items-center justify-between">
-
                     <p className="text-sm font-semibold text-gray-900">
                       Quantity
                     </p>
 
                     <span className="text-xs text-gray-400">
-                      Max{" "}
-                      {currentStock}
+                      Max {currentStock}
                     </span>
-
                   </div>
 
                   <div className="mt-2 flex items-center justify-between gap-3">
-
                     <div className="inline-flex items-center border border-gray-300">
-
                       <button
                         type="button"
-                        onClick={
-                          handleDecreaseQuantity
-                        }
+                        onClick={handleDecreaseQuantity}
                         disabled={
                           quantity <= 1 ||
                           addingToCart ||
@@ -1952,12 +1536,9 @@ export default function ProductDetailsPage() {
 
                       <button
                         type="button"
-                        onClick={
-                          handleIncreaseQuantity
-                        }
+                        onClick={handleIncreaseQuantity}
                         disabled={
-                          quantity >=
-                            currentStock ||
+                          quantity >= currentStock ||
                           addingToCart ||
                           buyingNow
                         }
@@ -1965,24 +1546,18 @@ export default function ProductDetailsPage() {
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
-
                     </div>
 
                     <span className="text-sm text-gray-500">
                       Total:{" "}
                       <strong className="text-gray-900">
                         ₹
-                        {(
-                          currentPrice *
-                          quantity
-                        ).toLocaleString(
+                        {(currentPrice * quantity).toLocaleString(
                           "en-IN"
                         )}
                       </strong>
                     </span>
-
                   </div>
-
                 </div>
               )}
 
@@ -2004,33 +1579,42 @@ export default function ProductDetailsPage() {
 
               {currentStock > 0 && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
-
                   <button
                     type="button"
-                    onClick={
-                      handleAddToCart
-                    }
+                    onClick={() => {
+                      if (isProductInCart) {
+                        router.push("/cart");
+                        return;
+                      }
+
+                      void handleAddToCart();
+                    }}
                     disabled={
                       addingToCart ||
                       buyingNow ||
-                      (hasVariants &&
+                      (!isProductInCart &&
+                        hasVariants &&
                         (!allRequiredOptionsSelected ||
                           !selectedVariant))
                     }
-                    className="flex h-11 items-center justify-center gap-2 bg-orange-500 px-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={`flex h-11 items-center justify-center gap-2 px-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isProductInCart
+                        ? "bg-green-600 hover:bg-green-700"
+                        : "bg-orange-500 hover:bg-orange-600"
+                    }`}
                   >
                     <ShoppingCart className="h-4 w-4" />
 
                     {addingToCart
                       ? "Adding..."
-                      : "Add to Cart"}
+                      : isProductInCart
+                        ? "Go to Cart"
+                        : "Add to Cart"}
                   </button>
 
                   <button
                     type="button"
-                    onClick={
-                      handleBuyNow
-                    }
+                    onClick={handleBuyNow}
                     disabled={
                       addingToCart ||
                       buyingNow ||
@@ -2042,16 +1626,12 @@ export default function ProductDetailsPage() {
                   >
                     <Zap className="h-4 w-4" />
 
-                    {buyingNow
-                      ? "Processing..."
-                      : "Buy Now"}
+                    {buyingNow ? "Processing..." : "Buy Now"}
                   </button>
-
                 </div>
               )}
 
               <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-100 pt-4">
-
                 <span className="text-xs text-gray-500">
                   ✓ Secure Payment
                 </span>
@@ -2063,25 +1643,18 @@ export default function ProductDetailsPage() {
                 <span className="text-xs text-gray-500">
                   ✓ Easy Shopping
                 </span>
-
               </div>
-
             </div>
           </div>
-
         </section>
 
         {/* RATINGS */}
 
         <section className="mt-6">
-
           <div className="w-fit rounded-md border border-gray-200 bg-white">
-
             <button
               type="button"
-              onClick={() =>
-                setShowReviewsModal(true)
-              }
+              onClick={() => setShowReviewsModal(true)}
               className="group flex items-center gap-2 px-2.5 py-1.5 text-xs text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
             >
               <span className="font-medium">
@@ -2089,11 +1662,7 @@ export default function ProductDetailsPage() {
               </span>
 
               <span className="inline-flex items-center gap-0.5 text-gray-500">
-                {(
-                  product.rating ??
-                  0
-                ).toFixed(1)}
-
+                {(product.rating ?? 0).toFixed(1)}
                 <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
               </span>
 
@@ -2103,9 +1672,7 @@ export default function ProductDetailsPage() {
 
               <ChevronRight className="h-3 w-3 text-gray-400 transition group-hover:translate-x-0.5" />
             </button>
-
           </div>
-
         </section>
 
         {/* REVIEWS MODAL */}
@@ -2117,18 +1684,13 @@ export default function ProductDetailsPage() {
             aria-modal="true"
             aria-labelledby="reviews-modal-title"
             onMouseDown={(event) => {
-              if (
-                event.target ===
-                event.currentTarget
-              ) {
+              if (event.target === event.currentTarget) {
                 setShowReviewsModal(false);
               }
             }}
           >
             <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-lg">
-
               <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6">
-
                 <div>
                   <h2
                     id="reviews-modal-title"
@@ -2147,119 +1709,80 @@ export default function ProductDetailsPage() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowReviewsModal(false)
-                  }
+                  onClick={() => setShowReviewsModal(false)}
                   className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
                   aria-label="Close reviews"
                 >
                   <X className="h-5 w-5" />
                 </button>
-
               </div>
 
               <div className="flex-1 overflow-y-auto">
-
                 {/* REVIEW SUMMARY */}
 
                 <div className="grid border-b border-gray-200 sm:grid-cols-[190px_1fr]">
-
                   <div className="border-b border-gray-200 px-4 py-5 text-center sm:border-b-0 sm:border-r">
-
                     <div className="text-4xl font-bold text-gray-900">
-                      {averageRating.toFixed(
-                        1
-                      )}
+                      {averageRating.toFixed(1)}
                     </div>
 
                     <div className="mt-2 flex justify-center gap-0.5">
-
-                      {[1, 2, 3, 4, 5].map(
-                        (star) => (
-                          <Star
-                            key={star}
-                            className={`h-4 w-4 ${
-                              star <=
-                              Math.round(
-                                averageRating
-                              )
-                                ? "fill-yellow-400 text-yellow-400"
-                                : "text-gray-300"
-                            }`}
-                          />
-                        )
-                      )}
-
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-4 w-4 ${
+                            star <= Math.round(averageRating)
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-gray-300"
+                          }`}
+                        />
+                      ))}
                     </div>
 
                     <p className="mt-1.5 text-[11px] text-gray-500">
-                      Based on{" "}
-                      {reviewCount}{" "}
-                      {reviewCount ===
-                      1
-                        ? "review"
-                        : "reviews"}
+                      Based on {reviewCount}{" "}
+                      {reviewCount === 1 ? "review" : "reviews"}
                     </p>
-
                   </div>
 
                   <div className="px-4 py-5 sm:px-6">
-
                     <div className="space-y-2.5">
+                      {ratingDistribution.map((item) => (
+                        <div
+                          key={item.rating}
+                          className="flex items-center gap-2"
+                        >
+                          <span className="w-7 text-[11px] font-medium text-gray-600">
+                            {item.rating} ★
+                          </span>
 
-                      {ratingDistribution.map(
-                        (item) => (
-                          <div
-                            key={
-                              item.rating
-                            }
-                            className="flex items-center gap-2"
-                          >
-                            <span className="w-7 text-[11px] font-medium text-gray-600">
-                              {
-                                item.rating
-                              }{" "}
-                              ★
-                            </span>
-
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                              <div
-                                className="h-full rounded-full bg-yellow-400 transition-all"
-                                style={{
-                                  width: `${item.percentage}%`,
-                                }}
-                              />
-                            </div>
-
-                            <span className="w-7 text-right text-[11px] text-gray-400">
-                              {
-                                item.count
-                              }
-                            </span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-yellow-400 transition-all"
+                              style={{
+                                width: `${item.percentage}%`,
+                              }}
+                            />
                           </div>
-                        )
-                      )}
 
+                          <span className="w-7 text-right text-[11px] text-gray-400">
+                            {item.count}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-
                   </div>
-
                 </div>
 
                 {/* WRITE REVIEW */}
 
                 {isCustomer && (
                   <div className="border-b border-gray-200 bg-gray-50 px-4 py-5 sm:px-6">
-
                     <form
-                      onSubmit={
-                        handleSubmitReview
-                      }
+                      onSubmit={handleSubmitReview}
                       className="max-w-2xl"
                     >
-
                       <div className="flex flex-wrap items-center justify-between gap-3">
-
                         <div>
                           <h3 className="text-sm font-semibold text-gray-900">
                             Write a review
@@ -2271,50 +1794,34 @@ export default function ProductDetailsPage() {
                         </div>
 
                         <div className="flex items-center gap-1">
-
-                          {[1, 2, 3, 4, 5].map(
-                            (star) => (
-                              <button
-                                key={star}
-                                type="button"
-                                onClick={() =>
-                                  setReviewRating(
-                                    star
-                                  )
-                                }
-                                className="p-0.5"
-                                aria-label={`Rate ${star} out of 5`}
-                              >
-                                <Star
-                                  className={`h-5 w-5 ${
-                                    star <=
-                                    reviewRating
-                                      ? "fill-yellow-400 text-yellow-400"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              </button>
-                            )
-                          )}
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setReviewRating(star)}
+                              className="p-0.5"
+                              aria-label={`Rate ${star} out of 5`}
+                            >
+                              <Star
+                                className={`h-5 w-5 ${
+                                  star <= reviewRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            </button>
+                          ))}
 
                           <span className="ml-1 text-xs font-medium text-gray-500">
-                            {reviewRating}
-                            /5
+                            {reviewRating}/5
                           </span>
-
                         </div>
-
                       </div>
 
                       <textarea
-                        value={
-                          reviewComment
-                        }
+                        value={reviewComment}
                         onChange={(event) =>
-                          setReviewComment(
-                            event.target
-                              .value
-                          )
+                          setReviewComment(event.target.value)
                         }
                         rows={3}
                         maxLength={2000}
@@ -2323,30 +1830,21 @@ export default function ProductDetailsPage() {
                       />
 
                       <div className="mt-2 flex items-center justify-between">
-
                         <span className="text-[11px] text-gray-400">
-                          {
-                            reviewComment.length
-                          }
-                          /2000
+                          {reviewComment.length}/2000
                         </span>
 
                         <button
                           type="submit"
-                          disabled={
-                            reviewSubmitting
-                          }
+                          disabled={reviewSubmitting}
                           className="bg-gray-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {reviewSubmitting
                             ? "Submitting..."
                             : "Submit Review"}
                         </button>
-
                       </div>
-
                     </form>
-
                   </div>
                 )}
 
@@ -2359,57 +1857,40 @@ export default function ProductDetailsPage() {
                 {/* CUSTOMER REVIEWS */}
 
                 <div className="px-4 py-5 sm:px-6">
-
                   <div className="mb-4 flex items-center justify-between">
-
                     <h3 className="text-sm font-semibold text-gray-900">
                       Customer Reviews
                     </h3>
 
-                    {reviewCount >
-                      0 && (
+                    {reviewCount > 0 && (
                       <span className="text-[11px] text-gray-400">
                         Newest first
                       </span>
                     )}
-
                   </div>
 
                   {reviewsLoading ? (
                     <div className="space-y-5">
+                      {[1, 2, 3].map((item) => (
+                        <div
+                          key={item}
+                          className="animate-pulse border-b border-gray-100 pb-5"
+                        >
+                          <div className="flex gap-3">
+                            <div className="h-9 w-9 rounded-full bg-gray-100" />
 
-                      {[1, 2, 3].map(
-                        (item) => (
-                          <div
-                            key={item}
-                            className="animate-pulse border-b border-gray-100 pb-5"
-                          >
-                            <div className="flex gap-3">
-
-                              <div className="h-9 w-9 rounded-full bg-gray-100" />
-
-                              <div className="flex-1">
-
-                                <div className="h-3 w-28 rounded bg-gray-100" />
-
-                                <div className="mt-2 h-3 w-20 rounded bg-gray-100" />
-
-                                <div className="mt-4 h-3 w-full rounded bg-gray-100" />
-
-                                <div className="mt-2 h-3 w-4/5 rounded bg-gray-100" />
-
-                              </div>
-
+                            <div className="flex-1">
+                              <div className="h-3 w-28 rounded bg-gray-100" />
+                              <div className="mt-2 h-3 w-20 rounded bg-gray-100" />
+                              <div className="mt-4 h-3 w-full rounded bg-gray-100" />
+                              <div className="mt-2 h-3 w-4/5 rounded bg-gray-100" />
                             </div>
                           </div>
-                        )
-                      )}
-
+                        </div>
+                      ))}
                     </div>
-                  ) : reviews.length ===
-                    0 ? (
+                  ) : reviews.length === 0 ? (
                     <div className="py-10 text-center">
-
                       <Star className="mx-auto h-9 w-9 text-gray-300" />
 
                       <p className="mt-3 text-sm font-semibold text-gray-800">
@@ -2419,267 +1900,179 @@ export default function ProductDetailsPage() {
                       <p className="mt-1 text-xs text-gray-500">
                         Be the first customer to review this product.
                       </p>
-
                     </div>
                   ) : (
                     <div className="space-y-5">
+                      {reviews.map((review) => {
+                        const isOwnReview =
+                          String(currentUser?.id) ===
+                          String(review.user_id);
 
-                      {reviews.map(
-                        (review) => {
+                        const isEditing =
+                          editingReviewId === review.id;
 
-                          const isOwnReview =
-                            String(
-                              currentUser?.id
-                            ) ===
-                            String(
-                              review.user_id
-                            );
+                        const reviewerName =
+                          review.user_name?.trim() || "Customer";
 
-                          const isEditing =
-                            editingReviewId ===
-                            review.id;
+                        const reviewerInitial = reviewerName
+                          .charAt(0)
+                          .toUpperCase();
 
-                          const reviewerName =
-                            review.user_name?.trim() ||
-                            "Customer";
-
-                          const reviewerInitial =
-                            reviewerName
-                              .charAt(0)
-                              .toUpperCase();
-
-                          return (
-                            <article
-                              key={
-                                review.id
-                              }
-                              className="border-b border-gray-100 pb-5 last:border-b-0 last:pb-0"
-                            >
-
-                              <div className="flex items-start justify-between gap-3">
-
-                                <div className="flex min-w-0 items-start gap-3">
-
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
-                                    {
-                                      reviewerInitial
-                                    }
-                                  </div>
-
-                                  <div className="min-w-0">
-
-                                    <div className="flex flex-wrap items-center gap-2">
-
-                                      <span className="truncate text-sm font-semibold text-gray-900">
-                                        {
-                                          reviewerName
-                                        }
-                                      </span>
-
-                                      <span className="text-[10px] text-gray-400">
-                                        {new Date(
-                                          review.created_at
-                                        ).toLocaleDateString(
-                                          "en-IN",
-                                          {
-                                            day: "numeric",
-                                            month: "short",
-                                            year: "numeric",
-                                          }
-                                        )}
-                                      </span>
-
-                                    </div>
-
-                                    <div className="mt-1 flex items-center gap-2">
-
-                                      <div className="flex items-center">
-
-                                        {[1, 2, 3, 4, 5].map(
-                                          (star) => (
-                                            <Star
-                                              key={
-                                                star
-                                              }
-                                              className={`h-3.5 w-3.5 ${
-                                                star <=
-                                                review.rating
-                                                  ? "fill-yellow-400 text-yellow-400"
-                                                  : "text-gray-300"
-                                              }`}
-                                            />
-                                          )
-                                        )}
-
-                                      </div>
-
-                                      <span className="text-[10px] text-gray-400">
-                                        {
-                                          review.rating
-                                        }
-                                        /5
-                                      </span>
-
-                                    </div>
-
-                                  </div>
-
+                        return (
+                          <article
+                            key={review.id}
+                            className="border-b border-gray-100 pb-5 last:border-b-0 last:pb-0"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex min-w-0 items-start gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
+                                  {reviewerInitial}
                                 </div>
 
-                                {(isOwnReview ||
-                                  currentUser?.role ===
-                                    "admin") && (
-                                  <div className="flex shrink-0 items-center gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="truncate text-sm font-semibold text-gray-900">
+                                      {reviewerName}
+                                    </span>
 
-                                    {isOwnReview && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleStartEditReview(
-                                            review
-                                          )
-                                        }
-                                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
-                                      >
-                                        Edit
-                                      </button>
-                                    )}
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleDeleteReview(
-                                          review.id
-                                        )
-                                      }
-                                      disabled={
-                                        reviewDeletingId ===
-                                        review.id
-                                      }
-                                      className="text-[11px] font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
-                                    >
-                                      {reviewDeletingId ===
-                                      review.id
-                                        ? "Deleting..."
-                                        : "Delete"}
-                                    </button>
-
+                                    <span className="text-[10px] text-gray-400">
+                                      {new Date(
+                                        review.created_at
+                                      ).toLocaleDateString("en-IN", {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}
+                                    </span>
                                   </div>
-                                )}
 
-                              </div>
-
-                              {isEditing ? (
-                                <div className="mt-4 ml-12 rounded border border-gray-200 bg-gray-50 p-3">
-
-                                  <p className="text-xs font-semibold text-gray-700">
-                                    Edit your review
-                                  </p>
-
-                                  <div className="mt-2 flex items-center">
-
-                                    {[1, 2, 3, 4, 5].map(
-                                      (star) => (
-                                        <button
-                                          key={
-                                            star
-                                          }
-                                          type="button"
-                                          onClick={() =>
-                                            setEditRating(
-                                              star
-                                            )
-                                          }
-                                          className="p-1"
-                                          aria-label={`Set rating to ${star}`}
-                                        >
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <div className="flex items-center">
+                                      {[1, 2, 3, 4, 5].map(
+                                        (star) => (
                                           <Star
-                                            className={`h-4 w-4 ${
-                                              star <=
-                                              editRating
+                                            key={star}
+                                            className={`h-3.5 w-3.5 ${
+                                              star <= review.rating
                                                 ? "fill-yellow-400 text-yellow-400"
                                                 : "text-gray-300"
                                             }`}
                                           />
-                                        </button>
-                                      )
-                                    )}
+                                        )
+                                      )}
+                                    </div>
 
+                                    <span className="text-[10px] text-gray-400">
+                                      {review.rating}/5
+                                    </span>
                                   </div>
+                                </div>
+                              </div>
 
-                                  <textarea
-                                    value={
-                                      editComment
-                                    }
-                                    onChange={(
-                                      event
-                                    ) =>
-                                      setEditComment(
-                                        event
-                                          .target
-                                          .value
-                                      )
-                                    }
-                                    rows={3}
-                                    maxLength={
-                                      2000
-                                    }
-                                    className="mt-2 w-full resize-none border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
-                                  />
-
-                                  <div className="mt-2 flex justify-end gap-2">
-
-                                    <button
-                                      type="button"
-                                      onClick={
-                                        handleCancelEditReview
-                                      }
-                                      disabled={
-                                        reviewSubmitting
-                                      }
-                                      className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                      Cancel
-                                    </button>
-
+                              {(isOwnReview ||
+                                currentUser?.role === "admin") && (
+                                <div className="flex shrink-0 items-center gap-3">
+                                  {isOwnReview && (
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        handleUpdateReview(
-                                          review.id
-                                        )
+                                        handleStartEditReview(review)
                                       }
-                                      disabled={
-                                        reviewSubmitting
-                                      }
-                                      className="bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
                                     >
-                                      {reviewSubmitting
-                                        ? "Saving..."
-                                        : "Save"}
+                                      Edit
                                     </button>
+                                  )}
 
-                                  </div>
-
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDeleteReview(review.id)
+                                    }
+                                    disabled={
+                                      reviewDeletingId === review.id
+                                    }
+                                    className="text-[11px] font-semibold text-red-600 hover:text-red-800 disabled:opacity-50"
+                                  >
+                                    {reviewDeletingId === review.id
+                                      ? "Deleting..."
+                                      : "Delete"}
+                                  </button>
                                 </div>
-                              ) : (
-                                <p className="mt-3 ml-12 whitespace-pre-line text-sm leading-5 text-gray-600">
-                                  {
-                                    review.comment
-                                  }
-                                </p>
                               )}
+                            </div>
 
-                            </article>
-                          );
-                        }
-                      )}
+                            {isEditing ? (
+                              <div className="mt-4 ml-12 rounded border border-gray-200 bg-gray-50 p-3">
+                                <p className="text-xs font-semibold text-gray-700">
+                                  Edit your review
+                                </p>
 
+                                <div className="mt-2 flex items-center">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      onClick={() => setEditRating(star)}
+                                      className="p-1"
+                                      aria-label={`Set rating to ${star}`}
+                                    >
+                                      <Star
+                                        className={`h-4 w-4 ${
+                                          star <= editRating
+                                            ? "fill-yellow-400 text-yellow-400"
+                                            : "text-gray-300"
+                                        }`}
+                                      />
+                                    </button>
+                                  ))}
+                                </div>
+
+                                <textarea
+                                  value={editComment}
+                                  onChange={(event) =>
+                                    setEditComment(event.target.value)
+                                  }
+                                  rows={3}
+                                  maxLength={2000}
+                                  className="mt-2 w-full resize-none border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-gray-500"
+                                />
+
+                                <div className="mt-2 flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEditReview}
+                                    disabled={reviewSubmitting}
+                                    className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  >
+                                    Cancel
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateReview(review.id)
+                                    }
+                                    disabled={reviewSubmitting}
+                                    className="bg-gray-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                                  >
+                                    {reviewSubmitting
+                                      ? "Saving..."
+                                      : "Save"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="mt-3 ml-12 whitespace-pre-line text-sm leading-5 text-gray-600">
+                                {review.comment}
+                              </p>
+                            )}
+                          </article>
+                        );
+                      })}
                     </div>
                   )}
-
                 </div>
-
               </div>
             </div>
           </div>
@@ -2687,12 +2080,9 @@ export default function ProductDetailsPage() {
 
         {/* RELATED PRODUCTS */}
 
-        {relatedProducts.length >
-          0 && (
+        {relatedProducts.length > 0 && (
           <section className="mt-8">
-
             <div className="mb-4 border-b border-gray-200 pb-3">
-
               <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
                 More Products From This Category
               </h2>
@@ -2700,143 +2090,101 @@ export default function ProductDetailsPage() {
               <p className="mt-1 text-xs text-gray-500">
                 Explore similar products you may like.
               </p>
-
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {relatedProducts.map((item) => {
+                const relatedImages = item.images ?? [];
 
-              {relatedProducts.map(
-                (item) => {
+                const relatedImage =
+                  relatedImages.find((image) => image.is_primary)
+                    ?.image_url ||
+                  relatedImages[0]?.image_url ||
+                  item.image ||
+                  null;
 
-                  const relatedImages =
-                    item.images ?? [];
+                const itemHasDiscount =
+                  item.original_price != null &&
+                  item.original_price > item.price;
 
-                  const relatedImage =
-                    relatedImages.find(
-                      (image) =>
-                        image.is_primary
-                    )?.image_url ||
-                    relatedImages[0]
-                      ?.image_url ||
-                    item.image ||
-                    null;
+                const itemDiscount =
+                  itemHasDiscount && item.original_price
+                    ? Math.round(
+                        ((item.original_price - item.price) /
+                          item.original_price) *
+                          100
+                      )
+                    : 0;
 
-                  const itemHasDiscount =
-                    item.original_price !=
-                      null &&
-                    item.original_price >
-                      item.price;
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/products/${item.slug}`}
+                    className="group block"
+                  >
+                    <article className="overflow-hidden border border-gray-200 bg-white transition hover:border-gray-300 hover:shadow-md">
+                      <div className="relative aspect-square overflow-hidden bg-gray-50">
+                        {relatedImage ? (
+                          <img
+                            src={relatedImage}
+                            alt={item.name}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            <Package className="h-10 w-10 text-gray-300" />
+                          </div>
+                        )}
 
-                  const itemDiscount =
-                    itemHasDiscount &&
-                    item.original_price
-                      ? Math.round(
-                          ((item.original_price -
-                            item.price) /
-                            item.original_price) *
-                            100
-                        )
-                      : 0;
+                        {itemHasDiscount && (
+                          <span className="absolute left-2 top-2 bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                            {itemDiscount}% OFF
+                          </span>
+                        )}
+                      </div>
 
-                  return (
-                    <Link
-                      key={item.id}
-                      href={`/products/${item.slug}`}
-                      className="group block"
-                    >
+                      <div className="p-3">
+                        <h3 className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-gray-900">
+                          {item.name}
+                        </h3>
 
-                      <article className="overflow-hidden border border-gray-200 bg-white transition hover:border-gray-300 hover:shadow-md">
-
-                        <div className="relative aspect-square overflow-hidden bg-gray-50">
-
-                          {relatedImage ? (
-                            <img
-                              src={
-                                relatedImage
-                              }
-                              alt={
-                                item.name
-                              }
-                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center">
-                              <Package className="h-10 w-10 text-gray-300" />
-                            </div>
-                          )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-base font-semibold text-gray-900">
+                            ₹
+                            {Number(item.price).toLocaleString(
+                              "en-IN"
+                            )}
+                          </p>
 
                           {itemHasDiscount && (
-                            <span className="absolute left-2 top-2 bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                              {
-                                itemDiscount
-                              }
-                              % OFF
-                            </span>
-                          )}
-
-                        </div>
-
-                        <div className="p-3">
-
-                          <h3 className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-gray-900">
-                            {
-                              item.name
-                            }
-                          </h3>
-
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-
-                            <p className="text-base font-semibold text-gray-900">
+                            <span className="text-xs text-gray-400 line-through">
                               ₹
                               {Number(
-                                item.price
-                              ).toLocaleString(
-                                "en-IN"
-                              )}
-                            </p>
-
-                            {itemHasDiscount && (
-                              <span className="text-xs text-gray-400 line-through">
-                                ₹
-                                {Number(
-                                  item.original_price
-                                ).toLocaleString(
-                                  "en-IN"
-                                )}
-                              </span>
-                            )}
-
-                          </div>
-
-                          <div className="mt-1">
-
-                            {item.stock >
-                            0 ? (
-                              <span className="text-[11px] font-medium text-green-600">
-                                In stock
-                              </span>
-                            ) : (
-                              <span className="text-[11px] font-medium text-red-600">
-                                Out of stock
-                              </span>
-                            )}
-
-                          </div>
-
+                                item.original_price
+                              ).toLocaleString("en-IN")}
+                            </span>
+                          )}
                         </div>
 
-                      </article>
-
-                    </Link>
-                  );
-                }
-              )}
-
+                        <div className="mt-1">
+                          {item.stock > 0 ? (
+                            <span className="text-[11px] font-medium text-green-600">
+                              In stock
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium text-red-600">
+                              Out of stock
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })}
             </div>
-
           </section>
         )}
-
       </div>
     </main>
   );
