@@ -1,7 +1,7 @@
+
 import { apiFetch } from "./api";
 
-
- // =====================================================
+// =====================================================
 // PAYMENT METHOD
 // =====================================================
 
@@ -9,7 +9,6 @@ export type PaymentMethod =
   | "stripe"
   | "razorpay"
   | "cod";
-
 
 // =====================================================
 // ORDER ITEM CREATE
@@ -98,6 +97,17 @@ export interface Shipment {
 }
 
 // =====================================================
+// SHIPMENT STATUS UPDATE RESPONSE
+// =====================================================
+
+export interface ShipmentStatusUpdate {
+  message: string;
+  order_status: string;
+  payment_status: string;
+  shipment: Shipment;
+}
+
+// =====================================================
 // CUSTOMER ORDER SHIPMENTS
 // =====================================================
 
@@ -157,13 +167,10 @@ export interface SellerRevenue {
 export async function createOrder(
   data: OrderCreateData
 ): Promise<Order> {
-  const response = await apiFetch(
-    "/orders/",
-    {
-      method: "POST",
-      body: JSON.stringify(data),
-    }
-  );
+  const response = await apiFetch("/orders/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
   if (!response.success) {
     throw new Error(
@@ -343,13 +350,13 @@ export async function getSellerShipments(): Promise<Shipment[]> {
 }
 
 // =====================================================
-// SELLER - UPDATE SHIPMENT STATUS
+// SELLER - UPDATE SHIPMENT STATUS AND ORDER STATUS
 // =====================================================
 
-export async function updateShipmentStatus(
+export async function updateShipmentStatusWithOrder(
   shipmentId: number,
   newStatus: string
-): Promise<Shipment> {
+): Promise<ShipmentStatusUpdate> {
   const response = await apiFetch(
     `/shipments/seller/${shipmentId}/status?new_status=${encodeURIComponent(
       newStatus
@@ -366,7 +373,24 @@ export async function updateShipmentStatus(
     );
   }
 
-  return response.data.shipment as Shipment;
+  return response.data as ShipmentStatusUpdate;
+}
+
+// =====================================================
+// SELLER - UPDATE SHIPMENT STATUS
+// Maintains the existing Shipment return type.
+// =====================================================
+
+export async function updateShipmentStatus(
+  shipmentId: number,
+  newStatus: string
+): Promise<Shipment> {
+  const result = await updateShipmentStatusWithOrder(
+    shipmentId,
+    newStatus
+  );
+
+  return result.shipment;
 }
 
 // =====================================================
