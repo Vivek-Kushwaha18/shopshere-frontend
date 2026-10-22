@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -7,7 +8,6 @@ import {
   Plus,
   Pencil,
   CreditCard,
-  Banknote,
   Tag,
   X,
   CheckCircle2,
@@ -45,6 +45,7 @@ import {
 } from "@/services/coupons";
 import {
   createPaymentIntent,
+  createSavedCardPaymentIntent,
   createRazorpayOrder,
   verifyRazorpayPayment,
   getSavedCards,
@@ -64,12 +65,13 @@ import {
 
 const BLUE = "#2874F0";
 
-type CheckoutPaymentOption =
-  | "stripe"
+type CheckoutPaymentOption = "stripe" | "razorpay" | "cod";
+type RazorpayPaymentOption =
+  | "upi"
   | "upi_qr"
+  | "card"
   | "netbanking"
-  | "wallet"
-  | "cod";
+  | "wallet";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
@@ -89,31 +91,23 @@ declare global {
         razorpay_payment_id: string;
         razorpay_signature: string;
       }) => void | Promise<void>;
-      modal?: {
-        ondismiss?: () => void;
-      };
+      modal?: { ondismiss?: () => void };
       prefill?: {
         name?: string;
         email?: string;
         contact?: string;
       };
-      theme?: {
-        color?: string;
-      };
+      theme?: { color?: string };
       config?: {
         display?: {
           blocks?: {
             shopsphere?: {
               name: string;
-              instruments: {
-                method: string;
-              }[];
+              instruments: { method: string }[];
             };
           };
           sequence?: string[];
-          preferences?: {
-            show_default_blocks?: boolean;
-          };
+          preferences?: { show_default_blocks?: boolean };
         };
       };
     }) => {
@@ -121,9 +115,7 @@ declare global {
       on: (
         event: string,
         callback: (response: {
-          error?: {
-            description?: string;
-          };
+          error?: { description?: string };
         }) => void
       ) => void;
     };
@@ -144,26 +136,17 @@ function loadRazorpayScript(): Promise<boolean> {
       );
 
     if (existingScript) {
-      const handleLoad = () => {
-        resolve(Boolean(window.Razorpay));
-      };
-
-      const handleError = () => {
-        resolve(false);
-      };
-
-      existingScript.addEventListener("load", handleLoad, {
-        once: true,
-      });
-
-      existingScript.addEventListener("error", handleError, {
-        once: true,
-      });
-
-      if (window.Razorpay) {
-        resolve(true);
-      }
-
+      existingScript.addEventListener(
+        "load",
+        () => resolve(Boolean(window.Razorpay)),
+        { once: true }
+      );
+      existingScript.addEventListener(
+        "error",
+        () => resolve(false),
+        { once: true }
+      );
+      if (window.Razorpay) resolve(true);
       return;
     }
 
@@ -172,7 +155,6 @@ function loadRazorpayScript(): Promise<boolean> {
     script.async = true;
     script.onload = () => resolve(Boolean(window.Razorpay));
     script.onerror = () => resolve(false);
-
     document.body.appendChild(script);
   });
 }
@@ -192,17 +174,20 @@ function PaymentForm({
   onSuccess,
   onCancel,
   processing,
+  clientSecret,
+  selectedSavedCardId,
 }: {
   onSuccess: () => Promise<void>;
   onCancel: () => Promise<void>;
   processing: boolean;
+  clientSecret: string;
+  selectedSavedCardId: string | null;
 }) {
   const stripe = useStripe();
   const elements = useElements();
 
   const [paymentError, setPaymentError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
   const paymentSubmitInProgress = useRef(false);
 
   async function handlePayment(
@@ -212,7 +197,7 @@ function PaymentForm({
 
     if (
       !stripe ||
-      !elements ||
+      (!selectedSavedCardId && !elements) ||
       paymentSubmitInProgress.current ||
       submitting ||
       processing
@@ -225,17 +210,38 @@ function PaymentForm({
     setSubmitting(true);
 
     try {
-      const { error, paymentIntent } =
-        await stripe.confirmPayment({
-          elements,
+      let paymentIntent;
+
+      if (selectedSavedCardId) {
+        const result = await stripe.confirmCardPayment(
+          clientSecret,
+          { payment_method: selectedSavedCardId }
+        );
+
+        if (result.error) {
+          setPaymentError(
+            result.error.message ||
+              "Saved-card payment failed. Please try again."
+          );
+          return;
+        }
+
+        paymentIntent = result.paymentIntent;
+      } else {
+        const result = await stripe.confirmPayment({
+          elements: elements!,
           redirect: "if_required",
         });
 
-      if (error) {
-        setPaymentError(
-          error.message || "Payment failed. Please try again."
-        );
-        return;
+        if (result.error) {
+          setPaymentError(
+            result.error.message ||
+              "Payment failed. Please try again."
+          );
+          return;
+        }
+
+        paymentIntent = result.paymentIntent;
       }
 
       if (paymentIntent?.status === "succeeded") {
@@ -267,9 +273,25 @@ function PaymentForm({
 
   return (
     <form onSubmit={handlePayment} className="space-y-5">
-      <div className="border border-gray-200 bg-white p-4 sm:p-6">
-        <PaymentElement />
-      </div>
+      {selectedSavedCardId ? (
+        <div className="border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-center gap-3">
+            <CreditCard className="h-6 w-6 text-[#2874F0]" />
+            <div>
+              <p className="text-sm font-semibold text-gray-900">
+                Saved card selected
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Your payment will use your selected saved card.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="border border-gray-200 bg-white p-4 sm:p-6">
+          <PaymentElement />
+        </div>
+      )}
 
       {paymentError && (
         <div
@@ -292,7 +314,7 @@ function PaymentForm({
 
         <button
           type="submit"
-          disabled={!stripe || !elements || processing || submitting}
+          disabled={!stripe || processing || submitting}
           className="flex flex-1 items-center justify-center gap-2 bg-[#2874F0] px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
         >
           {processing || submitting ? (
@@ -332,11 +354,9 @@ function SectionHeading({
           number
         )}
       </span>
-
       <h2 className="text-sm font-bold uppercase tracking-wide text-gray-700">
         {title}
       </h2>
-
       {completed && (
         <span className="ml-auto text-xs font-semibold text-green-600">
           Completed
@@ -350,7 +370,6 @@ export default function CheckoutPage() {
   const router = useRouter();
 
   const initialLoadStarted = useRef(false);
-
   const orderSubmissionInProgress = useRef(false);
   const addressSaveInProgress = useRef(false);
   const couponValidationInProgress = useRef(false);
@@ -378,7 +397,9 @@ export default function CheckoutPage() {
     useState<number | null>(null);
 
   const [paymentMethod, setPaymentMethod] =
-    useState<CheckoutPaymentOption>("upi_qr");
+    useState<CheckoutPaymentOption>("razorpay");
+  const [razorpayMethod, setRazorpayMethod] =
+    useState<RazorpayPaymentOption>("upi_qr");
 
   const [razorpayQr, setRazorpayQr] =
     useState<RazorpayQrResponse | null>(null);
@@ -389,6 +410,8 @@ export default function CheckoutPage() {
   const [saveCard, setSaveCard] = useState(false);
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [loadingSavedCards, setLoadingSavedCards] = useState(false);
+  const [selectedSavedCardId, setSelectedSavedCardId] =
+    useState<string | null>(null);
 
   const [addressForm, setAddressForm] =
     useState<AddressCreateData>({ ...emptyAddressForm });
@@ -405,14 +428,10 @@ export default function CheckoutPage() {
       setCart(await getCart());
     } catch (error) {
       console.error("Failed to load cart:", error);
-
       await Swal.fire({
         icon: "error",
         title: "Unable to Load Cart",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Please try again.",
+        text: error instanceof Error ? error.message : "Please try again.",
       });
     } finally {
       setLoadingCart(false);
@@ -422,7 +441,6 @@ export default function CheckoutPage() {
   const loadAddresses = useCallback(async () => {
     try {
       setLoadingAddresses(true);
-
       const data = await getAddresses();
       setAddresses(data);
 
@@ -433,21 +451,14 @@ export default function CheckoutPage() {
         const defaultAddress = data.find(
           (address) => address.is_default
         );
-
-        setSelectedAddressId(
-          defaultAddress?.id ?? data[0].id
-        );
+        setSelectedAddressId(defaultAddress?.id ?? data[0].id);
       }
     } catch (error) {
       console.error("Failed to load addresses:", error);
-
       await Swal.fire({
         icon: "error",
         title: "Unable to Load Addresses",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Please try again.",
+        text: error instanceof Error ? error.message : "Please try again.",
       });
     } finally {
       setLoadingAddresses(false);
@@ -455,27 +466,20 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    if (initialLoadStarted.current) {
-      return;
-    }
-
+    if (initialLoadStarted.current) return;
     initialLoadStarted.current = true;
-
     void loadCart();
     void loadAddresses();
   }, [loadCart, loadAddresses]);
 
   useEffect(() => {
-    if (paymentMethod !== "stripe") {
-      return;
-    }
+    if (paymentMethod !== "stripe") return;
 
     let active = true;
 
     async function loadCards() {
       try {
         setLoadingSavedCards(true);
-
         const cards = await getSavedCards();
 
         if (active) {
@@ -483,14 +487,9 @@ export default function CheckoutPage() {
         }
       } catch (error) {
         console.error("Unable to load saved cards:", error);
-
-        if (active) {
-          setSavedCards([]);
-        }
+        if (active) setSavedCards([]);
       } finally {
-        if (active) {
-          setLoadingSavedCards(false);
-        }
+        if (active) setLoadingSavedCards(false);
       }
     }
 
@@ -507,21 +506,14 @@ export default function CheckoutPage() {
     >
   ) {
     const { name, value } = event.target;
-
-    setAddressForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+    setAddressForm((previous) => ({ ...previous, [name]: value }));
   }
 
   async function handleCreateAddress(
     event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
-
-    if (addressSaveInProgress.current) {
-      return;
-    }
+    if (addressSaveInProgress.current) return;
 
     if (
       addressForm.full_name.trim().length < 2 ||
@@ -543,7 +535,6 @@ export default function CheckoutPage() {
 
     try {
       setSavingAddress(true);
-
       const newAddress = await createAddress({
         full_name: addressForm.full_name.trim(),
         phone: addressForm.phone.trim(),
@@ -556,7 +547,6 @@ export default function CheckoutPage() {
       });
 
       const updatedAddresses = await getAddresses();
-
       setAddresses(updatedAddresses);
       setSelectedAddressId(newAddress.id);
       setShowNewAddressForm(false);
@@ -570,14 +560,10 @@ export default function CheckoutPage() {
       });
     } catch (error) {
       console.error("Failed to save address:", error);
-
       await Swal.fire({
         icon: "error",
         title: "Unable to Save Address",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Please try again.",
+        text: error instanceof Error ? error.message : "Please try again.",
       });
     } finally {
       addressSaveInProgress.current = false;
@@ -597,9 +583,7 @@ export default function CheckoutPage() {
   }
 
   async function handleApplyCoupon() {
-    if (couponValidationInProgress.current || couponLoading) {
-      return;
-    }
+    if (couponValidationInProgress.current || couponLoading) return;
 
     if (!cart || !couponCode.trim()) {
       await Swal.fire({
@@ -614,12 +598,7 @@ export default function CheckoutPage() {
 
     try {
       setCouponLoading(true);
-
-      const coupon = await validateCoupon(
-        couponCode.trim(),
-        cart.total
-      );
-
+      const coupon = await validateCoupon(couponCode.trim(), cart.total);
       setAppliedCoupon(coupon);
       setCouponCode(coupon.code);
 
@@ -632,14 +611,10 @@ export default function CheckoutPage() {
       });
     } catch (error) {
       setAppliedCoupon(null);
-
       await Swal.fire({
         icon: "error",
         title: "Invalid Coupon",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Unable to apply coupon.",
+        text: error instanceof Error ? error.message : "Unable to apply coupon.",
       });
     } finally {
       couponValidationInProgress.current = false;
@@ -653,21 +628,15 @@ export default function CheckoutPage() {
 
   async function handleRazorpayPayment(
     orderId: number,
-    method: "netbanking" | "wallet"
+    method: "upi" | "card" | "netbanking" | "wallet"
   ) {
-    if (
-      razorpayPaymentInProgress.current ||
-      razorpayProcessing
-    ) {
-      return;
-    }
+    if (razorpayPaymentInProgress.current || razorpayProcessing) return;
 
     razorpayPaymentInProgress.current = true;
     setRazorpayProcessing(true);
 
     try {
       const scriptLoaded = await loadRazorpayScript();
-
       if (!scriptLoaded || !window.Razorpay) {
         throw new Error(
           "Unable to load Razorpay Checkout. Check your internet connection and try again."
@@ -675,31 +644,27 @@ export default function CheckoutPage() {
       }
 
       const RazorpayCheckout = window.Razorpay;
-
-      const razorpayOrder = await createRazorpayOrder({
-        order_id: orderId,
-      });
+      const razorpayOrder = await createRazorpayOrder({ order_id: orderId });
 
       await new Promise<void>((resolve, reject) => {
         let completed = false;
         let verificationStarted = false;
 
         function finish(error?: Error) {
-          if (completed) {
-            return;
-          }
-
+          if (completed) return;
           completed = true;
-
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
+          if (error) reject(error);
+          else resolve();
         }
 
         const selectedMethodLabel =
-          method === "netbanking" ? "Net Banking" : "Wallet";
+          method === "netbanking"
+            ? "Net Banking"
+            : method === "wallet"
+              ? "Wallet"
+              : method === "card"
+                ? "Card"
+                : "UPI";
 
         const checkout = new RazorpayCheckout({
           key: razorpayOrder.key_id,
@@ -708,11 +673,7 @@ export default function CheckoutPage() {
           name: "ShopSphere",
           description: `${selectedMethodLabel} payment for Order #${orderId}`,
           order_id: razorpayOrder.razorpay_order_id,
-
-          theme: {
-            color: BLUE,
-          },
-
+          theme: { color: BLUE },
           config: {
             display: {
               blocks: {
@@ -722,17 +683,11 @@ export default function CheckoutPage() {
                 },
               },
               sequence: ["block.shopsphere"],
-              preferences: {
-                show_default_blocks: false,
-              },
+              preferences: { show_default_blocks: false },
             },
           },
-
           handler: async (result) => {
-            if (verificationStarted || completed) {
-              return;
-            }
-
+            if (verificationStarted || completed) return;
             verificationStarted = true;
 
             try {
@@ -744,8 +699,7 @@ export default function CheckoutPage() {
               });
 
               if (
-                (verification as { verified?: boolean }).verified !==
-                true
+                (verification as { verified?: boolean }).verified !== true
               ) {
                 throw new Error(
                   "Payment has not been verified. Check My Orders before trying again."
@@ -755,10 +709,7 @@ export default function CheckoutPage() {
               try {
                 await clearCart();
               } catch (error) {
-                console.error(
-                  "Unable to clear cart after payment:",
-                  error
-                );
+                console.error("Unable to clear cart after payment:", error);
               }
 
               await Swal.fire({
@@ -778,7 +729,6 @@ export default function CheckoutPage() {
               );
             }
           },
-
           modal: {
             ondismiss: () => {
               finish(
@@ -793,8 +743,7 @@ export default function CheckoutPage() {
         checkout.on("payment.failed", (result) => {
           finish(
             new Error(
-              result.error?.description ||
-                "Razorpay payment failed."
+              result.error?.description || "Razorpay payment failed."
             )
           );
         });
@@ -805,10 +754,7 @@ export default function CheckoutPage() {
       await Swal.fire({
         icon: "error",
         title: "Payment Not Confirmed",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Check My Orders before trying again.",
+        text: error instanceof Error ? error.message : "Check My Orders before trying again.",
       });
     } finally {
       razorpayPaymentInProgress.current = false;
@@ -817,20 +763,15 @@ export default function CheckoutPage() {
   }
 
   async function handleRazorpayQrPayment(orderId: number) {
-    if (razorpayQrCreationInProgress.current) {
-      return;
-    }
+    if (razorpayQrCreationInProgress.current) return;
 
     razorpayQrCreationInProgress.current = true;
-
     setQrError("");
     setRazorpayQr(null);
     setQrOrderId(null);
 
     try {
-      const qr = await createRazorpayQr({
-        order_id: orderId,
-      });
+      const qr = await createRazorpayQr({ order_id: orderId });
 
       if (!qr.image_url) {
         throw new Error(
@@ -842,11 +783,8 @@ export default function CheckoutPage() {
       setQrOrderId(orderId);
     } catch (error) {
       setQrError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create the UPI QR code."
+        error instanceof Error ? error.message : "Unable to create the UPI QR code."
       );
-
       throw error;
     } finally {
       razorpayQrCreationInProgress.current = false;
@@ -854,9 +792,7 @@ export default function CheckoutPage() {
   }
 
   useEffect(() => {
-    if (!razorpayQr || qrOrderId === null) {
-      return;
-    }
+    if (!razorpayQr || qrOrderId === null) return;
 
     let active = true;
     let finished = false;
@@ -875,9 +811,7 @@ export default function CheckoutPage() {
       qrStatusCheckInProgress.current = true;
 
       try {
-        const result = await getRazorpayQrStatus({
-          order_id: qrOrderId,
-        });
+        const result = await getRazorpayQrStatus({ order_id: qrOrderId });
 
         if (
           active &&
@@ -885,23 +819,15 @@ export default function CheckoutPage() {
           result.payment_status === "paid"
         ) {
           finished = true;
-
-          if (timer) {
-            clearInterval(timer);
-          }
+          if (timer) clearInterval(timer);
 
           try {
             await clearCart();
           } catch (error) {
-            console.error(
-              "Unable to clear cart after QR payment:",
-              error
-            );
+            console.error("Unable to clear cart after QR payment:", error);
           }
 
-          if (!active) {
-            return;
-          }
+          if (!active) return;
 
           await Swal.fire({
             icon: "success",
@@ -910,35 +836,22 @@ export default function CheckoutPage() {
             confirmButtonText: "View Orders",
           });
 
-          if (active) {
-            router.push("/orders");
-          }
+          if (active) router.push("/orders");
         }
       } catch (error) {
-        console.error(
-          "Unable to check Razorpay QR payment status:",
-          error
-        );
+        console.error("Unable to check Razorpay QR payment status:", error);
       } finally {
         qrStatusCheckInProgress.current = false;
       }
     }
 
     setQrChecking(true);
-
     void checkQrPayment();
-
-    timer = setInterval(() => {
-      void checkQrPayment();
-    }, 3000);
+    timer = setInterval(() => void checkQrPayment(), 3000);
 
     return () => {
       active = false;
-
-      if (timer) {
-        clearInterval(timer);
-      }
-
+      if (timer) clearInterval(timer);
       setQrChecking(false);
     };
   }, [razorpayQr, qrOrderId, router]);
@@ -1016,29 +929,29 @@ export default function CheckoutPage() {
         return;
       }
 
-      if (paymentMethod === "upi_qr") {
-        await handleRazorpayQrPayment(order.id);
+      if (paymentMethod === "razorpay") {
+        if (razorpayMethod === "upi_qr") {
+          await handleRazorpayQrPayment(order.id);
+        } else {
+          await handleRazorpayPayment(order.id, razorpayMethod);
+        }
         return;
       }
 
-      if (
-        paymentMethod === "netbanking" ||
-        paymentMethod === "wallet"
-      ) {
-        await handleRazorpayPayment(order.id, paymentMethod);
-        return;
-      }
-
-      const payment = await createPaymentIntent({
-        order_id: order.id,
-        save_card: saveCard,
-      });
+      const payment = selectedSavedCardId
+        ? await createSavedCardPaymentIntent({
+            order_id: order.id,
+            payment_method_id: selectedSavedCardId,
+          })
+        : await createPaymentIntent({
+            order_id: order.id,
+            save_card: saveCard,
+          });
 
       setPaymentOrderId(order.id);
       setPaymentClientSecret(payment.client_secret);
     } catch (error) {
       console.error("Checkout failed:", error);
-
       await Swal.fire({
         icon: "error",
         title: "Unable to Continue",
@@ -1053,18 +966,10 @@ export default function CheckoutPage() {
     }
   }
 
-  // FIX: Confirm the Stripe order with one API request.
-  // The ref prevents duplicate confirmation requests.
   async function handlePaymentSuccess() {
-    if (
-      paymentOrderId === null ||
-      paymentSuccessInProgress.current
-    ) {
-      return;
-    }
+    if (paymentOrderId === null || paymentSuccessInProgress.current) return;
 
     paymentSuccessInProgress.current = true;
-
     const orderId = paymentOrderId;
     setPaymentProcessing(true);
 
@@ -1087,10 +992,7 @@ export default function CheckoutPage() {
       try {
         await clearCart();
       } catch (error) {
-        console.error(
-          "Unable to clear cart after payment:",
-          error
-        );
+        console.error("Unable to clear cart after payment:", error);
       }
 
       await Swal.fire({
@@ -1103,7 +1005,6 @@ export default function CheckoutPage() {
       router.push("/orders");
     } catch (error) {
       console.error("Payment confirmation failed:", error);
-
       await Swal.fire({
         icon: "warning",
         title: "Payment Status Could Not Be Verified",
@@ -1111,7 +1012,6 @@ export default function CheckoutPage() {
           "We could not verify your payment status. Please check My Orders before attempting another payment. Your cart has been preserved.",
         confirmButtonText: "View Orders",
       });
-
       router.push("/orders");
     } finally {
       setPaymentProcessing(false);
@@ -1119,9 +1019,7 @@ export default function CheckoutPage() {
   }
 
   async function handleCancelPayment() {
-    if (paymentProcessing) {
-      return;
-    }
+    if (paymentProcessing) return;
 
     setPaymentProcessing(true);
 
@@ -1132,7 +1030,7 @@ export default function CheckoutPage() {
 
       setPaymentClientSecret(null);
       setPaymentOrderId(null);
-
+      setSelectedSavedCardId(null);
       paymentSuccessInProgress.current = false;
 
       await Swal.fire({
@@ -1143,14 +1041,10 @@ export default function CheckoutPage() {
       });
     } catch (error) {
       console.error("Unable to cancel order:", error);
-
       await Swal.fire({
         icon: "warning",
         title: "Unable to Cancel Order",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Check My Orders before trying again.",
+        text: error instanceof Error ? error.message : "Check My Orders before trying again.",
       });
     } finally {
       setPaymentProcessing(false);
@@ -1170,6 +1064,29 @@ export default function CheckoutPage() {
     addresses.length === 0 ||
     selectedAddressId === null ||
     showNewAddressForm;
+
+  const razorpayMethodLabel =
+    razorpayMethod === "upi"
+      ? "UPI"
+      : razorpayMethod === "upi_qr"
+        ? "UPI QR Code"
+        : razorpayMethod === "card"
+          ? "Cards"
+          : razorpayMethod === "netbanking"
+            ? "Net Banking"
+            : "Wallets";
+
+  const submitButtonLabel = placingOrder
+    ? "Preparing Order..."
+    : razorpayProcessing
+      ? "Waiting for Payment..."
+      : paymentMethod === "cod"
+        ? "Place Order"
+        : paymentMethod === "stripe"
+          ? "Continue to Stripe"
+          : razorpayMethod === "upi_qr"
+            ? "Generate UPI QR"
+            : `Continue to Razorpay ${razorpayMethodLabel}`;
 
   if (loadingCart) {
     return (
@@ -1205,6 +1122,7 @@ export default function CheckoutPage() {
 
             <div className="p-5 sm:p-7">
               <Elements
+                key={`${paymentOrderId}-${selectedSavedCardId ?? "new-card"}`}
                 stripe={stripePromise}
                 options={{
                   clientSecret: paymentClientSecret,
@@ -1221,6 +1139,8 @@ export default function CheckoutPage() {
                   onSuccess={handlePaymentSuccess}
                   onCancel={handleCancelPayment}
                   processing={paymentProcessing}
+                  clientSecret={paymentClientSecret}
+                  selectedSavedCardId={selectedSavedCardId}
                 />
               </Elements>
             </div>
@@ -1239,9 +1159,7 @@ export default function CheckoutPage() {
               <p className="text-xs font-semibold uppercase tracking-widest text-blue-100">
                 Secure UPI Payment
               </p>
-              <h1 className="mt-2 text-2xl font-bold">
-                Scan and Pay
-              </h1>
+              <h1 className="mt-2 text-2xl font-bold">Scan and Pay</h1>
               <p className="mt-2 text-sm text-blue-100">
                 Order #{qrOrderId}
               </p>
@@ -1249,8 +1167,7 @@ export default function CheckoutPage() {
 
             <div className="p-5 text-center sm:p-7">
               <p className="text-sm leading-6 text-gray-600">
-                Scan this QR code using your UPI app and complete
-                the payment.
+                Scan this QR code using your UPI app and complete the payment.
               </p>
 
               <div className="mx-auto mt-5 flex min-h-64 max-w-72 items-center justify-center border border-gray-200 p-4">
@@ -1279,8 +1196,7 @@ export default function CheckoutPage() {
                     : "Checking payment status..."}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-gray-600">
-                  Keep this page open while ShopSphere checks the
-                  payment status.
+                  Keep this page open while ShopSphere checks the payment status.
                 </p>
               </div>
 
@@ -1316,14 +1232,12 @@ export default function CheckoutPage() {
             <div className="mx-auto flex h-20 w-20 items-center justify-center bg-blue-50">
               <ShoppingBag className="h-10 w-10 text-[#2874F0]" />
             </div>
-
             <h1 className="mt-5 text-2xl font-bold text-gray-900">
               Your Cart Is Empty
             </h1>
             <p className="mt-2 text-sm text-gray-500">
               Your next favourite purchase is waiting for you.
             </p>
-
             <Link
               href="/products"
               className="mt-6 inline-flex items-center justify-center gap-2 bg-[#2874F0] px-6 py-3 text-sm font-bold text-white hover:bg-blue-700"
@@ -1341,22 +1255,15 @@ export default function CheckoutPage() {
     <main className="min-h-screen bg-[#f1f3f6] pb-24">
       <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5 sm:py-6">
         <div className="mb-4 flex items-center gap-2 text-xs text-gray-500">
-          <Link href="/" className="hover:text-[#2874F0]">
-            Home
-          </Link>
+          <Link href="/" className="hover:text-[#2874F0]">Home</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href="/cart" className="hover:text-[#2874F0]">
-            Cart
-          </Link>
+          <Link href="/cart" className="hover:text-[#2874F0]">Cart</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="font-semibold text-gray-800">
-            Checkout
-          </span>
+          <span className="font-semibold text-gray-800">Checkout</span>
         </div>
 
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="min-w-0 space-y-3">
-            {/* Delivery address */}
             <div className="overflow-hidden bg-white shadow-sm">
               <SectionHeading
                 number="1"
@@ -1380,16 +1287,13 @@ export default function CheckoutPage() {
 
                     <div className="space-y-3">
                       {addresses.map((address) => {
-                        const isSelected =
-                          selectedAddressId === address.id;
+                        const isSelected = selectedAddressId === address.id;
 
                         return (
                           <button
                             key={address.id}
                             type="button"
-                            onClick={() =>
-                              setSelectedAddressId(address.id)
-                            }
+                            onClick={() => setSelectedAddressId(address.id)}
                             disabled={placingOrder}
                             className={`w-full border p-3 text-left transition sm:p-4 ${
                               isSelected
@@ -1415,24 +1319,19 @@ export default function CheckoutPage() {
                                   <span className="text-sm font-bold text-gray-900">
                                     {address.full_name}
                                   </span>
-
                                   <span className="bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-gray-600">
                                     {address.address_type}
                                   </span>
-
                                   {address.is_default && (
                                     <span className="bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
                                       Default
                                     </span>
                                   )}
                                 </div>
-
                                 <p className="mt-2 break-words text-sm leading-5 text-gray-600">
-                                  {address.address_line},{" "}
-                                  {address.city}, {address.state} -{" "}
-                                  {address.postal_code}
+                                  {address.address_line}, {address.city},{" "}
+                                  {address.state} - {address.postal_code}
                                 </p>
-
                                 <p className="mt-1 text-xs text-gray-500">
                                   Phone: {address.phone}
                                 </p>
@@ -1495,16 +1394,10 @@ export default function CheckoutPage() {
                           )}
                         </div>
 
-                        <form
-                          onSubmit={handleCreateAddress}
-                          className="space-y-3"
-                        >
+                        <form onSubmit={handleCreateAddress} className="space-y-3">
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
-                              <label
-                                htmlFor="full_name"
-                                className="mb-1 block text-xs font-semibold text-gray-700"
-                              >
+                              <label htmlFor="full_name" className="mb-1 block text-xs font-semibold text-gray-700">
                                 Full Name
                               </label>
                               <input
@@ -1518,12 +1411,8 @@ export default function CheckoutPage() {
                                 className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
                               />
                             </div>
-
                             <div>
-                              <label
-                                htmlFor="phone"
-                                className="mb-1 block text-xs font-semibold text-gray-700"
-                              >
+                              <label htmlFor="phone" className="mb-1 block text-xs font-semibold text-gray-700">
                                 Phone Number
                               </label>
                               <input
@@ -1541,10 +1430,7 @@ export default function CheckoutPage() {
                           </div>
 
                           <div>
-                            <label
-                              htmlFor="address_line"
-                              className="mb-1 block text-xs font-semibold text-gray-700"
-                            >
+                            <label htmlFor="address_line" className="mb-1 block text-xs font-semibold text-gray-700">
                               House No., Building, Street, Area
                             </label>
                             <textarea
@@ -1562,10 +1448,7 @@ export default function CheckoutPage() {
 
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
-                              <label
-                                htmlFor="city"
-                                className="mb-1 block text-xs font-semibold text-gray-700"
-                              >
+                              <label htmlFor="city" className="mb-1 block text-xs font-semibold text-gray-700">
                                 City
                               </label>
                               <input
@@ -1579,12 +1462,8 @@ export default function CheckoutPage() {
                                 className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
                               />
                             </div>
-
                             <div>
-                              <label
-                                htmlFor="state"
-                                className="mb-1 block text-xs font-semibold text-gray-700"
-                              >
+                              <label htmlFor="state" className="mb-1 block text-xs font-semibold text-gray-700">
                                 State
                               </label>
                               <input
@@ -1602,10 +1481,7 @@ export default function CheckoutPage() {
 
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
-                              <label
-                                htmlFor="postal_code"
-                                className="mb-1 block text-xs font-semibold text-gray-700"
-                              >
+                              <label htmlFor="postal_code" className="mb-1 block text-xs font-semibold text-gray-700">
                                 PIN Code
                               </label>
                               <input
@@ -1619,12 +1495,8 @@ export default function CheckoutPage() {
                                 className="w-full border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#2874F0]"
                               />
                             </div>
-
                             <div>
-                              <label
-                                htmlFor="address_type"
-                                className="mb-1 block text-xs font-semibold text-gray-700"
-                              >
+                              <label htmlFor="address_type" className="mb-1 block text-xs font-semibold text-gray-700">
                                 Address Type
                               </label>
                               <select
@@ -1659,18 +1531,13 @@ export default function CheckoutPage() {
                           <div className="flex flex-col gap-2 sm:flex-row">
                             <button
                               type="submit"
-                              disabled={
-                                savingAddress ||
-                                addressSaveInProgress.current
-                              }
+                              disabled={savingAddress || addressSaveInProgress.current}
                               className="flex flex-1 items-center justify-center gap-2 bg-[#2874F0] px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
                             >
                               {savingAddress && (
                                 <LoaderCircle className="h-4 w-4 animate-spin" />
                               )}
-                              {savingAddress
-                                ? "Saving..."
-                                : "Save Address"}
+                              {savingAddress ? "Saving..." : "Save Address"}
                             </button>
 
                             {addresses.length > 0 && (
@@ -1694,193 +1561,239 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Payment methods */}
+            {/* Payment options */}
             <div className="overflow-hidden bg-white shadow-sm">
               <SectionHeading number="2" title="Payment Options" />
-
               <div className="border-t border-gray-100">
-                {(
-                  [
-                    {
-                      id: "stripe",
-                      title: "Credit / Debit Card",
-                      description: "",
-                      icon: CreditCard,
-                    },
-                    {
-                      id: "upi_qr",
-                      title: "UPI QR Code",
-                      description: "",
-                      icon: QrCode,
-                    },
-                    {
-                      id: "netbanking",
-                      title: "Net Banking",
-                      description: "",
-                      icon: Banknote,
-                    },
-                    {
-                      id: "wallet",
-                      title: "Wallet",
-                      description: "",
-                      icon: Wallet,
-                    },
-                    {
-                      id: "cod",
-                      title: "Cash on Delivery",
-                      description: "",
-                      icon: Truck,
-                    },
-                  ] as const
-                ).map((option) => {
-                  const Icon = option.icon;
-                  const selected = paymentMethod === option.id;
+                {/* Stripe */}
+                <div className={`border-b border-gray-100 ${paymentMethod === "stripe" ? "bg-[#f5f9ff]" : "bg-white"}`}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("stripe")}
+                    disabled={placingOrder || paymentProcessing || razorpayProcessing}
+                    aria-pressed={paymentMethod === "stripe"}
+                    className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-gray-50 disabled:opacity-60 sm:px-6"
+                  >
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${paymentMethod === "stripe" ? "border-[#2874F0]" : "border-gray-400"}`}>
+                      {paymentMethod === "stripe" && <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />}
+                    </span>
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center ${paymentMethod === "stripe" ? "bg-blue-100 text-[#2874F0]" : "bg-gray-100 text-gray-600"}`}>
+                      <CreditCard className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-gray-900">Stripe</span>
+                      <span className="mt-1 block text-xs leading-5 text-gray-500">
+                        Secure online payment with your card.
+                      </span>
+                    </span>
+                    {paymentMethod === "stripe" && <CheckCircle2 className="h-5 w-5 shrink-0 text-[#2874F0]" />}
+                  </button>
 
-                  return (
-                    <div
-                      key={option.id}
-                      className={`border-b border-gray-100 ${
-                        selected ? "bg-[#f5f9ff]" : "bg-white"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod(option.id)}
-                        disabled={
-                          placingOrder ||
-                          paymentProcessing ||
-                          razorpayProcessing
-                        }
-                        aria-pressed={selected}
-                        className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-gray-50 disabled:opacity-60 sm:px-6"
-                      >
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                            selected
-                              ? "border-[#2874F0]"
-                              : "border-gray-400"
-                          }`}
-                        >
-                          {selected && (
-                            <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />
-                          )}
-                        </span>
-
-                        <span
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center ${
-                            selected
-                              ? "bg-blue-100 text-[#2874F0]"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </span>
-
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-semibold text-gray-900">
-                            {option.title}
+                  {paymentMethod === "stripe" && (
+                    <div className="border-t border-blue-100 px-4 py-4 sm:px-6 sm:pl-[88px]">
+                      <label className="flex items-start gap-3 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={saveCard}
+                          onChange={(event) => setSaveCard(event.target.checked)}
+                          disabled={placingOrder || selectedSavedCardId !== null}
+                          className="mt-0.5 h-4 w-4 accent-[#2874F0]"
+                        />
+                        <span>
+                          <span className="font-semibold text-gray-800">
+                            Save my card for future payments
                           </span>
-                          <span className="mt-1 block text-xs leading-5 text-gray-500">
-                            {option.description}
+                          <span className="mt-1 block text-gray-500">
+                            Save your card securely for your next purchase.
                           </span>
                         </span>
+                      </label>
 
-                        {selected && (
-                          <CheckCircle2 className="h-5 w-5 shrink-0 text-[#2874F0]" />
-                        )}
-                      </button>
+                      <div className="mt-4 border-t border-blue-100 pt-4">
+                        <p className="text-xs font-bold text-gray-800">Saved Cards</p>
 
-                      {selected && option.id === "stripe" && (
-                        <div className="border-t border-blue-100 px-4 py-4 sm:px-6 sm:pl-[88px]">
-                          <label className="flex items-start gap-3 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={saveCard}
-                              onChange={(event) =>
-                                setSaveCard(event.target.checked)
-                              }
-                              disabled={placingOrder}
-                              className="mt-0.5 h-4 w-4 accent-[#2874F0]"
-                            />
+                        {loadingSavedCards ? (
+                          <p className="mt-2 text-xs text-gray-500">Loading saved cards...</p>
+                        ) : savedCards.length === 0 ? (
+                          <p className="mt-2 text-xs text-gray-500">No saved cards found.</p>
+                        ) : (
+                          <div className="mt-3 space-y-2">
+                            {savedCards.map((card) => {
+                              const cardId = String(card.id);
+                              const selected = selectedSavedCardId === cardId;
 
-                            <span>
-                              <span className="font-semibold text-gray-800">
-                                Save my card for future payments
-                              </span>
-                            </span>
-                          </label>
-
-                          <div className="mt-4 border-t border-blue-100 pt-4">
-                            <p className="text-xs font-bold text-gray-800">
-                              Saved Cards
-                            </p>
-
-                            {loadingSavedCards ? (
-                              <p className="mt-2 text-xs text-gray-500">
-                                Loading saved cards...
-                              </p>
-                            ) : savedCards.length === 0 ? (
-                              <p className="mt-2 text-xs text-gray-500">
-                                No saved cards found.
-                              </p>
-                            ) : (
-                              <div className="mt-3 space-y-2">
-                                {savedCards.map((card) => (
-                                  <div
-                                    key={card.id}
-                                    className="flex items-center gap-3 border border-gray-200 bg-white p-3"
-                                  >
-                                    <CreditCard className="h-5 w-5 text-gray-500" />
-                                    <div>
-                                      <p className="text-xs font-semibold capitalize text-gray-800">
-                                        {card.brand} ending in {card.last4}
-                                      </p>
-                                      <p className="mt-1 text-[11px] text-gray-500">
-                                        Expires{" "}
-                                        {String(card.exp_month).padStart(2, "0")}
-                                        /{card.exp_year}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            <p className="mt-3 text-[11px] leading-5 text-gray-500">
-                              Saved cards are displayed for reference. Direct
-                              saved-card payment is not supported by the current
-                              backend.
-                            </p>
+                              return (
+                                <button
+                                  key={cardId}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSavedCardId(selected ? null : cardId);
+                                    setSaveCard(false);
+                                  }}
+                                  disabled={placingOrder || paymentProcessing}
+                                  aria-pressed={selected}
+                                  className={`flex w-full items-center gap-3 border p-3 text-left transition disabled:opacity-60 ${
+                                    selected
+                                      ? "border-[#2874F0] bg-white ring-1 ring-[#2874F0]"
+                                      : "border-gray-200 bg-white hover:border-blue-300"
+                                  }`}
+                                >
+                                  <CreditCard className="h-5 w-5 shrink-0 text-gray-500" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-xs font-semibold capitalize text-gray-800">
+                                      {card.brand} ending in {card.last4}
+                                    </span>
+                                    <span className="mt-1 block text-[11px] text-gray-500">
+                                      Expires {String(card.exp_month).padStart(2, "0")}/{card.exp_year}
+                                    </span>
+                                  </span>
+                                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-[#2874F0]" : "border-gray-300"}`}>
+                                    {selected && <span className="h-2 w-2 rounded-full bg-[#2874F0]" />}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {selected && option.id === "upi_qr" && (
-                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
+                        {selectedSavedCardId && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSavedCardId(null)}
+                            disabled={placingOrder || paymentProcessing}
+                            className="mt-3 text-xs font-semibold text-[#2874F0] hover:underline disabled:opacity-60"
+                          >
+                            Use a new card instead
+                          </button>
+                        )}
+
+                        <p className="mt-3 text-[11px] leading-5 text-gray-500">
+                          Select a saved card to use it, or leave all cards unselected to enter new card details.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Razorpay */}
+                <div className={`border-b border-gray-100 ${paymentMethod === "razorpay" ? "bg-[#f5f9ff]" : "bg-white"}`}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("razorpay")}
+                    disabled={placingOrder || paymentProcessing || razorpayProcessing}
+                    aria-pressed={paymentMethod === "razorpay"}
+                    className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-gray-50 disabled:opacity-60 sm:px-6"
+                  >
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${paymentMethod === "razorpay" ? "border-[#2874F0]" : "border-gray-400"}`}>
+                      {paymentMethod === "razorpay" && <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />}
+                    </span>
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center ${paymentMethod === "razorpay" ? "bg-blue-100 text-[#2874F0]" : "bg-gray-100 text-gray-600"}`}>
+                      <Wallet className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-gray-900">Razorpay</span>
+                      <span className="mt-1 block text-xs leading-5 text-gray-500">
+                        UPI, QR Code, Cards, Net Banking, and Wallets.
+                      </span>
+                    </span>
+                    {paymentMethod === "razorpay" && <CheckCircle2 className="h-5 w-5 shrink-0 text-[#2874F0]" />}
+                  </button>
+
+                  {paymentMethod === "razorpay" && (
+                    <div className="border-t border-blue-100 px-4 py-4 sm:px-6 sm:pl-[88px]">
+                      <p className="mb-3 text-xs font-bold text-gray-800">
+                        Choose a Razorpay payment method
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {([
+                          
+                          { id: "upi_qr", title: "UPI QR Code", description: "Scan a QR code to pay", icon: QrCode },
+                          { id: "card", title: "Credit / Debit Cards", description: "Pay with a card", icon: CreditCard },
+                          { id: "netbanking", title: "Net Banking", description: "Pay through your bank", icon: ShieldCheck },
+                          { id: "wallet", title: "Wallets", description: "Use an available wallet", icon: Wallet },
+                        ] as const).map((option) => {
+                          const Icon = option.icon;
+                          const selected = razorpayMethod === option.id;
+
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => setRazorpayMethod(option.id)}
+                              disabled={placingOrder || paymentProcessing || razorpayProcessing}
+                              aria-pressed={selected}
+                              className={`flex items-start gap-3 border p-3 text-left transition disabled:opacity-60 ${selected ? "border-[#2874F0] bg-white ring-1 ring-[#2874F0]" : "border-gray-200 bg-white hover:border-blue-300"}`}
+                            >
+                              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center ${selected ? "bg-blue-50 text-[#2874F0]" : "bg-gray-100 text-gray-600"}`}>
+                                <Icon className="h-4 w-4" />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-xs font-bold text-gray-900">{option.title}</span>
+                                <span className="mt-1 block text-[11px] leading-4 text-gray-500">{option.description}</span>
+                              </span>
+                              <span className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${selected ? "border-[#2874F0]" : "border-gray-300"}`}>
+                                {selected && <span className="h-2 w-2 rounded-full bg-[#2874F0]" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {razorpayMethod === "upi_qr" ? (
+                        <div className="mt-3 flex items-start gap-2 bg-blue-50 p-3">
+                          <QrCode className="mt-0.5 h-4 w-4 shrink-0 text-[#2874F0]" />
                           <p className="text-xs leading-5 text-gray-600">
-                            A UPI QR code will be generated after you continue.
-                            Scan it using your UPI app and keep this page open
-                            while the payment is verified.
+                            A QR code will be generated after you continue. Scan it with your UPI app and keep this page open while payment is verified.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-3 flex items-start gap-2 bg-blue-50 p-3">
+                          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#2874F0]" />
+                          <p className="text-xs leading-5 text-gray-600">
+                            Razorpay Checkout will open for {razorpayMethodLabel}. Available payment instruments depend on your Razorpay account and checkout configuration.
                           </p>
                         </div>
                       )}
-
-                      {selected && option.id === "netbanking" && (
-                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]"></div>
-                      )}
-
-                      {selected && option.id === "wallet" && (
-                        <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]"></div>
-                      )}
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+
+                {/* Cash on Delivery */}
+                <div className={`border-b border-gray-100 ${paymentMethod === "cod" ? "bg-[#f5f9ff]" : "bg-white"}`}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("cod")}
+                    disabled={placingOrder || paymentProcessing || razorpayProcessing}
+                    aria-pressed={paymentMethod === "cod"}
+                    className="flex w-full items-center gap-3 px-4 py-4 text-left transition hover:bg-gray-50 disabled:opacity-60 sm:px-6"
+                  >
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${paymentMethod === "cod" ? "border-[#2874F0]" : "border-gray-400"}`}>
+                      {paymentMethod === "cod" && <span className="h-2.5 w-2.5 rounded-full bg-[#2874F0]" />}
+                    </span>
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center ${paymentMethod === "cod" ? "bg-blue-100 text-[#2874F0]" : "bg-gray-100 text-gray-600"}`}>
+                      <Truck className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-gray-900">Cash on Delivery</span>
+                      <span className="mt-1 block text-xs leading-5 text-gray-500">
+                        Pay when your order is delivered.
+                      </span>
+                    </span>
+                    {paymentMethod === "cod" && <CheckCircle2 className="h-5 w-5 shrink-0 text-[#2874F0]" />}
+                  </button>
+                  {paymentMethod === "cod" && (
+                    <div className="border-t border-blue-100 px-4 py-3 sm:px-6 sm:pl-[88px]">
+                      <p className="text-xs leading-5 text-gray-600">
+                        Place your order now and pay when it arrives.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex items-start gap-2 border-t border-gray-100 bg-gray-50 px-4 py-3 sm:px-6">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
                   <p className="text-[11px] leading-5 text-gray-500">
-                    Never share your card PIN or UPI PIN. Payments are
-                    processed through your selected payment provider.
+                    Never share your card PIN or UPI PIN. Payments are processed through your selected payment provider.
                   </p>
                 </div>
               </div>
@@ -1888,74 +1801,42 @@ export default function CheckoutPage() {
 
             {/* Order items */}
             <div className="overflow-hidden bg-white shadow-sm">
-              <SectionHeading
-                number="3"
-                title={`Order Summary (${cart.total_items} items)`}
-              />
-
+              <SectionHeading number="3" title={`Order Summary (${cart.total_items} items)`} />
               <div className="divide-y divide-gray-100 border-t border-gray-100">
                 {cart.items.map((item) => {
                   const variantImage =
-                    item.variant?.images?.find(
-                      (image) => image.is_primary
-                    )?.image_url ??
+                    item.variant?.images?.find((image) => image.is_primary)?.image_url ??
                     item.variant?.images?.[0]?.image_url ??
                     null;
-
-                  const productImage =
-                    variantImage ?? item.product.image_url;
-
-                  const itemPrice =
-                    item.variant?.price ?? item.product.price;
-
-                  const variantOptions =
-                    item.variant?.option_values
-                      ?.map((option) => option.value)
-                      .filter(Boolean)
-                      .join(" • ");
+                  const productImage = variantImage ?? item.product.image_url;
+                  const itemPrice = item.variant?.price ?? item.product.price;
+                  const variantOptions = item.variant?.option_values
+                    ?.map((option) => option.value)
+                    .filter(Boolean)
+                    .join(" • ");
 
                   return (
-                    <div
-                      key={item.id}
-                      className="flex gap-3 p-4 sm:gap-4 sm:p-5"
-                    >
+                    <div key={item.id} className="flex gap-3 p-4 sm:gap-4 sm:p-5">
                       <div className="flex h-24 w-20 shrink-0 items-center justify-center border border-gray-100 bg-gray-50 sm:h-28 sm:w-24">
                         {productImage ? (
-                          <img
-                            src={productImage}
-                            alt={item.product.name}
-                            className="h-full w-full object-contain p-1"
-                          />
+                          <img src={productImage} alt={item.product.name} className="h-full w-full object-contain p-1" />
                         ) : (
                           <Package className="h-8 w-8 text-gray-300" />
                         )}
                       </div>
-
                       <div className="min-w-0 flex-1">
                         <p className="line-clamp-2 text-sm font-semibold leading-5 text-gray-900">
                           {item.product.name}
                         </p>
-
                         {variantOptions && (
                           <p className="mt-2 text-xs text-gray-500">
-                            Options:{" "}
-                            <span className="font-semibold text-gray-700">
-                              {variantOptions}
-                            </span>
+                            Options: <span className="font-semibold text-gray-700">{variantOptions}</span>
                           </p>
                         )}
-
-                        <p className="mt-1 text-xs text-gray-500">
-                          Qty: {item.quantity}
-                        </p>
-
+                        <p className="mt-1 text-xs text-gray-500">Qty: {item.quantity}</p>
                         <p className="mt-2 text-sm font-bold text-gray-900">
-                          ₹{itemPrice.toFixed(2)}{" "}
-                          <span className="font-normal text-gray-500">
-                            each
-                          </span>
+                          ₹{itemPrice.toFixed(2)} <span className="font-normal text-gray-500">each</span>
                         </p>
-
                         <p className="mt-1 text-xs text-gray-600">
                           Item total: ₹{item.item_total.toFixed(2)}
                         </p>
@@ -1964,12 +1845,8 @@ export default function CheckoutPage() {
                   );
                 })}
               </div>
-
               <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
-                <Link
-                  href="/cart"
-                  className="inline-flex items-center gap-2 text-xs font-semibold text-[#2874F0] hover:underline"
-                >
+                <Link href="/cart" className="inline-flex items-center gap-2 text-xs font-semibold text-[#2874F0] hover:underline">
                   <Pencil className="h-3.5 w-3.5" />
                   Change items or quantities in cart
                 </Link>
@@ -1977,64 +1854,40 @@ export default function CheckoutPage() {
             </div>
           </section>
 
-          {/* Price details sidebar */}
+          {/* Price details */}
           <aside className="min-w-0 lg:sticky lg:top-20">
             <div className="overflow-hidden bg-white shadow-sm">
               <div className="border-b border-gray-100 px-4 py-4 sm:px-5">
-                <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">
-                  Price Details
-                </h2>
+                <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">Price Details</h2>
               </div>
 
               <div className="space-y-4 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-gray-600">
-                    Price ({cart.total_items} items)
-                  </span>
-                  <span className="tabular-nums text-gray-800">
-                    ₹{subtotal.toFixed(2)}
-                  </span>
+                  <span className="text-gray-600">Price ({cart.total_items} items)</span>
+                  <span className="tabular-nums text-gray-800">₹{subtotal.toFixed(2)}</span>
                 </div>
-
                 {appliedCoupon && (
                   <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-gray-600">
-                      Coupon discount
-                    </span>
-                    <span className="font-semibold tabular-nums text-green-600">
-                      −₹{discountAmount.toFixed(2)}
-                    </span>
+                    <span className="text-gray-600">Coupon discount</span>
+                    <span className="font-semibold tabular-nums text-green-600">−₹{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
-
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="text-gray-600">Delivery</span>
-                  <span className="font-semibold text-green-600">
-                    FREE
-                  </span>
+                  <span className="font-semibold text-green-600">FREE</span>
                 </div>
-
                 <div className="border-t border-dashed border-gray-300 pt-4">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-bold text-gray-900">
-                      Total Payable
-                    </span>
-                    <span className="text-lg font-extrabold tabular-nums text-gray-900">
-                      ₹{finalAmount.toFixed(2)}
-                    </span>
+                    <span className="text-sm font-bold text-gray-900">Total Payable</span>
+                    <span className="text-lg font-extrabold tabular-nums text-gray-900">₹{finalAmount.toFixed(2)}</span>
                   </div>
                 </div>
-
                 {appliedCoupon && (
                   <div className="flex items-start gap-2 border border-green-200 bg-green-50 p-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
                     <div>
-                      <p className="text-xs font-bold text-green-800">
-                        Coupon applied successfully
-                      </p>
-                      <p className="mt-1 text-xs text-green-700">
-                        You saved ₹{discountAmount.toFixed(2)}
-                      </p>
+                      <p className="text-xs font-bold text-green-800">Coupon applied successfully</p>
+                      <p className="mt-1 text-xs text-green-700">You saved ₹{discountAmount.toFixed(2)}</p>
                     </div>
                   </div>
                 )}
@@ -2050,36 +1903,22 @@ export default function CheckoutPage() {
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-blue-50 text-[#2874F0]">
                     <Tag className="h-4 w-4" />
                   </span>
-
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-gray-800">
-                      Apply Coupon
-                    </span>
-                    <span className="mt-1 block text-xs text-gray-500">
-                      Save more on your order
-                    </span>
+                    <span className="block text-sm font-semibold text-gray-800">Apply Coupon</span>
+                    <span className="mt-1 block text-xs text-gray-500">Save more on your order</span>
                   </span>
-
-                  <ChevronDown
-                    className={`h-4 w-4 text-gray-500 transition ${
-                      showCouponForm ? "rotate-180" : ""
-                    }`}
-                  />
+                  <ChevronDown className={`h-4 w-4 text-gray-500 transition ${showCouponForm ? "rotate-180" : ""}`} />
                 </button>
 
                 {appliedCoupon ? (
                   <div className="mt-3 border border-green-200 bg-green-50 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-green-800">
-                          {appliedCoupon.code}
-                        </p>
+                        <p className="text-sm font-bold text-green-800">{appliedCoupon.code}</p>
                         <p className="mt-1 text-xs text-green-700">
-                          Saving ₹
-                          {appliedCoupon.discount_amount.toFixed(2)}
+                          Saving ₹{appliedCoupon.discount_amount.toFixed(2)}
                         </p>
                       </div>
-
                       <button
                         type="button"
                         onClick={() => {
@@ -2105,23 +1944,14 @@ export default function CheckoutPage() {
                     <input
                       type="text"
                       value={couponCode}
-                      onChange={(event) =>
-                        setCouponCode(
-                          event.target.value.toUpperCase()
-                        )
-                      }
+                      onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
                       placeholder="Enter coupon code"
                       disabled={couponLoading || placingOrder}
                       className="w-full border border-gray-300 px-3 py-2.5 text-sm uppercase outline-none focus:border-[#2874F0]"
                     />
-
                     <button
                       type="submit"
-                      disabled={
-                        couponLoading ||
-                        placingOrder ||
-                        !couponCode.trim()
-                      }
+                      disabled={couponLoading || placingOrder || !couponCode.trim()}
                       className="w-full border border-[#2874F0] bg-white px-4 py-2.5 text-sm font-bold text-[#2874F0] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {couponLoading ? (
@@ -2129,9 +1959,7 @@ export default function CheckoutPage() {
                           <LoaderCircle className="h-4 w-4 animate-spin" />
                           Applying...
                         </span>
-                      ) : (
-                        "Apply Coupon"
-                      )}
+                      ) : "Apply Coupon"}
                     </button>
                   </form>
                 ) : (
@@ -2148,39 +1976,22 @@ export default function CheckoutPage() {
               {/* Selected address */}
               <div className="border-t border-gray-100 p-4 sm:p-5">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                    Delivering To
-                  </p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Delivering To</p>
                   <MapPin className="h-4 w-4 text-[#2874F0]" />
                 </div>
-
                 {selectedAddress ? (
                   <div>
-                    <p className="text-sm font-bold text-gray-900">
-                      {selectedAddress.full_name}
-                    </p>
+                    <p className="text-sm font-bold text-gray-900">{selectedAddress.full_name}</p>
                     <p className="mt-1 break-words text-xs leading-5 text-gray-600">
-                      {selectedAddress.address_line},{" "}
-                      {selectedAddress.city},{" "}
-                      {selectedAddress.state}{" "}
-                      {selectedAddress.postal_code}
+                      {selectedAddress.address_line}, {selectedAddress.city}, {selectedAddress.state} {selectedAddress.postal_code}
                     </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {selectedAddress.phone}
-                    </p>
+                    <p className="mt-1 text-xs text-gray-500">{selectedAddress.phone}</p>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-500">
-                    Select a delivery address to continue.
-                  </p>
+                  <p className="text-xs text-gray-500">Select a delivery address to continue.</p>
                 )}
-
-                <Link
-                  href="/addresses"
-                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#2874F0] hover:underline"
-                >
-                  Change Address
-                  <ChevronRight className="h-3 w-3" />
+                <Link href="/addresses" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#2874F0] hover:underline">
+                  Change Address <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
 
@@ -2189,10 +2000,7 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => void handleSubmit()}
-                  disabled={
-                    submitDisabled ||
-                    orderSubmissionInProgress.current
-                  }
+                  disabled={submitDisabled || orderSubmissionInProgress.current}
                   className="flex min-h-12 w-full items-center justify-center gap-2 bg-[#fb641b] px-4 py-3 text-sm font-bold uppercase text-white transition hover:bg-[#e85a15] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {placingOrder || razorpayProcessing ? (
@@ -2202,25 +2010,10 @@ export default function CheckoutPage() {
                   ) : (
                     <LockKeyhole className="h-4 w-4" />
                   )}
-
-                  {placingOrder
-                    ? "Preparing Order..."
-                    : razorpayProcessing
-                      ? "Waiting for Payment..."
-                      : paymentMethod === "cod"
-                        ? "Place Order"
-                        : paymentMethod === "upi_qr"
-                          ? "Generate UPI QR"
-                          : paymentMethod === "netbanking"
-                            ? "Continue to Net Banking"
-                            : paymentMethod === "wallet"
-                              ? "Continue to Wallet"
-                              : "Continue to Card Payment"}
+                  {submitButtonLabel}
                 </button>
-
                 <p className="mt-3 text-center text-[11px] leading-5 text-gray-500">
-                  By continuing, you agree to complete your order
-                  using the selected payment method.
+                  By continuing, you agree to complete your order using the selected payment method.
                 </p>
               </div>
             </div>
@@ -2229,25 +2022,18 @@ export default function CheckoutPage() {
               <div className="flex items-start gap-3 bg-white p-4 shadow-sm">
                 <ShieldCheck className="h-5 w-5 shrink-0 text-green-600" />
                 <div>
-                  <p className="text-xs font-bold text-gray-800">
-                    Safe and Secure Payments
-                  </p>
+                  <p className="text-xs font-bold text-gray-800">Safe and Secure Payments</p>
                   <p className="mt-1 text-[11px] leading-5 text-gray-500">
-                    Payment processing is handled by your selected
-                    payment provider.
+                    Payment processing is handled by your selected payment provider.
                   </p>
                 </div>
               </div>
-
               <div className="flex items-start gap-3 border border-blue-100 bg-white p-4">
                 <Gift className="h-5 w-5 shrink-0 text-[#2874F0]" />
                 <div>
-                  <p className="text-xs font-bold text-gray-800">
-                    Offers and Savings
-                  </p>
+                  <p className="text-xs font-bold text-gray-800">Offers and Savings</p>
                   <p className="mt-1 text-[11px] leading-5 text-gray-500">
-                    Apply a valid ShopSphere coupon to see your
-                    available discount reflected in the total.
+                    Apply a valid ShopSphere coupon to see your available discount reflected in the total.
                   </p>
                 </div>
               </div>
@@ -2275,9 +2061,7 @@ export default function CheckoutPage() {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] lg:hidden">
         <div className="mx-auto flex max-w-6xl items-center gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-gray-500">
-              Total Payable
-            </p>
+            <p className="text-[11px] text-gray-500">Total Payable</p>
             <p className="truncate text-lg font-extrabold text-gray-900">
               ₹{finalAmount.toFixed(2)}
             </p>
@@ -2287,14 +2071,10 @@ export default function CheckoutPage() {
               </p>
             )}
           </div>
-
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={
-              submitDisabled ||
-              orderSubmissionInProgress.current
-            }
+            disabled={submitDisabled || orderSubmissionInProgress.current}
             className="flex min-h-12 flex-1 items-center justify-center gap-2 bg-[#fb641b] px-3 py-3 text-sm font-bold uppercase text-white hover:bg-[#e85a15] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {placingOrder || razorpayProcessing ? (
@@ -2304,20 +2084,17 @@ export default function CheckoutPage() {
             ) : (
               <LockKeyhole className="h-4 w-4" />
             )}
-
             {placingOrder
               ? "Preparing..."
               : razorpayProcessing
                 ? "Processing..."
                 : paymentMethod === "cod"
                   ? "Place Order"
-                  : paymentMethod === "upi_qr"
-                    ? "Generate QR"
-                    : paymentMethod === "netbanking"
-                      ? "Net Banking"
-                      : paymentMethod === "wallet"
-                        ? "Continue to Wallet"
-                        : "Continue to Card"}
+                  : paymentMethod === "stripe"
+                    ? "Continue to Stripe"
+                    : razorpayMethod === "upi_qr"
+                      ? "Generate QR"
+                      : `Razorpay: ${razorpayMethodLabel}`}
           </button>
         </div>
       </div>
