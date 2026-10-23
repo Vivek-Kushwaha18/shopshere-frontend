@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapPin,
   Package,
@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 
-import { getCart, clearCart, type CartData } from "@/services/cart";
+import { getCart, removeCartItem, type CartData } from "@/services/cart";
 import {
   createOrder,
   getOrder,
@@ -64,6 +64,7 @@ import {
 } from "@stripe/react-stripe-js";
 
 const BLUE = "#2874F0";
+const SELECTED_CART_ITEM_IDS_KEY = "shopsphere_selected_cart_item_ids";
 
 type CheckoutPaymentOption = "stripe" | "razorpay" | "cod";
 type RazorpayPaymentOption =
@@ -379,6 +380,8 @@ export default function CheckoutPage() {
   const paymentSuccessInProgress = useRef(false);
 
   const [cart, setCart] = useState<CartData | null>(null);
+  // null means normal checkout (all cart items); an array means Buy This Now.
+  const [selectedCartItemIds, setSelectedCartItemIds] = useState<number[] | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] =
     useState<number | null>(null);
@@ -468,6 +471,22 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (initialLoadStarted.current) return;
     initialLoadStarted.current = true;
+
+    // Buy This Now passes its cart item ID in the URL. A normal /checkout visit
+    // intentionally includes every cart item, even if an old localStorage key exists.
+    const query = new URLSearchParams(window.location.search);
+    const buyNowItemId = Number(query.get("buyNow"));
+    if (Number.isInteger(buyNowItemId) && buyNowItemId > 0) {
+      setSelectedCartItemIds([buyNowItemId]);
+    } else {
+      setSelectedCartItemIds(null);
+      try {
+        localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+      } catch (error) {
+        console.error("Unable to clear old selected cart item state:", error);
+      }
+    }
+
     void loadCart();
     void loadAddresses();
   }, [loadCart, loadAddresses]);
@@ -499,6 +518,56 @@ export default function CheckoutPage() {
       active = false;
     };
   }, [paymentMethod]);
+
+  const checkoutItems = useMemo(() => {
+    if (!cart) return [];
+    if (selectedCartItemIds === null) return cart.items;
+    return cart.items.filter((item) => selectedCartItemIds.includes(item.id));
+  }, [cart, selectedCartItemIds]);
+
+  const checkoutItemCount = useMemo(
+    () => checkoutItems.reduce((total, item) => total + Number(item.quantity || 0), 0),
+    [checkoutItems]
+  );
+
+  const subtotal = useMemo(
+    () =>
+      checkoutItems.reduce(
+        (total, item) =>
+          total + Number(item.item_total ?? Number(item.product.price || 0) * item.quantity),
+        0
+      ),
+    [checkoutItems]
+  );
+
+  const discountAmount = appliedCoupon?.discount_amount ?? 0;
+  const finalAmount = Math.max(subtotal - discountAmount, 0);
+
+  const removePurchasedCartItems = useCallback(async (): Promise<boolean> => {
+    const purchasedIds = checkoutItems.map((item) => item.id);
+    const failedIds: number[] = [];
+
+    // Remove only items that were included in this order. Never clear the full cart.
+    for (const itemId of purchasedIds) {
+      try {
+        await removeCartItem(itemId);
+      } catch (error) {
+        failedIds.push(itemId);
+        console.error(`Unable to remove purchased cart item ${itemId}:`, error);
+      }
+    }
+
+    try {
+      localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+    } catch (error) {
+      console.error("Unable to clear selected checkout item state:", error);
+    }
+    if (failedIds.length > 0) {
+      console.error("Some purchased items could not be removed from cart:", failedIds);
+      return false;
+    }
+    return true;
+  }, [checkoutItems]);
 
   function handleAddressChange(
     event: React.ChangeEvent<
@@ -598,7 +667,7 @@ export default function CheckoutPage() {
 
     try {
       setCouponLoading(true);
-      const coupon = await validateCoupon(couponCode.trim(), cart.total);
+      const coupon = await validateCoupon(couponCode.trim(), subtotal);
       setAppliedCoupon(coupon);
       setCouponCode(coupon.code);
 
@@ -621,10 +690,6 @@ export default function CheckoutPage() {
       setCouponLoading(false);
     }
   }
-
-  const subtotal = cart?.total ?? 0;
-  const discountAmount = appliedCoupon?.discount_amount ?? 0;
-  const finalAmount = Math.max(subtotal - discountAmount, 0);
 
   async function handleRazorpayPayment(
     orderId: number,
@@ -706,11 +771,7 @@ export default function CheckoutPage() {
                 );
               }
 
-              try {
-                await clearCart();
-              } catch (error) {
-                console.error("Unable to clear cart after payment:", error);
-              }
+              await removePurchasedCartItems();
 
               await Swal.fire({
                 icon: "success",
@@ -821,11 +882,7 @@ export default function CheckoutPage() {
           finished = true;
           if (timer) clearInterval(timer);
 
-          try {
-            await clearCart();
-          } catch (error) {
-            console.error("Unable to clear cart after QR payment:", error);
-          }
+          await removePurchasedCartItems();
 
           if (!active) return;
 
@@ -854,7 +911,7 @@ export default function CheckoutPage() {
       if (timer) clearInterval(timer);
       setQrChecking(false);
     };
-  }, [razorpayQr, qrOrderId, router]);
+  }, [razorpayQr, qrOrderId, router, removePurchasedCartItems]);
 
   async function handleSubmit() {
     if (
@@ -866,7 +923,7 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!cart || cart.items.length === 0) {
+    if (!cart || checkoutItems.length === 0) {
       await Swal.fire({
         icon: "warning",
         title: "Your Cart Is Empty",
@@ -902,7 +959,7 @@ export default function CheckoutPage() {
 
       const order = await createOrder({
         shipping_address: createShippingAddress(selectedAddress),
-        items: cart.items.map((item) => ({
+        items: checkoutItems.map((item) => ({
           product_id: item.product_id,
           variant_id: item.variant_id,
           quantity: item.quantity,
@@ -912,11 +969,7 @@ export default function CheckoutPage() {
       });
 
       if (paymentMethod === "cod") {
-        try {
-          await clearCart();
-        } catch (error) {
-          console.error("Unable to clear cart:", error);
-        }
+        await removePurchasedCartItems();
 
         await Swal.fire({
           icon: "success",
@@ -989,11 +1042,7 @@ export default function CheckoutPage() {
         return;
       }
 
-      try {
-        await clearCart();
-      } catch (error) {
-        console.error("Unable to clear cart after payment:", error);
-      }
+      await removePurchasedCartItems();
 
       await Swal.fire({
         icon: "success",
@@ -1062,6 +1111,7 @@ export default function CheckoutPage() {
     couponLoading ||
     loadingAddresses ||
     addresses.length === 0 ||
+    checkoutItems.length === 0 ||
     selectedAddressId === null ||
     showNewAddressForm;
 
@@ -1224,7 +1274,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!cart || cart.items.length === 0) {
+  if (!cart || checkoutItems.length === 0) {
     return (
       <main className="min-h-screen bg-[#f1f3f6]">
         <div className="mx-auto max-w-2xl px-4 py-12">
@@ -1233,10 +1283,14 @@ export default function CheckoutPage() {
               <ShoppingBag className="h-10 w-10 text-[#2874F0]" />
             </div>
             <h1 className="mt-5 text-2xl font-bold text-gray-900">
-              Your Cart Is Empty
+              {selectedCartItemIds !== null && cart?.items.length
+                ? "Selected Item Is No Longer Available"
+                : "Your Cart Is Empty"}
             </h1>
             <p className="mt-2 text-sm text-gray-500">
-              Your next favourite purchase is waiting for you.
+              {selectedCartItemIds !== null && cart?.items.length
+                ? "Please return to your cart and choose an available item to purchase."
+                : "Your next favourite purchase is waiting for you."}
             </p>
             <Link
               href="/products"
@@ -1801,9 +1855,9 @@ export default function CheckoutPage() {
 
             {/* Order items */}
             <div className="overflow-hidden bg-white shadow-sm">
-              <SectionHeading number="3" title={`Order Summary (${cart.total_items} items)`} />
+              <SectionHeading number="3" title={`Order Summary (${checkoutItemCount} items)`} />
               <div className="divide-y divide-gray-100 border-t border-gray-100">
-                {cart.items.map((item) => {
+                {checkoutItems.map((item) => {
                   const variantImage =
                     item.variant?.images?.find((image) => image.is_primary)?.image_url ??
                     item.variant?.images?.[0]?.image_url ??
@@ -1863,7 +1917,7 @@ export default function CheckoutPage() {
 
               <div className="space-y-4 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-gray-600">Price ({cart.total_items} items)</span>
+                  <span className="text-gray-600">Price ({checkoutItemCount} items)</span>
                   <span className="tabular-nums text-gray-800">₹{subtotal.toFixed(2)}</span>
                 </div>
                 {appliedCoupon && (
