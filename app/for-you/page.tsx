@@ -337,28 +337,7 @@ export default function ForYouPage() {
             <ProductGrid products={viewedProducts} />
           </section>
         ) : (
-          <section className="mb-10 rounded-xl border border-dashed border-gray-300 bg-white px-5 py-8 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-              <Clock className="h-7 w-7 text-blue-600" />
-            </div>
-
-            <h2 className="mt-4 text-lg font-semibold text-gray-900">
-              Start exploring products
-            </h2>
-
-            {/*<p className="mx-auto mt-2 max-w-lg text-sm text-gray-500">
-              When you open a product, it can appear here so you can
-              easily find it again. Recently viewed products are saved
-              in this browser.
-            </p>*/}
-
-            <Link
-              href="/products"
-              className="mt-4 inline-flex rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              Explore products
-            </Link>
-          </section>
+          <span></span>
         )}
 
         {/* RECOMMENDED PRODUCTS */}
