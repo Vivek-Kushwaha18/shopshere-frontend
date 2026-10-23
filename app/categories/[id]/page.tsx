@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -8,128 +9,170 @@ import {
   ChevronDown,
   ChevronRight,
   Package,
-  SlidersHorizontal,
+  Check,
 } from "lucide-react";
 
 import ProductGrid from "@/components/products/ProductGrid";
-
 import {
   getProductsByCategory,
   type Product,
 } from "@/services/products";
-
 import {
   getCategories,
   type Category,
 } from "@/services/categories";
 
-interface CategoryTreeItemProps {
-  category: Category;
-  categories: Category[];
-  currentCategoryId: number;
-  level?: number;
+const INITIAL_CATEGORY_COUNT = 6;
+
+function getDescendantCategories(
+  categoryId: number,
+  categories: Category[]
+): Category[] {
+  const result: Category[] = [];
+  const visited = new Set<number>([categoryId]);
+  const queue = [categoryId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+
+    const children = categories.filter(
+      (category) =>
+        category.is_active &&
+        Number(category.parent_id) === currentId
+    );
+
+    for (const child of children) {
+      const childId = Number(child.id);
+
+      if (!visited.has(childId)) {
+        visited.add(childId);
+        result.push(child);
+        queue.push(childId);
+      }
+    }
+  }
+
+  return result;
 }
 
-function CategoryTreeItem({
+function getAllCategoryIds(
+  categoryId: number,
+  categories: Category[]
+): number[] {
+  return [
+    categoryId,
+    ...getDescendantCategories(categoryId, categories).map(
+      (category) => Number(category.id)
+    ),
+  ];
+}
+
+type CategoryItemProps = {
+  category: Category;
+  categories: Category[];
+  selectedIds: number[];
+  onToggle: (id: number) => void;
+  level?: number;
+};
+
+function CategoryItem({
   category,
   categories,
-  currentCategoryId,
+  selectedIds,
+  onToggle,
   level = 0,
-}: CategoryTreeItemProps) {
-  const [open, setOpen] = useState(true);
+}: CategoryItemProps) {
+  const [expanded, setExpanded] = useState(level === 0);
+  const [showAll, setShowAll] = useState(false);
 
-  const children = useMemo(() => {
-    return categories
-      .filter(
-        (item) =>
-          item.parent_id === category.id &&
-          item.is_active
-      )
-      .sort((a, b) =>
-        a.name.localeCompare(b.name)
-      );
-  }, [categories, category.id]);
+  const children = categories.filter(
+    (item) =>
+      item.is_active &&
+      Number(item.parent_id) === Number(category.id)
+  );
 
-  const hasChildren = children.length > 0;
-  const isCurrent =
-    category.id === currentCategoryId;
+  const visibleChildren = showAll
+    ? children
+    : children.slice(0, INITIAL_CATEGORY_COUNT);
+
+  const checked = selectedIds.includes(Number(category.id));
+  const remainingCount = children.length - visibleChildren.length;
 
   return (
-    <div className="relative">
+    <div className="w-full">
       <div
-        className={`group flex min-h-10 items-center rounded-lg transition-all duration-200 ${
-          isCurrent
-            ? "bg-gray-900 text-white shadow-sm"
-            : "text-gray-700 hover:bg-gray-50 hover:text-gray-950"
+        className={`flex min-h-9 items-center gap-2 rounded-md px-2 transition-colors ${
+          checked ? "bg-blue-50" : "hover:bg-gray-50"
         }`}
-        style={{
-          marginLeft: `${Math.min(level * 12, 36)}px`,
-        }}
+        style={{ paddingLeft: `${8 + level * 12}px` }}
       >
-        {hasChildren ? (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={checked}
+          aria-label={`Select ${category.name}`}
+          onClick={() => onToggle(Number(category.id))}
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+            checked
+              ? "border-blue-600 bg-blue-600 text-white"
+              : "border-gray-300 bg-white hover:border-blue-500"
+          }`}
+        >
+          {checked && <Check size={11} strokeWidth={3} />}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onToggle(Number(category.id))}
+          title={category.name}
+          className={`min-w-0 flex-1 truncate py-1 text-left text-[13px] ${
+            checked
+              ? "font-medium text-blue-700"
+              : "text-gray-700 hover:text-gray-950"
+          }`}
+        >
+          {category.name}
+        </button>
+
+        {children.length > 0 && (
           <button
             type="button"
-            onClick={() =>
-              setOpen((value) => !value)
-            }
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors duration-200 ${
-              isCurrent
-                ? "hover:bg-white/10"
-                : "hover:bg-gray-100"
-            }`}
-            aria-label={
-              open
-                ? `Collapse ${category.name}`
-                : `Expand ${category.name}`
-            }
+            onClick={() => setExpanded((value) => !value)}
+            aria-label={`Toggle ${category.name} subcategories`}
+            aria-expanded={expanded}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 hover:bg-gray-200 hover:text-gray-700"
           >
-            <ChevronDown
-              className={`h-4 w-4 transition-transform duration-300 ${
-                open ? "" : "-rotate-90"
-              }`}
-            />
+            {expanded ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
           </button>
-        ) : (
-          <div className="w-9 shrink-0" />
-        )}
-
-        <Link
-          href={`/categories/${category.slug}`}
-          className="flex min-h-10 min-w-0 flex-1 items-center py-2 pr-2 text-sm font-medium"
-        >
-          <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">
-            {category.name}
-          </span>
-        </Link>
-
-        {!isCurrent && (
-          <ChevronRight className="mr-2 h-3.5 w-3.5 shrink-0 text-gray-300 opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
         )}
       </div>
 
-      {hasChildren && (
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-            open
-              ? "grid-rows-[1fr]"
-              : "grid-rows-[0fr]"
-          }`}
-        >
-          <div className="min-h-0 overflow-hidden">
-            <div className="mt-1 space-y-1">
-              {children.map((child) => (
-                <CategoryTreeItem
-                  key={child.id}
-                  category={child}
-                  categories={categories}
-                  currentCategoryId={
-                    currentCategoryId
-                  }
-                  level={level + 1}
-                />
-              ))}
-            </div>
-          </div>
+      {expanded && children.length > 0 && (
+        <div>
+          {visibleChildren.map((child) => (
+            <CategoryItem
+              key={child.id}
+              category={child}
+              categories={categories}
+              selectedIds={selectedIds}
+              onToggle={onToggle}
+              level={level + 1}
+            />
+          ))}
+
+          {children.length > INITIAL_CATEGORY_COUNT && (
+            <button
+              type="button"
+              onClick={() => setShowAll((value) => !value)}
+              className="mb-2 ml-9 mt-1 text-xs font-semibold text-blue-600 hover:text-blue-800"
+            >
+              {showAll ? "Show less" : `${remainingCount} MORE`}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -138,279 +181,268 @@ function CategoryTreeItem({
 
 export default function CategoryPage() {
   const params = useParams();
+  const categorySlug = String(params.id || "");
 
-  const categorySlug = Array.isArray(params.id)
-    ? params.id[0]
-    : params.id;
-
-  const [category, setCategory] =
+  const [initialProducts, setInitialProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [currentCategory, setCurrentCategory] =
     useState<Category | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterLoading, setFilterLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [categories, setCategories] =
-    useState<Category[]>([]);
-
-  const [products, setProducts] =
-    useState<Product[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState<string | null>(null);
-
-  const [
-    mobileCategoriesOpen,
-    setMobileCategoriesOpen,
-  ] = useState(false);
-
+  // Load the current category and its initial products.
   useEffect(() => {
-    if (!categorySlug) {
-      return;
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      setError("");
+      setSelectedIds([]);
+      setSelectedProducts([]);
+      setInitialProducts([]);
+
+      try {
+        const [productResult, categoryResult] = await Promise.all([
+          getProductsByCategory(categorySlug),
+          getCategories(),
+        ]);
+
+        if (cancelled) return;
+
+        const activeCategories = (
+          Array.isArray(categoryResult) ? categoryResult : []
+        ).filter((item) => item.is_active);
+
+        setInitialProducts(
+          Array.isArray(productResult) ? productResult : []
+        );
+        setCategories(activeCategories);
+
+        setCurrentCategory(
+          activeCategories.find(
+            (item) => item.slug === categorySlug
+          ) || null
+        );
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error("Failed to load category:", err);
+        setError("Unable to load products. Please try again.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
-    async function loadCategoryPage() {
-      if (!categorySlug) {
+    if (categorySlug) {
+      loadData();
+    } else {
+      setLoading(false);
+      setError("Category not found.");
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [categorySlug]);
+
+  // Find the root category for the sidebar.
+  const rootCategory = useMemo(() => {
+    if (!currentCategory) return null;
+
+    let root = currentCategory;
+    const visited = new Set<number>();
+
+    while (
+      root.parent_id != null &&
+      !visited.has(Number(root.id))
+    ) {
+      visited.add(Number(root.id));
+
+      const parent = categories.find(
+        (item) => Number(item.id) === Number(root.parent_id)
+      );
+
+      if (!parent) break;
+
+      root = parent;
+    }
+
+    return root;
+  }, [currentCategory, categories]);
+
+  // Allow only one selected category.
+  // Selecting a different category replaces the previous selection.
+  // Clicking the selected category again deselects it.
+  function toggleCategory(categoryId: number) {
+    setSelectedIds((previous) =>
+      previous.includes(categoryId) ? [] : [categoryId]
+    );
+  }
+
+  // Load products for the selected category and all its descendants.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSelectedProducts() {
+      if (selectedIds.length === 0 || categories.length === 0) {
+        setSelectedProducts([]);
+        setFilterLoading(false);
         return;
       }
 
+      setFilterLoading(true);
+      setError("");
+
       try {
-        setLoading(true);
-        setError(null);
+        const categoryIds = getAllCategoryIds(
+          selectedIds[0],
+          categories
+        );
 
-        const [
-          allCategories,
-          categoryProducts,
-        ] = await Promise.all([
-          getCategories(),
-          getProductsByCategory(categorySlug),
-        ]);
-
-        const currentCategory =
-          allCategories.find(
-            (item) =>
-              item.slug === categorySlug &&
-              item.is_active
+        const selectedCategories = categoryIds
+          .map((id) =>
+            categories.find(
+              (category) => Number(category.id) === id
+            )
+          )
+          .filter(
+            (category): category is Category => Boolean(category)
           );
 
-        if (!currentCategory) {
-          setError("Category not found.");
-          return;
+        const results = await Promise.all(
+          selectedCategories.map((category) =>
+            getProductsByCategory(category.slug)
+          )
+        );
+
+        if (cancelled) return;
+
+        const productMap = new Map<number, Product>();
+
+        for (const result of results) {
+          if (!Array.isArray(result)) continue;
+
+          for (const product of result) {
+            productMap.set(Number(product.id), product);
+          }
         }
 
-        setCategories(allCategories);
-        setProducts(categoryProducts);
-        setCategory(currentCategory);
+        setSelectedProducts(Array.from(productMap.values()));
       } catch (err) {
-        console.error(
-          "Failed to load category page:",
-          err
-        );
+        if (cancelled) return;
 
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load category."
-        );
+        console.error("Failed to load selected category products:", err);
+        setSelectedProducts([]);
+        setError("Unable to load selected category products.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setFilterLoading(false);
       }
     }
 
-    loadCategoryPage();
-  }, [categorySlug]);
+    loadSelectedProducts();
 
-  const sidebarCategories = useMemo(() => {
-    if (!category) {
-      return [];
-    }
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedIds, categories]);
 
-    return categories.filter(
-      (item) =>
-        item.id === category.id &&
-        item.is_active
-    );
-  }, [categories, category]);
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="animate-pulse">
-            <div className="mb-6 h-7 w-48 rounded-md bg-gray-200" />
-
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[230px_minmax(0,1fr)]">
-              <div className="hidden h-72 rounded-xl bg-gray-100 lg:block" />
-
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-                {Array.from({
-                  length: 8,
-                }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="aspect-[3/4] rounded-xl bg-gray-100"
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (error || !category) {
-    return (
-      <main className="min-h-screen bg-white">
-        <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center px-4">
-          <div className="max-w-md text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
-              <Package className="h-6 w-6 text-gray-500" />
-            </div>
-
-            <h1 className="text-xl font-bold text-gray-900">
-              Category not found
-            </h1>
-
-            <p className="mt-2 text-sm text-gray-500">
-              {error ||
-                "The category you are looking for does not exist."}
-            </p>
-
-            <Link
-              href="/products"
-              className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-black hover:shadow-md active:scale-[0.98]"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              All products
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
+  const displayedProducts =
+    selectedIds.length > 0 ? selectedProducts : initialProducts;
 
   return (
-    <main className="min-h-screen bg-gray-50/40">
-      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        {/* BACK TO PRODUCTS */}
-        <div className="mb-3">
-          {/*<Link
-            href="/products"
-            className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-500 transition-all duration-200 hover:bg-white hover:text-gray-900 hover:shadow-sm"
-          >
-            <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" />
-            All product
-          </Link>*/}
+    <main className="min-h-screen bg-gray-50/70">
+      <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
+        {/*<Link
+          href="/products"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600"
+        >
+          <ArrowLeft size={16} />
+          All products
+        </Link>*/}
+
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+            {currentCategory?.name || "Category"}
+          </h1>
+
+          {/*<p className="mt-1 text-sm text-gray-500">
+            Select a category to view its products and subcategories.
+          </p>*/}
         </div>
 
-        {/* MOBILE CATEGORY BUTTON */}
-        <div className="mb-4 lg:hidden">
-          <button
-            type="button"
-            onClick={() =>
-              setMobileCategoriesOpen(
-                (value) => !value
-              )
-            }
-            className="group flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-900 shadow-sm transition-all duration-200 hover:border-gray-300 hover:shadow-md active:scale-[0.99]"
-          >
-            <span className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-gray-500 transition-transform duration-200 group-hover:rotate-12" />
-              Categories
-            </span>
-
-            <ChevronDown
-              className={`h-4 w-4 text-gray-400 transition-transform duration-300 ${
-                mobileCategoriesOpen
-                  ? "rotate-180"
-                  : ""
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* CONTENT */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[230px_minmax(0,1fr)]">
-          {/* SIDEBAR */}
-          <aside
-            className={`${
-              mobileCategoriesOpen
-                ? "block"
-                : "hidden"
-            } lg:block`}
-          >
-            <div className="sticky top-20 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md">
-              {/* SIDEBAR HEADER */}
-              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
-                <div>
-                  <h2 className="text-sm font-bold text-gray-900">
-                    Categories
-                  </h2>
-
-                  <p className="mt-0.5 text-[11px] text-gray-400">
-                    Related categories
-                  </p>
-                </div>
-
-                <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-gray-100 px-1.5 text-[11px] font-semibold text-gray-500">
-                  {sidebarCategories.length}
-                </span>
-              </div>
-
-              {/* CATEGORY TREE */}
-              <div className="p-2.5">
-                {sidebarCategories.map(
-                  (item) => (
-                    <CategoryTreeItem
-                      key={item.id}
-                      category={item}
-                      categories={categories}
-                      currentCategoryId={
-                        category.id
-                      }
-                    />
-                  )
-                )}
-              </div>
-            </div>
-          </aside>
-
-          {/* PRODUCT AREA */}
-          <section className="min-w-0">
-            {/* PRODUCT HEADER */}
-            <div className="mb-3">
-              <h2 className="truncate text-sm font-bold text-gray-900 sm:text-base">
-                {category.name} products
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="mb-3 border-b border-gray-100 px-2 pb-3">
+              <h2 className="text-sm font-semibold text-gray-900">
+                Categories
               </h2>
 
-              {/*<p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">
-                Explore products in this category
+              {/*<p className="mt-1 text-xs text-gray-500">
+                Select one category at a time
               </p>*/}
             </div>
 
-            {products.length === 0 ? (
-              <div className="flex min-h-[330px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white px-6 text-center">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-                  <Package className="h-5 w-5 text-gray-400" />
-                </div>
+            {rootCategory ? (
+              <CategoryItem
+                category={rootCategory}
+                categories={categories}
+                selectedIds={selectedIds}
+                onToggle={toggleCategory}
+              />
+            ) : (
+              <p className="px-2 py-3 text-sm text-gray-500">
+                No categories available.
+              </p>
+            )}
+          </aside>
 
-                <h3 className="text-base font-bold text-gray-900">
-                  No products available
+          <section className="min-w-0">
+            <div className="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <h2 className="text-sm font-semibold text-gray-900">
+                {selectedIds.length > 0
+                  ? "Selected category products"
+                  : "All products"}
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500">
+                {loading || filterLoading
+                  ? "Loading products..."
+                  : `${displayedProducts.length} ${
+                      displayedProducts.length === 1
+                        ? "product"
+                        : "products"
+                    } found`}
+              </p>
+            </div>
+
+            {error ? (
+              <div className="rounded-xl border border-red-200 bg-white p-6 text-center text-sm text-red-600">
+                {error}
+              </div>
+            ) : loading || filterLoading ? (
+              <div className="py-12 text-center text-sm text-gray-500">
+                Loading products...
+              </div>
+            ) : displayedProducts.length > 0 ? (
+              <ProductGrid products={displayedProducts} />
+            ) : (
+              <div className="rounded-xl border border-gray-200 bg-white px-5 py-12 text-center">
+                <Package
+                  size={28}
+                  className="mx-auto text-gray-400"
+                />
+
+                <h3 className="mt-3 text-base font-semibold text-gray-900">
+                  No products found
                 </h3>
 
-                <p className="mt-1.5 text-sm text-gray-500">
-                  There are no products in this category yet.
+                <p className="mt-1 text-sm text-gray-500">
+                  Try selecting another category.
                 </p>
-
-                <Link
-                  href="/products"
-                  className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-black hover:shadow-md active:scale-[0.98]"
-                >
-                  Browse products
-                </Link>
               </div>
-            ) : (
-              <ProductGrid products={products} />
             )}
           </section>
         </div>
