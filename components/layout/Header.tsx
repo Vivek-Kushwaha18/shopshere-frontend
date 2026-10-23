@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -36,9 +37,6 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Hide For You and Categories only on product detail pages.
-  // Examples: /products/42 and /products/my-product
-  // Keep them visible on / and /products.
   const isProductDetailPage = /^\/products\/[^/]+\/?$/.test(pathname);
 
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -55,7 +53,6 @@ export default function Header() {
   const [searchSuggestions, setSearchSuggestions] = useState<Product[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // Count distinct products, not total item quantity.
   const [cartCount, setCartCount] = useState(0);
 
   const profileRef = useRef<HTMLDivElement>(null);
@@ -70,7 +67,6 @@ export default function Header() {
     return pathname === path || pathname.startsWith(`${path}/`);
   }
 
-  // Load the current authenticated user.
   const loadAuthUser = useCallback(() => {
     const accessToken =
       sessionStorage.getItem("access_token") ||
@@ -98,7 +94,6 @@ export default function Header() {
     };
   }, [loadAuthUser]);
 
-  // Load categories from the backend.
   useEffect(() => {
     let active = true;
 
@@ -138,7 +133,6 @@ export default function Header() {
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Load real products for search suggestions.
   useEffect(() => {
     let active = true;
 
@@ -165,7 +159,6 @@ export default function Header() {
     };
   }, []);
 
-  // Load the number of unique products in the cart.
   useEffect(() => {
     let active = true;
     let requestInProgress = false;
@@ -238,22 +231,14 @@ export default function Header() {
     window.addEventListener(CART_UPDATED_EVENT, handleCartUpdated);
     window.addEventListener("auth-change", handleCartUpdated);
     window.addEventListener("focus", handleCartUpdated);
-
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange
-    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
 
-      window.removeEventListener(
-        CART_UPDATED_EVENT,
-        handleCartUpdated
-      );
+      window.removeEventListener(CART_UPDATED_EVENT, handleCartUpdated);
       window.removeEventListener("auth-change", handleCartUpdated);
       window.removeEventListener("focus", handleCartUpdated);
-
       document.removeEventListener(
         "visibilitychange",
         handleVisibilityChange
@@ -261,15 +246,11 @@ export default function Header() {
     };
   }, []);
 
-  // Close dropdowns when clicking outside.
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
 
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(target)
-      ) {
+      if (profileRef.current && !profileRef.current.contains(target)) {
         setProfileOpen(false);
       }
 
@@ -279,10 +260,7 @@ export default function Header() {
       const clickedInsideMobileSearch =
         mobileSearchRef.current?.contains(target) ?? false;
 
-      if (
-        !clickedInsideDesktopSearch &&
-        !clickedInsideMobileSearch
-      ) {
+      if (!clickedInsideDesktopSearch && !clickedInsideMobileSearch) {
         setSearchFocused(false);
       }
     }
@@ -290,14 +268,10 @@ export default function Header() {
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleClickOutside
-      );
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
-  // Close menus when the route changes.
   useEffect(() => {
     setMobileMenu(false);
     setMobileCategoriesOpen(false);
@@ -364,82 +338,29 @@ export default function Header() {
     return "Dashboard";
   }
 
-  function levenshteinDistance(first: string, second: string) {
-    const matrix = Array.from(
-      { length: second.length + 1 },
-      () => Array(first.length + 1).fill(0)
-    );
+  // Search product names only. Do not use descriptions or fuzzy matching.
+  function getSearchSuggestions(value: string): Product[] {
+    const searchTerms = value
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
 
-    for (let index = 0; index <= first.length; index++) {
-      matrix[0][index] = index;
-    }
-
-    for (let index = 0; index <= second.length; index++) {
-      matrix[index][0] = index;
-    }
-
-    for (let row = 1; row <= second.length; row++) {
-      for (let column = 1; column <= first.length; column++) {
-        if (
-          second[row - 1].toLowerCase() ===
-          first[column - 1].toLowerCase()
-        ) {
-          matrix[row][column] =
-            matrix[row - 1][column - 1];
-        } else {
-          matrix[row][column] = Math.min(
-            matrix[row - 1][column] + 1,
-            matrix[row][column - 1] + 1,
-            matrix[row - 1][column - 1] + 1
-          );
-        }
-      }
-    }
-
-    return matrix[second.length][first.length];
-  }
-
-  function getSearchSuggestions(value: string) {
-    const searchValue = value.trim().toLowerCase();
-
-    if (!searchValue) {
+    if (searchTerms.length === 0) {
       return [];
     }
 
     return products
-      .map((product) => {
-        const productName = product.name?.toLowerCase() || "";
-        const productDescription =
-          product.description?.toLowerCase() || "";
+      .filter((product) => {
+        const productName = (product.name ?? "")
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, " ");
 
-        let score = 0;
-
-        if (productName === searchValue) score += 100;
-        if (productName.startsWith(searchValue)) score += 80;
-        if (productName.includes(searchValue)) score += 60;
-
-        if (productDescription.includes(searchValue)) {
-          score += 30;
-        }
-
-        const distance = levenshteinDistance(
-          searchValue,
-          productName
+        return searchTerms.every((term) =>
+          productName.includes(term)
         );
-
-        if (
-          distance <=
-          Math.max(2, Math.floor(productName.length * 0.3))
-        ) {
-          score += 40 - distance * 5;
-        }
-
-        return { product, score };
       })
-      .filter((item) => item.score > 0)
-      .sort((first, second) => second.score - first.score)
-      .slice(0, 6)
-      .map((item) => item.product);
+      .slice(0, 6);
   }
 
   function handleSearchChange(value: string) {
@@ -479,15 +400,14 @@ export default function Header() {
     const trimmedSearch = search.trim();
 
     setSearchFocused(false);
+    setSearchSuggestions([]);
 
     if (!trimmedSearch) {
       router.push("/products");
       return;
     }
 
-    router.push(
-      `/products?search=${encodeURIComponent(trimmedSearch)}`
-    );
+    router.push(`/products?search=${encodeURIComponent(trimmedSearch)}`);
   }
 
   function closeMobileMenu() {
@@ -508,12 +428,56 @@ export default function Header() {
     );
   }
 
+  function SearchSuggestions() {
+    if (!searchFocused || !search.trim()) {
+      return null;
+    }
+
+    return (
+      <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-lg border bg-white shadow-xl">
+        {searchSuggestions.length > 0 ? (
+          searchSuggestions.map((product) => (
+            <button
+              key={product.id}
+              type="button"
+              onClick={() => handleSuggestionClick(product)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50"
+            >
+              {product.image ? (
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="h-10 w-10 rounded-md object-cover"
+                />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100">
+                  <Search className="h-4 w-4 text-gray-400" />
+                </div>
+              )}
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-gray-900">
+                  {product.name}
+                </p>
+                <p className="truncate text-xs text-gray-500">
+                  ₹{product.price}
+                </p>
+              </div>
+            </button>
+          ))
+        ) : (
+          <p className="px-4 py-3 text-sm text-gray-500">
+            No matching products found.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
-      {/* MAIN HEADER */}
       <div className="border-b">
         <div className="mx-auto flex h-[68px] max-w-7xl items-center gap-4 px-4">
-          {/* LOGO */}
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2"
@@ -527,7 +491,6 @@ export default function Header() {
               <h1 className="text-lg font-bold leading-none tracking-tight text-blue-600">
                 ShopSphere
               </h1>
-
               <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-gray-500">
                 Smart Shopping
               </p>
@@ -553,40 +516,7 @@ export default function Header() {
               />
             </form>
 
-            {searchFocused && searchSuggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-lg border bg-white shadow-xl">
-                {searchSuggestions.map((product) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => handleSuggestionClick(product)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50"
-                  >
-                    {product.image ? (
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="h-10 w-10 rounded-md object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100">
-                        <Search className="h-4 w-4 text-gray-400" />
-                      </div>
-                    )}
-
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-900">
-                        {product.name}
-                      </p>
-
-                      <p className="truncate text-xs text-gray-500">
-                        ₹{product.price}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+            <SearchSuggestions />
           </div>
 
           {/* DESKTOP ACTIONS */}
@@ -661,7 +591,6 @@ export default function Header() {
                           <p className="truncate font-semibold text-gray-900">
                             {user?.full_name || "User"}
                           </p>
-
                           <p className="truncate text-xs text-gray-500">
                             {user?.email}
                           </p>
@@ -701,8 +630,7 @@ export default function Header() {
                         </div>
                       </Link>
 
-                      {(user?.role === "seller" ||
-                        user?.role === "admin") && (
+                      {(user?.role === "seller" || user?.role === "admin") && (
                         <Link
                           href={getDashboardUrl()}
                           onClick={() => setProfileOpen(false)}
@@ -710,9 +638,7 @@ export default function Header() {
                         >
                           <LayoutDashboard className="h-4 w-4" />
                           <div>
-                            <p className="font-medium">
-                              {getDashboardLabel()}
-                            </p>
+                            <p className="font-medium">{getDashboardLabel()}</p>
                             <p className="text-xs text-gray-400">
                               Manage your workspace
                             </p>
@@ -770,13 +696,10 @@ export default function Header() {
             )}
           </div>
 
-          {/* MOBILE MENU BUTTON */}
           <button
             type="button"
             className="rounded-lg p-2 transition hover:bg-gray-100 md:hidden"
-            onClick={() =>
-              setMobileMenu((previous) => !previous)
-            }
+            onClick={() => setMobileMenu((previous) => !previous)}
             aria-label={mobileMenu ? "Close menu" : "Open menu"}
             aria-expanded={mobileMenu}
           >
@@ -789,11 +712,9 @@ export default function Header() {
         </div>
       </div>
 
-      {/* DESKTOP NAVIGATION */}
       {!isProductDetailPage && (
         <div className="hidden border-b bg-white md:block">
           <nav className="mx-auto flex h-12 max-w-7xl items-center justify-center gap-8 overflow-x-auto px-4">
-            {/* FOR YOU */}
             <Link
               href="/for-you"
               className={`shrink-0 text-sm font-semibold transition ${
@@ -805,7 +726,6 @@ export default function Header() {
               For You
             </Link>
 
-            {/* CATEGORIES */}
             {categoriesLoading ? (
               <span className="shrink-0 text-sm text-gray-400">
                 Loading categories...
@@ -816,9 +736,7 @@ export default function Header() {
                   key={category.id}
                   href={`/categories/${category.slug}`}
                   className={`shrink-0 text-sm font-semibold transition ${
-                    pathname.startsWith(
-                      `/categories/${category.slug}`
-                    )
+                    pathname.startsWith(`/categories/${category.slug}`)
                       ? "text-blue-600"
                       : "text-gray-700 hover:text-blue-600"
                   }`}
@@ -835,11 +753,7 @@ export default function Header() {
       {mobileMenu && (
         <div className="border-t bg-white md:hidden">
           <div className="mx-auto max-w-7xl px-4 py-4">
-            {/* MOBILE SEARCH */}
-            <div
-              ref={mobileSearchRef}
-              className="relative mb-4"
-            >
+            <div ref={mobileSearchRef} className="relative mb-4">
               <form
                 onSubmit={(event) => {
                   handleSearch(event);
@@ -860,47 +774,10 @@ export default function Header() {
                 />
               </form>
 
-              {searchFocused && searchSuggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-xl border bg-white shadow-xl">
-                  {searchSuggestions.map((product) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      onClick={() => {
-                        handleSuggestionClick(product);
-                        closeMobileMenu();
-                      }}
-                      className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-gray-50"
-                    >
-                      {product.image ? (
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="h-10 w-10 rounded-md object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100">
-                          <Search className="h-4 w-4 text-gray-400" />
-                        </div>
-                      )}
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {product.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          ₹{product.price}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <SearchSuggestions />
             </div>
 
-            {/* MOBILE NAVIGATION */}
             <nav className="flex flex-col gap-1">
-              {/* Hide For You and Categories on product details */}
               {!isProductDetailPage && (
                 <>
                   <Link
@@ -919,9 +796,7 @@ export default function Header() {
                     <button
                       type="button"
                       onClick={() =>
-                        setMobileCategoriesOpen(
-                          (previous) => !previous
-                        )
+                        setMobileCategoriesOpen((previous) => !previous)
                       }
                       className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
                       aria-expanded={mobileCategoriesOpen}
@@ -959,9 +834,7 @@ export default function Header() {
                               }`}
                             >
                               <span>{category.name}</span>
-                              <span className="text-xs text-gray-400">
-                                →
-                              </span>
+                              <span className="text-xs text-gray-400">→</span>
                             </Link>
                           ))
                         )}
@@ -981,7 +854,6 @@ export default function Header() {
                 </>
               )}
 
-              {/* MOBILE CART */}
               <Link
                 href="/cart"
                 onClick={closeMobileMenu}
@@ -992,7 +864,6 @@ export default function Header() {
                   <ShoppingCart className="h-5 w-5" />
                   <CartCountBadge />
                 </span>
-
                 <span>Cart</span>
 
                 {cartCount > 0 && (
@@ -1012,7 +883,6 @@ export default function Header() {
                   >
                     Login
                   </Link>
-
                   <Link
                     href="/signup"
                     onClick={closeMobileMenu}
@@ -1033,7 +903,6 @@ export default function Header() {
                         <p className="truncate font-semibold text-gray-900">
                           {user?.full_name || "User"}
                         </p>
-
                         <p className="truncate text-xs text-gray-500">
                           {user?.email}
                         </p>
@@ -1066,8 +935,7 @@ export default function Header() {
                     My Profile
                   </Link>
 
-                  {(user?.role === "seller" ||
-                    user?.role === "admin") && (
+                  {(user?.role === "seller" || user?.role === "admin") && (
                     <Link
                       href={getDashboardUrl()}
                       onClick={closeMobileMenu}

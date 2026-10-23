@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronRight,
@@ -23,70 +24,78 @@ import {
 
 export default function ProductsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const searchQuery = (searchParams.get("search") ?? "").trim();
+
+  const searchTerms = useMemo(
+    () =>
+      searchQuery
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean),
+    [searchQuery]
+  );
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>(
-    []
-  );
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(
-    null
-  );
+  const [error, setError] = useState<string | null>(null);
 
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(20000);
 
-  const [appliedMinPrice, setAppliedMinPrice] =
-    useState(0);
-  const [appliedMaxPrice, setAppliedMaxPrice] =
-    useState(20000);
+  const [appliedMinPrice, setAppliedMinPrice] = useState(0);
+  const [appliedMaxPrice, setAppliedMaxPrice] = useState(20000);
 
-  const [openCategory, setOpenCategory] =
-    useState(true);
-
+  const [openCategory, setOpenCategory] = useState(true);
   const [openPrice, setOpenPrice] = useState(true);
-
-  const [openDiscount, setOpenDiscount] =
-    useState(true);
-
-  const [openAvailability, setOpenAvailability] =
-    useState(true);
+  const [openDiscount, setOpenDiscount] = useState(true);
+  const [openAvailability, setOpenAvailability] = useState(true);
 
   const [selectedDiscount, setSelectedDiscount] =
     useState<number | null>(null);
 
-  const [inStockOnly, setInStockOnly] =
-    useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
 
   useEffect(() => {
+    let active = true;
+
     async function loadProducts() {
       try {
         setLoading(true);
         setError(null);
 
-        const [
-          productsResponse,
-          categoriesResponse,
-        ] = await Promise.all([
-          getProducts(),
-          getCategories(),
-        ]);
+        const [productsResponse, categoriesResponse] =
+          await Promise.all([getProducts(), getCategories()]);
+
+        if (!active) {
+          return;
+        }
 
         setProducts(productsResponse);
         setCategories(categoriesResponse);
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load products."
-        );
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load products."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
-    loadProducts();
+    void loadProducts();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const highestProductPrice = useMemo(() => {
@@ -95,17 +104,12 @@ export default function ProductsPage() {
     }
 
     const highestPrice = Math.max(
-      ...products.map(
-        (product) => product.price
-      )
+      ...products.map((product) => product.price)
     );
 
-    const roundedPrice =
-      Math.ceil(highestPrice / 1000) * 1000;
+    const roundedPrice = Math.ceil(highestPrice / 1000) * 1000;
 
-    return roundedPrice > 0
-      ? roundedPrice
-      : 20000;
+    return roundedPrice > 0 ? roundedPrice : 20000;
   }, [products]);
 
   useEffect(() => {
@@ -119,16 +123,23 @@ export default function ProductsPage() {
     return categories
       .filter(
         (category) =>
-          category.parent_id === null &&
-          category.is_active
+          category.parent_id === null && category.is_active
       )
-      .sort((a, b) =>
-        a.name.localeCompare(b.name)
-      );
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [categories]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
+      const productName = (product.name ?? "")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ");
+
+      // Every search term must occur in the product name.
+      // Descriptions are deliberately not searched.
+      const matchesSearch = searchTerms.every((term) =>
+        productName.includes(term)
+      );
+
       const matchesPrice =
         product.price >= appliedMinPrice &&
         product.price <= appliedMaxPrice;
@@ -141,13 +152,13 @@ export default function ProductsPage() {
         (product.original_price !== null &&
           product.original_price !== undefined &&
           product.original_price > product.price &&
-          ((product.original_price -
-            product.price) /
+          ((product.original_price - product.price) /
             product.original_price) *
             100 >=
             selectedDiscount);
 
       return (
+        matchesSearch &&
         matchesPrice &&
         matchesStock &&
         matchesDiscount
@@ -155,6 +166,7 @@ export default function ProductsPage() {
     });
   }, [
     products,
+    searchTerms,
     appliedMinPrice,
     appliedMaxPrice,
     selectedDiscount,
@@ -177,28 +189,16 @@ export default function ProductsPage() {
     selectedDiscount !== null ||
     inStockOnly;
 
-  const handleCategoryClick = (
-    category: Category
-  ) => {
-    router.push(
-      `/categories/${category.slug}`
-    );
+  const handleCategoryClick = (category: Category) => {
+    router.push(`/categories/${category.slug}`);
   };
 
-  const handleMinPriceChange = (
-    value: number
-  ) => {
-    const safeValue = Math.max(
-      0,
-      Math.min(value, maxPrice - 1)
-    );
-
+  const handleMinPriceChange = (value: number) => {
+    const safeValue = Math.max(0, Math.min(value, maxPrice - 1));
     setMinPrice(safeValue);
   };
 
-  const handleMaxPriceChange = (
-    value: number
-  ) => {
+  const handleMaxPriceChange = (value: number) => {
     const safeValue = Math.min(
       highestProductPrice,
       Math.max(value, minPrice + 1)
@@ -215,32 +215,20 @@ export default function ProductsPage() {
   const clearAllFilters = () => {
     setMinPrice(0);
     setMaxPrice(highestProductPrice);
-
     setAppliedMinPrice(0);
-    setAppliedMaxPrice(
-      highestProductPrice
-    );
-
+    setAppliedMaxPrice(highestProductPrice);
     setSelectedDiscount(null);
     setInStockOnly(false);
   };
 
+  const clearSearch = () => {
+    router.push("/products");
+  };
+
   const quickPriceRanges = [
-    {
-      label: "Under ₹1,000",
-      min: 0,
-      max: 1000,
-    },
-    {
-      label: "₹1,000 – ₹5,000",
-      min: 1000,
-      max: 5000,
-    },
-    {
-      label: "₹5,000 – ₹10,000",
-      min: 5000,
-      max: 10000,
-    },
+    { label: "Under ₹1,000", min: 0, max: 1000 },
+    { label: "₹1,000 – ₹5,000", min: 1000, max: 5000 },
+    { label: "₹5,000 – ₹10,000", min: 5000, max: 10000 },
     {
       label: "₹10,000+",
       min: 10000,
@@ -263,9 +251,7 @@ export default function ProductsPage() {
 
             <div className="flex-1">
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                {Array.from({
-                  length: 8,
-                }).map((_, index) => (
+                {Array.from({ length: 8 }).map((_, index) => (
                   <div
                     key={index}
                     className="overflow-hidden rounded-lg border"
@@ -292,10 +278,7 @@ export default function ProductsPage() {
           <h2 className="text-lg font-semibold text-red-700">
             Unable to load products
           </h2>
-
-          <p className="mt-2 text-sm text-red-600">
-            {error}
-          </p>
+          <p className="mt-2 text-sm text-red-600">{error}</p>
         </div>
       </main>
     );
@@ -305,13 +288,20 @@ export default function ProductsPage() {
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-         {/* <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-            All Products
-          </h1>*/}
-
-          {/*<p className="mt-1 text-sm text-gray-500">
-            Discover products you'll love
-          </p>*/}
+          {searchQuery && (
+            <>
+              <h1 className="text-xl font-bold text-gray-900">
+                Search results for &quot;{searchQuery}&quot;
+              </h1>
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                Clear search
+              </button>
+            </>
+          )}
         </div>
 
         <p className="text-sm text-gray-500">
@@ -323,11 +313,9 @@ export default function ProductsPage() {
         {/* FILTER SIDEBAR */}
         <aside className="sticky top-20 hidden h-fit w-64 shrink-0 lg:block">
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md">
-            {/* FILTER HEADER */}
             <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-gray-700" />
-
                 <h2 className="text-sm font-bold uppercase tracking-wide text-gray-900">
                   Filters
                 </h2>
@@ -348,55 +336,37 @@ export default function ProductsPage() {
             <section className="border-b border-gray-200">
               <button
                 type="button"
-                onClick={() =>
-                  setOpenCategory(
-                    (previous) => !previous
-                  )
-                }
+                onClick={() => setOpenCategory((previous) => !previous)}
                 className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Category
                 </span>
-
                 <ChevronDown
                   className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
-                    openCategory
-                      ? "rotate-180"
-                      : ""
+                    openCategory ? "rotate-180" : ""
                   }`}
                 />
               </button>
 
               <div
                 className={`grid transition-all duration-300 ${
-                  openCategory
-                    ? "grid-rows-[1fr]"
-                    : "grid-rows-[0fr]"
+                  openCategory ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                 }`}
               >
                 <div className="overflow-hidden">
                   <div className="space-y-1 px-3 pb-4">
-                    {mainCategories.map(
-                      (category) => (
-                        <button
-                          key={category.id}
-                          type="button"
-                          onClick={() =>
-                            handleCategoryClick(
-                              category
-                            )
-                          }
-                          className="group flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm text-gray-700 transition-all duration-200 hover:bg-blue-50 hover:pl-4 hover:text-blue-700"
-                        >
-                          <span>
-                            {category.name}
-                          </span>
-
-                          <ChevronRight className="h-4 w-4 opacity-0 transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-100" />
-                        </button>
-                      )
-                    )}
+                    {mainCategories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => handleCategoryClick(category)}
+                        className="group flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm text-gray-700 transition-all duration-200 hover:bg-blue-50 hover:pl-4 hover:text-blue-700"
+                      >
+                        <span>{category.name}</span>
+                        <ChevronRight className="h-4 w-4 opacity-0 transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-100" />
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -406,47 +376,33 @@ export default function ProductsPage() {
             <section className="border-b border-gray-200">
               <button
                 type="button"
-                onClick={() =>
-                  setOpenPrice(
-                    (previous) => !previous
-                  )
-                }
+                onClick={() => setOpenPrice((previous) => !previous)}
                 className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Price
                 </span>
-
                 <ChevronDown
                   className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
-                    openPrice
-                      ? "rotate-180"
-                      : ""
+                    openPrice ? "rotate-180" : ""
                   }`}
                 />
               </button>
 
               <div
                 className={`grid transition-all duration-300 ${
-                  openPrice
-                    ? "grid-rows-[1fr]"
-                    : "grid-rows-[0fr]"
+                  openPrice ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                 }`}
               >
                 <div className="overflow-hidden">
                   <div className="px-5 pb-5">
-                    {/* PRICE VALUES */}
                     <div className="mb-5 grid grid-cols-2 gap-2">
                       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-wide text-gray-400">
                           Min
                         </p>
-
                         <p className="mt-0.5 text-sm font-semibold text-gray-800">
-                          ₹
-                          {minPrice.toLocaleString(
-                            "en-IN"
-                          )}
+                          ₹{minPrice.toLocaleString("en-IN")}
                         </p>
                       </div>
 
@@ -454,28 +410,19 @@ export default function ProductsPage() {
                         <p className="text-[10px] uppercase tracking-wide text-gray-400">
                           Max
                         </p>
-
                         <p className="mt-0.5 text-sm font-semibold text-gray-800">
-                          ₹
-                          {maxPrice.toLocaleString(
-                            "en-IN"
-                          )}
+                          ₹{maxPrice.toLocaleString("en-IN")}
                         </p>
                       </div>
                     </div>
 
-                    {/* SLIDER */}
                     <div className="relative mb-6 h-5">
                       <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-gray-200" />
-
                       <div
                         className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-blue-600 transition-all duration-150"
                         style={{
                           left: `${minPosition}%`,
-                          width: `${
-                            maxPosition -
-                            minPosition
-                          }%`,
+                          width: `${maxPosition - minPosition}%`,
                         }}
                       />
 
@@ -485,11 +432,7 @@ export default function ProductsPage() {
                         max={highestProductPrice}
                         value={minPrice}
                         onChange={(event) =>
-                          handleMinPriceChange(
-                            Number(
-                              event.target.value
-                            )
-                          )
+                          handleMinPriceChange(Number(event.target.value))
                         }
                         className="price-slider pointer-events-none absolute left-0 top-0 h-5 w-full appearance-none bg-transparent"
                         aria-label="Minimum price"
@@ -501,63 +444,45 @@ export default function ProductsPage() {
                         max={highestProductPrice}
                         value={maxPrice}
                         onChange={(event) =>
-                          handleMaxPriceChange(
-                            Number(
-                              event.target.value
-                            )
-                          )
+                          handleMaxPriceChange(Number(event.target.value))
                         }
                         className="price-slider pointer-events-none absolute left-0 top-0 h-5 w-full appearance-none bg-transparent"
                         aria-label="Maximum price"
                       />
                     </div>
 
-                    {/* QUICK RANGES */}
                     <div className="space-y-1">
-                      {quickPriceRanges.map(
-                        (range) => {
-                          const active =
-                            minPrice ===
-                              range.min &&
-                            maxPrice ===
-                              range.max;
+                      {quickPriceRanges.map((range) => {
+                        const active =
+                          minPrice === range.min && maxPrice === range.max;
 
-                          return (
-                            <button
-                              key={
-                                range.label
-                              }
-                              type="button"
-                              onClick={() => {
-                                setMinPrice(
-                                  range.min
-                                );
-                                setMaxPrice(
-                                  Math.min(
-                                    range.max,
-                                    highestProductPrice
-                                  )
-                                );
-                              }}
-                              className={`flex w-full items-center rounded-md px-2 py-2 text-left text-xs transition-all duration-200 ${
+                        return (
+                          <button
+                            key={range.label}
+                            type="button"
+                            onClick={() => {
+                              setMinPrice(range.min);
+                              setMaxPrice(
+                                Math.min(range.max, highestProductPrice)
+                              );
+                            }}
+                            className={`flex w-full items-center rounded-md px-2 py-2 text-left text-xs transition-all duration-200 ${
+                              active
+                                ? "bg-blue-50 font-semibold text-blue-700"
+                                : "text-gray-600 hover:bg-gray-50 hover:pl-3 hover:text-gray-900"
+                            }`}
+                          >
+                            <span
+                              className={`mr-2 h-1.5 w-1.5 rounded-full transition-transform ${
                                 active
-                                  ? "bg-blue-50 font-semibold text-blue-700"
-                                  : "text-gray-600 hover:bg-gray-50 hover:pl-3 hover:text-gray-900"
+                                  ? "scale-125 bg-blue-600"
+                                  : "bg-gray-300"
                               }`}
-                            >
-                              <span
-                                className={`mr-2 h-1.5 w-1.5 rounded-full transition-transform ${
-                                  active
-                                    ? "scale-125 bg-blue-600"
-                                    : "bg-gray-300"
-                                }`}
-                              />
-
-                              {range.label}
-                            </button>
-                          );
-                        }
-                      )}
+                            />
+                            {range.label}
+                          </button>
+                        );
+                      })}
                     </div>
 
                     <button
@@ -576,75 +501,55 @@ export default function ProductsPage() {
             <section className="border-b border-gray-200">
               <button
                 type="button"
-                onClick={() =>
-                  setOpenDiscount(
-                    (previous) => !previous
-                  )
-                }
+                onClick={() => setOpenDiscount((previous) => !previous)}
                 className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Discount
                 </span>
-
                 <ChevronDown
                   className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
-                    openDiscount
-                      ? "rotate-180"
-                      : ""
+                    openDiscount ? "rotate-180" : ""
                   }`}
                 />
               </button>
 
               <div
                 className={`grid transition-all duration-300 ${
-                  openDiscount
-                    ? "grid-rows-[1fr]"
-                    : "grid-rows-[0fr]"
+                  openDiscount ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                 }`}
               >
                 <div className="overflow-hidden">
                   <div className="space-y-1 px-5 pb-4">
-                    {[10, 20, 30, 50].map(
-                      (discount) => {
-                        const active =
-                          selectedDiscount ===
-                          discount;
+                    {[10, 20, 30, 50].map((discount) => {
+                      const active = selectedDiscount === discount;
 
-                        return (
-                          <button
-                            key={discount}
-                            type="button"
-                            onClick={() =>
-                              setSelectedDiscount(
-                                active
-                                  ? null
-                                  : discount
-                              )
-                            }
-                            className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-all duration-200 ${
-                              active
-                                ? "bg-blue-50 font-semibold text-blue-700"
-                                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      return (
+                        <button
+                          key={discount}
+                          type="button"
+                          onClick={() =>
+                            setSelectedDiscount(active ? null : discount)
+                          }
+                          className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-all duration-200 ${
+                            active
+                              ? "bg-blue-50 font-semibold text-blue-700"
+                              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                              active ? "border-blue-600" : "border-gray-300"
                             }`}
                           >
-                            <span
-                              className={`flex h-4 w-4 items-center justify-center rounded-full border transition-all duration-200 ${
-                                active
-                                  ? "border-blue-600"
-                                  : "border-gray-300"
-                              }`}
-                            >
-                              {active && (
-                                <span className="h-2 w-2 rounded-full bg-blue-600" />
-                              )}
-                            </span>
-
-                            {discount}% or more
-                          </button>
-                        );
-                      }
-                    )}
+                            {active && (
+                              <span className="h-2 w-2 rounded-full bg-blue-600" />
+                            )}
+                          </span>
+                          {discount}% or more
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -655,21 +560,16 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setOpenAvailability(
-                    (previous) => !previous
-                  )
+                  setOpenAvailability((previous) => !previous)
                 }
                 className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Availability
                 </span>
-
                 <ChevronDown
                   className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
-                    openAvailability
-                      ? "rotate-180"
-                      : ""
+                    openAvailability ? "rotate-180" : ""
                   }`}
                 />
               </button>
@@ -685,16 +585,11 @@ export default function ProductsPage() {
                   <div className="px-5 pb-5">
                     <button
                       type="button"
-                      onClick={() =>
-                        setInStockOnly(
-                          (previous) =>
-                            !previous
-                        )
-                      }
+                      onClick={() => setInStockOnly((previous) => !previous)}
                       className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 hover:text-gray-900"
                     >
                       <span
-                        className={`flex h-4 w-4 items-center justify-center rounded border transition-all duration-200 ${
+                        className={`flex h-4 w-4 items-center justify-center rounded border ${
                           inStockOnly
                             ? "border-blue-600 bg-blue-600"
                             : "border-gray-300"
@@ -706,7 +601,6 @@ export default function ProductsPage() {
                           </span>
                         )}
                       </span>
-
                       In Stock
                     </button>
                   </div>
@@ -718,7 +612,6 @@ export default function ProductsPage() {
 
         {/* PRODUCT AREA */}
         <section className="min-w-0 flex-1">
-          {/* ACTIVE FILTERS */}
           {hasActiveFilters && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {appliedMinPrice > 0 && (
@@ -730,32 +623,21 @@ export default function ProductsPage() {
                   }}
                   className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
                 >
-                  Min ₹
-                  {appliedMinPrice.toLocaleString(
-                    "en-IN"
-                  )}
+                  Min ₹{appliedMinPrice.toLocaleString("en-IN")}
                   <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
                 </button>
               )}
 
-              {appliedMaxPrice <
-                highestProductPrice && (
+              {appliedMaxPrice < highestProductPrice && (
                 <button
                   type="button"
                   onClick={() => {
-                    setMaxPrice(
-                      highestProductPrice
-                    );
-                    setAppliedMaxPrice(
-                      highestProductPrice
-                    );
+                    setMaxPrice(highestProductPrice);
+                    setAppliedMaxPrice(highestProductPrice);
                   }}
                   className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
                 >
-                  Max ₹
-                  {appliedMaxPrice.toLocaleString(
-                    "en-IN"
-                  )}
+                  Max ₹{appliedMaxPrice.toLocaleString("en-IN")}
                   <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
                 </button>
               )}
@@ -763,9 +645,7 @@ export default function ProductsPage() {
               {selectedDiscount !== null && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setSelectedDiscount(null)
-                  }
+                  onClick={() => setSelectedDiscount(null)}
                   className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
                 >
                   {selectedDiscount}%+ off
@@ -776,9 +656,7 @@ export default function ProductsPage() {
               {inStockOnly && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setInStockOnly(false)
-                  }
+                  onClick={() => setInStockOnly(false)}
                   className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
                 >
                   In Stock
@@ -800,22 +678,32 @@ export default function ProductsPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Try changing your filters.
+                  {searchQuery
+                    ? `No products match "${searchQuery}". Try another search.`
+                    : "Try changing your filters."}
                 </p>
 
-                <button
-                  type="button"
-                  onClick={clearAllFilters}
-                  className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 hover:shadow-md"
-                >
-                  Clear Filters
-                </button>
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 hover:shadow-md"
+                  >
+                    Clear Search
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 hover:shadow-md"
+                  >
+                    Clear Filters
+                  </button>
+                )}
               </div>
             </div>
           ) : (
-            <ProductGrid
-              products={filteredProducts}
-            />
+            <ProductGrid products={filteredProducts} />
           )}
         </section>
       </div>
