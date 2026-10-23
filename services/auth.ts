@@ -7,17 +7,27 @@ import { apiFetch } from "./api";
 
 export type UserRole = "customer" | "seller" | "admin";
 
+export type UserGender =
+  | "male"
+  | "female"
+  | "other"
+  | "prefer_not_to_say";
+
 export interface AuthUser {
   id: number | string;
   full_name: string;
   email: string;
   phone?: string | null;
   role: UserRole;
+  gender?: UserGender | null;
   is_verified?: boolean;
   is_active?: boolean;
   profile_image?: string | null;
   [key: string]: unknown;
 }
+
+// Compatibility with profile pages importing User.
+export type User = AuthUser;
 
 export interface AuthResponse {
   access_token: string;
@@ -151,7 +161,6 @@ export function saveAuthSession(
 
   const storage = rememberMe ? localStorage : sessionStorage;
 
-  // Remove stale sessions from both storage locations.
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
@@ -280,10 +289,8 @@ export function getRedirectPath(role?: UserRole | null): string {
   switch (role) {
     case "admin":
       return "/admin/dashboard";
-
     case "seller":
       return "/seller/dashboard";
-
     case "customer":
     default:
       return "/";
@@ -308,9 +315,7 @@ export async function signup(
   try {
     const response = await apiFetch("/auth/signup", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -330,9 +335,7 @@ export async function sendVerificationCode(
   try {
     const response = await apiFetch("/auth/send-verification-code", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
 
@@ -348,9 +351,7 @@ export async function verifyEmail(
   try {
     const response = await apiFetch("/auth/verify-email", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -370,9 +371,7 @@ export async function login(
   try {
     const response = await apiFetch("/auth/login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -386,13 +385,6 @@ export async function login(
 // GOOGLE LOGIN / SIGNUP
 // =====================================================
 
-/**
- * Sends the Google ID token to the backend.
- *
- * Existing verified Google users receive authentication tokens.
- * New Google users receive requires_otp=true and must verify
- * the email OTP before a session is saved.
- */
 export async function googleLogin(
   credential: string
 ): Promise<GoogleLoginResult> {
@@ -403,12 +395,8 @@ export async function googleLogin(
   try {
     const response = await apiFetch("/auth/google", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        credential,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential }),
     });
 
     return unwrapResponse<GoogleLoginResult>(response);
@@ -417,19 +405,13 @@ export async function googleLogin(
   }
 }
 
-/**
- * Verifies the OTP sent after Google signup.
- * Authentication tokens are returned only after successful verification.
- */
 export async function verifyGoogleOtp(
   payload: GoogleVerifyOtpRequest
 ): Promise<AuthResponse> {
   try {
     const response = await apiFetch("/auth/google/verify-otp", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -439,18 +421,13 @@ export async function verifyGoogleOtp(
   }
 }
 
-/**
- * Requests a fresh OTP for an unverified Google signup.
- */
 export async function resendGoogleOtp(
   payload: GoogleResendOtpRequest
 ): Promise<GoogleLoginResult> {
   try {
     const response = await apiFetch("/auth/google/resend-otp", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -475,12 +452,8 @@ export async function refreshAccessToken(): Promise<AuthResponse> {
   try {
     const response = await apiFetch("/auth/refresh", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
     const result = unwrapResponse<AuthResponse>(response);
@@ -516,9 +489,7 @@ export async function forgotPassword(
   try {
     const response = await apiFetch("/auth/forgot-password", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
 
@@ -539,9 +510,7 @@ export async function resetPassword(payload: {
   try {
     const response = await apiFetch("/auth/reset-password", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -567,6 +536,16 @@ export async function getCurrentUser(): Promise<AuthUser> {
   }
 }
 
+// Compatibility API expected by profile pages.
+export async function getMyProfile(): Promise<ApiResult<AuthUser>> {
+  const user = await getCurrentUser();
+
+  return {
+    success: true,
+    data: user,
+  };
+}
+
 // =====================================================
 // PROFILE UPDATE
 // =====================================================
@@ -576,14 +555,13 @@ export async function updateProfile(
     full_name?: string;
     phone?: string | null;
     profile_image?: string | null;
+    gender?: UserGender | null;
   }
 ): Promise<AuthUser> {
   try {
     const response = await apiFetch("/auth/profile", {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -599,6 +577,22 @@ export async function updateProfile(
   }
 }
 
+export async function updateMyProfile(
+  payload: {
+    full_name?: string;
+    phone?: string | null;
+    profile_image?: string | null;
+    gender?: UserGender | null;
+  }
+): Promise<ApiResult<AuthUser>> {
+  const user = await updateProfile(payload);
+
+  return {
+    success: true,
+    data: user,
+  };
+}
+
 // =====================================================
 // CHANGE EMAIL
 // =====================================================
@@ -609,9 +603,7 @@ export async function requestEmailChange(
   try {
     const response = await apiFetch("/auth/change-email", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ new_email: email }),
     });
 
@@ -621,6 +613,13 @@ export async function requestEmailChange(
   }
 }
 
+// Compatibility API expected by profile pages.
+export async function changeEmail(
+  email: string
+): Promise<ApiResult<unknown>> {
+  return requestEmailChange(email);
+}
+
 export async function verifyEmailChange(payload: {
   email: string;
   code: string;
@@ -628,9 +627,7 @@ export async function verifyEmailChange(payload: {
   try {
     const response = await apiFetch("/auth/verify-email-change", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -668,8 +665,11 @@ const authService = {
   forgotPassword,
   resetPassword,
   getCurrentUser,
+  getMyProfile,
   updateProfile,
+  updateMyProfile,
   requestEmailChange,
+  changeEmail,
   verifyEmailChange,
   saveAuthSession,
   getAccessToken,

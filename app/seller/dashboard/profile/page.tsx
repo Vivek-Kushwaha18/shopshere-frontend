@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -38,35 +39,105 @@ import {
   getMyProfile,
   getStoredUser,
   updateMyProfile,
+  updateStoredUser,
   verifyEmailChange,
   type User as AuthUser,
   type UserGender,
 } from "@/services/auth";
 
-function formatGender(gender: UserGender | null) {
+// =====================================================
+// HELPERS
+// =====================================================
+
+function formatGender(gender?: UserGender | null): string {
   switch (gender) {
     case "male":
       return "Male";
-
     case "female":
       return "Female";
-
     case "other":
       return "Other";
-
     case "prefer_not_to_say":
       return "Prefer not to say";
-
     default:
       return "Not specified";
   }
 }
 
+function getApiErrorMessage(
+  response: unknown,
+  fallback: string
+): string {
+  if (!response || typeof response !== "object") {
+    return fallback;
+  }
+
+  const result = response as {
+    data?: unknown;
+    message?: unknown;
+  };
+
+  if (result.data && typeof result.data === "object") {
+    const data = result.data as {
+      detail?: unknown;
+      message?: unknown;
+    };
+
+    if (
+      typeof data.detail === "string" &&
+      data.detail.trim()
+    ) {
+      return data.detail;
+    }
+
+    if (Array.isArray(data.detail)) {
+      const messages = data.detail
+        .map((item: unknown) => {
+          if (
+            item &&
+            typeof item === "object" &&
+            "msg" in item &&
+            typeof item.msg === "string"
+          ) {
+            return item.msg;
+          }
+
+          return "";
+        })
+        .filter(Boolean);
+
+      if (messages.length > 0) {
+        return messages.join(", ");
+      }
+    }
+
+    if (
+      typeof data.message === "string" &&
+      data.message.trim()
+    ) {
+      return data.message;
+    }
+  }
+
+  if (
+    typeof result.message === "string" &&
+    result.message.trim()
+  ) {
+    return result.message;
+  }
+
+  return fallback;
+}
+
+// =====================================================
+// SELLER PROFILE PAGE
+// =====================================================
+
 export default function SellerProfilePage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<AuthUser | null>(() =>
-    getStoredUser()
+  const [user, setUser] = useState<AuthUser | null>(
+    () => getStoredUser()
   );
 
   const [loading, setLoading] = useState(false);
@@ -76,39 +147,28 @@ export default function SellerProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [fullName, setFullName] = useState(() => {
-    const storedUser = getStoredUser();
+  const [fullName, setFullName] = useState(
+    () => getStoredUser()?.full_name || ""
+  );
 
-    return storedUser?.full_name || "";
-  });
+  const [phone, setPhone] = useState(
+    () => getStoredUser()?.phone || ""
+  );
 
-  const [phone, setPhone] = useState(() => {
-    const storedUser = getStoredUser();
+  const [gender, setGender] = useState<UserGender | null>(
+    () => getStoredUser()?.gender || null
+  );
 
-    return storedUser?.phone || "";
-  });
-
-  const [gender, setGender] = useState<UserGender | null>(() => {
-    const storedUser = getStoredUser();
-
-    return storedUser?.gender || null;
-  });
-
-  const [newEmail, setNewEmail] = useState(() => {
-    const storedUser = getStoredUser();
-
-    return storedUser?.email || "";
-  });
+  const [newEmail, setNewEmail] = useState(
+    () => getStoredUser()?.email || ""
+  );
 
   const [emailChanging, setEmailChanging] = useState(false);
 
-  const [
-    emailVerificationSent,
-    setEmailVerificationSent,
-  ] = useState(false);
+  const [emailVerificationSent, setEmailVerificationSent] =
+    useState(false);
 
   const [emailCode, setEmailCode] = useState("");
-
   const [emailVerifying, setEmailVerifying] = useState(false);
 
   // =====================================================
@@ -131,14 +191,11 @@ export default function SellerProfilePage() {
         return;
       }
 
-      if (isMounted) {
-        setUser(storedUser);
-
-        setFullName(storedUser.full_name);
-        setPhone(storedUser.phone || "");
-        setGender(storedUser.gender);
-        setNewEmail(storedUser.email);
-      }
+      setUser(storedUser);
+      setFullName(storedUser.full_name || "");
+      setPhone(storedUser.phone || "");
+      setGender(storedUser.gender || null);
+      setNewEmail(storedUser.email || "");
 
       try {
         setLoading(true);
@@ -146,14 +203,14 @@ export default function SellerProfilePage() {
 
         const result = await getMyProfile();
 
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         if (!result.success) {
           throw new Error(
-            result.data?.detail ||
+            getApiErrorMessage(
+              result,
               "Unable to load profile."
+            )
           );
         }
 
@@ -165,40 +222,26 @@ export default function SellerProfilePage() {
         }
 
         setUser(profile);
-
-        setFullName(profile.full_name);
+        setFullName(profile.full_name || "");
         setPhone(profile.phone || "");
-        setGender(profile.gender);
-        setNewEmail(profile.email);
+        setGender(profile.gender || null);
+        setNewEmail(profile.email || "");
 
-        localStorage.setItem(
-          "user",
-          JSON.stringify(profile)
-        );
+        updateStoredUser(profile);
+      } catch (err: unknown) {
+        if (!isMounted) return;
 
-        window.dispatchEvent(
-          new Event("auth-change")
-        );
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        console.error(
-          "Seller profile loading error:",
-          error
-        );
+        console.error("Seller profile loading error:", err);
 
         setUser(storedUser);
-
-        setFullName(storedUser.full_name);
+        setFullName(storedUser.full_name || "");
         setPhone(storedUser.phone || "");
-        setGender(storedUser.gender);
-        setNewEmail(storedUser.email);
+        setGender(storedUser.gender || null);
+        setNewEmail(storedUser.email || "");
 
         setError(
-          error instanceof Error
-            ? error.message
+          err instanceof Error
+            ? err.message
             : "Unable to refresh profile."
         );
       } finally {
@@ -208,7 +251,7 @@ export default function SellerProfilePage() {
       }
     }
 
-    loadProfile();
+    void loadProfile();
 
     return () => {
       isMounted = false;
@@ -220,13 +263,11 @@ export default function SellerProfilePage() {
   // =====================================================
 
   function startEditing() {
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
-    setFullName(user.full_name);
+    setFullName(user.full_name || "");
     setPhone(user.phone || "");
-    setGender(user.gender);
+    setGender(user.gender || null);
 
     setError("");
     setSuccess("");
@@ -238,13 +279,11 @@ export default function SellerProfilePage() {
   // =====================================================
 
   function cancelEditing() {
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
-    setFullName(user.full_name);
+    setFullName(user.full_name || "");
     setPhone(user.phone || "");
-    setGender(user.gender);
+    setGender(user.gender || null);
 
     setError("");
     setSuccess("");
@@ -256,15 +295,12 @@ export default function SellerProfilePage() {
   // =====================================================
 
   async function saveProfile() {
-    if (!user) {
-      return;
-    }
+    if (!user || saving) return;
 
-    if (fullName.trim().length < 2) {
-      setError(
-        "Full name must contain at least 2 characters."
-      );
+    const trimmedName = fullName.trim();
 
+    if (trimmedName.length < 2) {
+      setError("Full name must contain at least 2 characters.");
       return;
     }
 
@@ -274,50 +310,38 @@ export default function SellerProfilePage() {
       setSuccess("");
 
       const result = await updateMyProfile({
-        full_name: fullName,
-        phone: phone || null,
+        full_name: trimmedName,
+        phone: phone.trim() || null,
         gender,
       });
 
       if (!result.success) {
         throw new Error(
-          result.data?.detail ||
+          getApiErrorMessage(
+            result,
             "Unable to update profile."
+          )
         );
       }
 
       const updatedUser = result.data as AuthUser;
 
       setUser(updatedUser);
-
-      setFullName(updatedUser.full_name);
+      setFullName(updatedUser.full_name || "");
       setPhone(updatedUser.phone || "");
-      setGender(updatedUser.gender);
-      setNewEmail(updatedUser.email);
+      setGender(updatedUser.gender || null);
+      setNewEmail(updatedUser.email || "");
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify(updatedUser)
-      );
-
-      window.dispatchEvent(
-        new Event("auth-change")
-      );
+      updateStoredUser(updatedUser);
 
       setEditing(false);
-
-      setSuccess(
-        "Profile updated successfully."
-      );
-    } catch (error) {
-      console.error(
-        "Seller profile update error:",
-        error
-      );
+      setSuccess("Profile updated successfully.");
+    } catch (err: unknown) {
+      console.error("Seller profile update error:", err);
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to update profile."
       );
     } finally {
@@ -326,31 +350,21 @@ export default function SellerProfilePage() {
   }
 
   // =====================================================
-  // CHANGE EMAIL
+  // REQUEST EMAIL CHANGE
   // =====================================================
 
   async function handleChangeEmail() {
-    if (!user) {
-      return;
-    }
+    if (!user || emailChanging || emailVerifying) return;
 
     const email = newEmail.trim().toLowerCase();
 
     if (!email) {
-      setError(
-        "Please enter an email address."
-      );
-
+      setError("Please enter an email address.");
       return;
     }
 
-    if (
-      email === user.email.toLowerCase()
-    ) {
-      setError(
-        "Please enter a different email address."
-      );
-
+    if (email === user.email.toLowerCase()) {
+      setError("Please enter a different email address.");
       return;
     }
 
@@ -363,25 +377,26 @@ export default function SellerProfilePage() {
 
       if (!result.success) {
         throw new Error(
-          result.data?.detail ||
+          getApiErrorMessage(
+            result,
             "Unable to send email verification code."
+          )
         );
       }
 
+      setNewEmail(email);
       setEmailVerificationSent(true);
+      setEmailCode("");
 
       setSuccess(
         "Verification code sent to your new email address."
       );
-    } catch (error) {
-      console.error(
-        "Seller change email error:",
-        error
-      );
+    } catch (err: unknown) {
+      console.error("Seller change email error:", err);
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to change email."
       );
     } finally {
@@ -394,11 +409,18 @@ export default function SellerProfilePage() {
   // =====================================================
 
   async function handleVerifyEmailChange() {
-    if (emailCode.trim().length !== 6) {
-      setError(
-        "Please enter the 6-digit verification code."
-      );
+    if (!user || emailVerifying || emailChanging) return;
 
+    const email = newEmail.trim().toLowerCase();
+    const code = emailCode.trim();
+
+    if (!email) {
+      setError("Please enter your new email address.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+      setError("Please enter the 6-digit verification code.");
       return;
     }
 
@@ -407,46 +429,36 @@ export default function SellerProfilePage() {
       setError("");
       setSuccess("");
 
-      const result = await verifyEmailChange(
-        emailCode.trim()
-      );
+      const result = await verifyEmailChange({
+        email,
+        code,
+      });
 
       if (!result.success) {
         throw new Error(
-          result.data?.detail ||
+          getApiErrorMessage(
+            result,
             "Unable to verify email."
+          )
         );
       }
 
       const updatedUser = result.data as AuthUser;
 
       setUser(updatedUser);
-      setNewEmail(updatedUser.email);
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify(updatedUser)
-      );
-
-      window.dispatchEvent(
-        new Event("auth-change")
-      );
-
+      setNewEmail(updatedUser.email || "");
       setEmailCode("");
       setEmailVerificationSent(false);
 
-      setSuccess(
-        "Email updated successfully."
-      );
-    } catch (error) {
-      console.error(
-        "Seller email verification error:",
-        error
-      );
+      updateStoredUser(updatedUser);
+
+      setSuccess("Email updated successfully.");
+    } catch (err: unknown) {
+      console.error("Seller email verification error:", err);
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Unable to verify email."
       );
     } finally {
@@ -460,7 +472,6 @@ export default function SellerProfilePage() {
 
   function logout() {
     clearAuthSession();
-
     router.replace("/login");
   }
 
@@ -469,15 +480,24 @@ export default function SellerProfilePage() {
   // =====================================================
 
   if (!user) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30">
+        <p className="text-sm text-muted-foreground">
+          {loading
+            ? "Loading profile..."
+            : "Redirecting to login..."}
+        </p>
+      </div>
+    );
   }
+
+  // =====================================================
+  // PAGE UI
+  // =====================================================
 
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="mx-auto max-w-5xl px-4 py-10">
-
-        {/* Page Header */}
-
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">
             Seller Profile
@@ -488,29 +508,30 @@ export default function SellerProfilePage() {
           </p>
         </div>
 
-        {/* Messages */}
-
         {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            role="alert"
+            className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+          <div
+            role="status"
+            className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+          >
             {success}
           </div>
         )}
 
         <div className="grid gap-6 md:grid-cols-3">
-
-          {/* Profile Card */}
+          {/* Personal Information */}
 
           <Card className="md:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>
-                Personal Information
-              </CardTitle>
+              <CardTitle>Personal Information</CardTitle>
 
               {!editing ? (
                 <Button
@@ -539,19 +560,13 @@ export default function SellerProfilePage() {
                     disabled={saving}
                   >
                     <Save className="mr-2 h-4 w-4" />
-
-                    {saving
-                      ? "Saving..."
-                      : "Save"}
+                    {saving ? "Saving..." : "Save"}
                   </Button>
                 </div>
               )}
             </CardHeader>
 
             <CardContent>
-
-              {/* Seller Header */}
-
               <div className="flex items-center gap-4">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
                   <User className="h-10 w-10 text-primary" />
@@ -572,9 +587,6 @@ export default function SellerProfilePage() {
 
               {!editing ? (
                 <div className="grid gap-5 sm:grid-cols-2">
-
-                  {/* Email */}
-
                   <div className="flex items-start gap-3">
                     <Mail className="mt-1 h-5 w-5 text-muted-foreground" />
 
@@ -596,8 +608,6 @@ export default function SellerProfilePage() {
                     </div>
                   </div>
 
-                  {/* Phone */}
-
                   <div className="flex items-start gap-3">
                     <Phone className="mt-1 h-5 w-5 text-muted-foreground" />
 
@@ -611,8 +621,6 @@ export default function SellerProfilePage() {
                       </p>
                     </div>
                   </div>
-
-                  {/* Gender */}
 
                   <div className="flex items-start gap-3">
                     <User className="mt-1 h-5 w-5 text-muted-foreground" />
@@ -628,8 +636,6 @@ export default function SellerProfilePage() {
                     </div>
                   </div>
 
-                  {/* Role */}
-
                   <div className="flex items-start gap-3">
                     <ShieldCheck className="mt-1 h-5 w-5 text-muted-foreground" />
 
@@ -638,18 +644,12 @@ export default function SellerProfilePage() {
                         Role
                       </p>
 
-                      <p className="font-medium">
-                        Seller
-                      </p>
+                      <p className="font-medium">Seller</p>
                     </div>
                   </div>
-
                 </div>
               ) : (
                 <div className="space-y-5">
-
-                  {/* Full Name */}
-
                   <div>
                     <label
                       htmlFor="full_name"
@@ -663,17 +663,14 @@ export default function SellerProfilePage() {
                       type="text"
                       value={fullName}
                       onChange={(event) =>
-                        setFullName(
-                          event.target.value
-                        )
+                        setFullName(event.target.value)
                       }
                       minLength={2}
                       maxLength={100}
+                      autoComplete="name"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
                   </div>
-
-                  {/* Phone */}
 
                   <div>
                     <label
@@ -688,16 +685,13 @@ export default function SellerProfilePage() {
                       type="tel"
                       value={phone}
                       onChange={(event) =>
-                        setPhone(
-                          event.target.value
-                        )
+                        setPhone(event.target.value)
                       }
                       maxLength={20}
+                      autoComplete="tel"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
                   </div>
-
-                  {/* Gender */}
 
                   <div>
                     <label
@@ -719,28 +713,15 @@ export default function SellerProfilePage() {
                       }
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     >
-                      <option value="">
-                        Not specified
-                      </option>
-
-                      <option value="male">
-                        Male
-                      </option>
-
-                      <option value="female">
-                        Female
-                      </option>
-
-                      <option value="other">
-                        Other
-                      </option>
-
+                      <option value="">Not specified</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
                       <option value="prefer_not_to_say">
                         Prefer not to say
                       </option>
                     </select>
                   </div>
-
                 </div>
               )}
             </CardContent>
@@ -750,15 +731,10 @@ export default function SellerProfilePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>
-                Quick Actions
-              </CardTitle>
+              <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-3">
-
-              {/* Products */}
-
               <Link
                 href="/seller/dashboard/products"
                 className="block"
@@ -771,8 +747,6 @@ export default function SellerProfilePage() {
                   Products
                 </Button>
               </Link>
-
-              {/* Revenue */}
 
               <Link
                 href="/seller/dashboard/revenue"
@@ -787,8 +761,6 @@ export default function SellerProfilePage() {
                 </Button>
               </Link>
 
-              {/* Inventory */}
-
               <Link
                 href="/seller/dashboard/inventory"
                 className="block"
@@ -801,8 +773,6 @@ export default function SellerProfilePage() {
                   Inventory
                 </Button>
               </Link>
-
-              {/* Orders */}
 
               <Link
                 href="/seller/dashboard/orders"
@@ -817,8 +787,6 @@ export default function SellerProfilePage() {
                 </Button>
               </Link>
 
-              {/* Analytics */}
-
               <Link
                 href="/seller/dashboard/analytics"
                 className="block"
@@ -832,12 +800,7 @@ export default function SellerProfilePage() {
                 </Button>
               </Link>
 
-              {/* Seller Dashboard */}
-
-              <Link
-                href="/seller/dashboard"
-                className="block"
-              >
+              <Link href="/seller/dashboard" className="block">
                 <Button
                   variant="outline"
                   className="w-full justify-start"
@@ -849,8 +812,6 @@ export default function SellerProfilePage() {
 
               <Separator />
 
-              {/* Logout */}
-
               <Button
                 variant="destructive"
                 className="w-full justify-start"
@@ -859,7 +820,6 @@ export default function SellerProfilePage() {
                 <LogOut className="mr-3 h-4 w-4" />
                 Logout
               </Button>
-
             </CardContent>
           </Card>
         </div>
@@ -868,18 +828,14 @@ export default function SellerProfilePage() {
 
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>
-              Email Address
-            </CardTitle>
+            <CardTitle>Email Address</CardTitle>
           </CardHeader>
 
           <CardContent>
             <div className="flex items-start gap-3">
-
               <Mail className="mt-1 h-5 w-5 text-muted-foreground" />
 
               <div className="w-full">
-
                 <p className="text-sm text-muted-foreground">
                   Current Email
                 </p>
@@ -905,17 +861,19 @@ export default function SellerProfilePage() {
                 </label>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
-
                   <input
                     id="new_email"
                     type="email"
                     value={newEmail}
                     onChange={(event) =>
-                      setNewEmail(
-                        event.target.value
-                      )
+                      setNewEmail(event.target.value)
                     }
-                    disabled={emailVerificationSent}
+                    disabled={
+                      emailVerificationSent ||
+                      emailChanging ||
+                      emailVerifying
+                    }
+                    autoComplete="email"
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                   />
 
@@ -924,41 +882,33 @@ export default function SellerProfilePage() {
                       type="button"
                       variant="outline"
                       onClick={handleChangeEmail}
-                      disabled={emailChanging}
+                      disabled={emailChanging || emailVerifying}
                     >
-                      {emailChanging
-                        ? "Sending..."
-                        : "Change Email"}
+                      {emailChanging ? "Sending..." : "Change Email"}
                     </Button>
                   )}
-
                 </div>
 
                 {emailVerificationSent && (
                   <div className="mt-5 rounded-lg border border-gray-200 bg-muted/30 p-4">
-
                     <p className="text-sm font-medium">
                       Verify your new email
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Enter the 6-digit code sent
-                      to your new email address.
+                      Enter the 6-digit code sent to your new email address.
                     </p>
 
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-
                       <input
                         type="text"
                         inputMode="numeric"
+                        autoComplete="one-time-code"
                         maxLength={6}
                         value={emailCode}
                         onChange={(event) =>
                           setEmailCode(
-                            event.target.value.replace(
-                              /\D/g,
-                              ""
-                            )
+                            event.target.value.replace(/\D/g, "")
                           )
                         }
                         placeholder="Enter 6-digit code"
@@ -967,20 +917,31 @@ export default function SellerProfilePage() {
 
                       <Button
                         type="button"
-                        onClick={
-                          handleVerifyEmailChange
-                        }
-                        disabled={emailVerifying}
+                        onClick={handleVerifyEmailChange}
+                        disabled={emailVerifying || emailChanging}
                       >
                         {emailVerifying
                           ? "Verifying..."
                           : "Verify Email"}
                       </Button>
 
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setEmailVerificationSent(false);
+                          setEmailCode("");
+                          setNewEmail(user.email);
+                          setError("");
+                          setSuccess("");
+                        }}
+                        disabled={emailVerifying || emailChanging}
+                      >
+                        Cancel
+                      </Button>
                     </div>
                   </div>
                 )}
-
               </div>
             </div>
           </CardContent>
@@ -990,40 +951,26 @@ export default function SellerProfilePage() {
 
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>
-              Account Information
-            </CardTitle>
+            <CardTitle>Account Information</CardTitle>
           </CardHeader>
 
           <CardContent>
-
             <div className="grid gap-6 sm:grid-cols-3">
-
-              {/* Account Type */}
-
               <div>
                 <p className="text-sm text-muted-foreground">
                   Account Type
                 </p>
 
-                <p className="mt-1 font-medium">
-                  Seller
-                </p>
+                <p className="mt-1 font-medium">Seller</p>
               </div>
-
-              {/* User ID */}
 
               <div>
                 <p className="text-sm text-muted-foreground">
                   User ID
                 </p>
 
-                <p className="mt-1 font-medium">
-                  {user.id}
-                </p>
+                <p className="mt-1 font-medium">{user.id}</p>
               </div>
-
-              {/* Account Status */}
 
               <div>
                 <p className="text-sm text-muted-foreground">
@@ -1037,14 +984,10 @@ export default function SellerProfilePage() {
                       : "text-red-600"
                   }`}
                 >
-                  {user.is_active
-                    ? "Active"
-                    : "Inactive"}
+                  {user.is_active ? "Active" : "Inactive"}
                 </p>
               </div>
-
             </div>
-
           </CardContent>
         </Card>
 
@@ -1052,14 +995,11 @@ export default function SellerProfilePage() {
 
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>
-              Account Security
-            </CardTitle>
+            <CardTitle>Account Security</CardTitle>
           </CardHeader>
 
           <CardContent>
             <div className="flex items-center gap-3">
-
               <ShieldCheck
                 className={`h-6 w-6 ${
                   user.is_verified
@@ -1069,9 +1009,7 @@ export default function SellerProfilePage() {
               />
 
               <div>
-                <p className="font-medium">
-                  Email Verification
-                </p>
+                <p className="font-medium">Email Verification</p>
 
                 <p
                   className={`text-sm ${
@@ -1085,11 +1023,9 @@ export default function SellerProfilePage() {
                     : "Your email address is not verified."}
                 </p>
               </div>
-
             </div>
           </CardContent>
         </Card>
-
       </div>
     </div>
   );

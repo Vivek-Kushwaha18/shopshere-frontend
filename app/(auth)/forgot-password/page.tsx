@@ -1,7 +1,8 @@
+
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
 import Swal from "sweetalert2";
 
@@ -18,16 +19,88 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// =====================================================
+// API ERROR HANDLING
+// =====================================================
+
+function getErrorMessage(
+  response: unknown,
+  fallback: string
+): string {
+  if (!response || typeof response !== "object") {
+    return fallback;
+  }
+
+  const result = response as {
+    data?: unknown;
+    message?: unknown;
+  };
+
+  let detail: unknown;
+
+  if (
+    result.data &&
+    typeof result.data === "object"
+  ) {
+    const data = result.data as {
+      detail?: unknown;
+      message?: unknown;
+    };
+
+    detail =
+      typeof data.detail === "string" ||
+      Array.isArray(data.detail)
+        ? data.detail
+        : data.message;
+  }
+
+  if (
+    typeof detail === "string" &&
+    detail.trim()
+  ) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item: unknown) => {
+        if (
+          item &&
+          typeof item === "object" &&
+          "msg" in item &&
+          typeof item.msg === "string"
+        ) {
+          return item.msg;
+        }
+
+        return "";
+      })
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join(", ");
+    }
+  }
+
+  if (
+    typeof result.message === "string" &&
+    result.message.trim()
+  ) {
+    return result.message;
+  }
+
+  return fallback;
+}
+
+// =====================================================
+// FORGOT PASSWORD PAGE
+// =====================================================
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] =
-    useState(false);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -38,15 +111,10 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    const normalizedEmail = email
-      .trim()
-      .toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
-      setError(
-        "Please enter your email address."
-      );
-
+      setError("Please enter your email address.");
       return;
     }
 
@@ -54,35 +122,36 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      const response =
-        await forgotPassword({
-          email: normalizedEmail,
-        });
+      // forgotPassword expects the email string.
+      const response = await forgotPassword(
+        normalizedEmail
+      );
 
       if (!response.success) {
         setError(
-          response.data?.detail ||
-            "Unable to process your request."
+          getErrorMessage(
+            response,
+            "Unable to process your request. Please try again."
+          )
         );
 
         return;
       }
 
-      // Store normalized email for the success message
       setEmail(normalizedEmail);
-
       setSubmitted(true);
+    } catch (error: unknown) {
+      console.error("Forgot password error:", error);
 
-    } catch (error) {
-      console.error(
-        "Forgot password error:",
-        error
-      );
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to connect to the server. Please try again.";
 
-      Swal.fire({
+      await Swal.fire({
         icon: "error",
-        title: "Connection Error",
-        text: "Unable to connect to the server. Please try again.",
+        title: "Password Reset Request Failed",
+        text: message,
         confirmButtonText: "OK",
       });
     } finally {
@@ -105,7 +174,7 @@ export default function ForgotPasswordPage() {
           </CardTitle>
 
           <CardDescription>
-            Enter your email address and we'll send you
+            Enter your email address and we&apos;ll send you
             instructions to reset your password.
           </CardDescription>
         </CardHeader>
@@ -133,11 +202,10 @@ export default function ForgotPasswordPage() {
               </div>
 
               <Button
+                type="button"
                 variant="outline"
                 className="w-full"
-                onClick={
-                  handleTryAnotherEmail
-                }
+                onClick={handleTryAnotherEmail}
               >
                 Try another email
               </Button>
@@ -171,18 +239,21 @@ export default function ForgotPasswordPage() {
                       placeholder="you@example.com"
                       value={email}
                       onChange={(event) =>
-                        setEmail(
-                          event.target.value
-                        )
+                        setEmail(event.target.value)
                       }
                       className="pl-9"
+                      autoComplete="email"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
 
                 {error && (
-                  <p className="text-sm text-destructive">
+                  <p
+                    role="alert"
+                    className="text-sm text-destructive"
+                  >
                     {error}
                   </p>
                 )}
