@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+import GoogleAuthProvider from "@/components/auth/GoogleAuthProvider";
 import ConditionalHeader from "@/components/layout/ConditionalHeader";
 import RoleGuard from "@/components/auth/RoleGuard";
 import ChatWidget from "@/components/ai-chat/ChatWidget";
@@ -19,13 +20,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-background antialiased">
-        <ConditionalHeader />
+        <GoogleAuthProvider>
+          <ConditionalHeader />
 
-        <main>
-          <RoleGuard>{children}</RoleGuard>
-        </main>
+          <main>
+            <RoleGuard>{children}</RoleGuard>
+          </main>
 
-        <ChatWidget />
+          <ChatWidget />
+        </GoogleAuthProvider>
       </body>
     </html>
   );

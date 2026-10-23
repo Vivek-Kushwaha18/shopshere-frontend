@@ -103,15 +103,17 @@ export async function apiFetch(
   try {
     let response =
       await makeRequest(token);
-
     const authEndpointsWithoutRefresh = [
       "/auth/signup",
       "/auth/login",
       "/auth/verify-email",
       "/auth/send-verification-code",
-      "/auth/forgot-password",
-      "/auth/reset-password",
+      "/auth/google",
+      "/auth/google/verify-otp",
       "/auth/refresh",
+      "/auth/google/resend-otp",
+      "/auth/reset-password",
+      "/auth/forgot-password",
     ];
 
     const normalizedAuthEndpoint =

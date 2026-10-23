@@ -1,19 +1,14 @@
+
 "use client";
 
-import {
-  signup,
-  sendVerificationCode,
-  verifyEmail,
-} from "@/services/auth";
-
-import Swal from "sweetalert2";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import {
-  FormEvent,
-  useState,
-} from "react";
 import { useRouter } from "next/navigation";
-
+import {
+  GoogleLogin,
+  type CredentialResponse,
+} from "@react-oauth/google";
+import Swal from "sweetalert2";
 import {
   Eye,
   EyeOff,
@@ -21,10 +16,22 @@ import {
   User,
   Lock,
   Phone,
+  ShieldCheck,
+  ArrowLeft,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import {
+  signup,
+  sendVerificationCode,
+  verifyEmail,
+  googleLogin,
+  verifyGoogleOtp,
+  resendGoogleOtp,
+  saveAuthSession,
+  getRedirectPath,
+} from "@/services/auth";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -32,620 +39,729 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 
-export default function SignupPage() {
+type SignupRole = "customer" | "seller";
+type OtpMode = "email" | "google" | null;
+
+function SignupForm() {
   const router = useRouter();
 
-  // ==========================================================
-  // PASSWORD VISIBILITY
-  // ==========================================================
+  const [loading, setLoading] = useState(false);
+  const [otpMode, setOtpMode] = useState<OtpMode>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [showPassword, setShowPassword] =
-    useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState<SignupRole>("customer");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  const [
-    showConfirmPassword,
-    setShowConfirmPassword,
-  ] = useState(false);
+  const normalizedEmail = email.trim().toLowerCase();
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-  // ==========================================================
-  // LOADING
-  // ==========================================================
+  const getVerificationEmail = (): string => {
+    if (typeof window === "undefined") {
+      return normalizedEmail;
+    }
 
-  const [loading, setLoading] =
-    useState(false);
+    return (
+      sessionStorage.getItem("verification_email") ||
+      normalizedEmail
+    ).trim().toLowerCase();
+  };
 
-  const [resending, setResending] =
-    useState(false);
+  const showError = async (title: string, error: unknown) => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Something went wrong. Please try again.";
 
-  // ==========================================================
-  // OTP MODE
-  // ==========================================================
+    await Swal.fire(title, message, "error");
+  };
 
-  const [otpMode, setOtpMode] =
-    useState(false);
+  // =====================================================
+  // NORMAL EMAIL/PASSWORD SIGNUP
+  // =====================================================
 
-  const [otp, setOtp] =
-    useState("");
-
-  // ==========================================================
-  // FORM DATA
-  // ==========================================================
-
-  const [formData, setFormData] =
-    useState({
-      fullName: "",
-      email: "",
-      phone: "",
-      role: "customer",
-      password: "",
-      confirmPassword: "",
-    });
-
-  // ==========================================================
-  // SIGNUP
-  // ==========================================================
-
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (loading) {
+    if (!acceptedTerms) {
+      await Swal.fire(
+        "Terms required",
+        "Please accept the Terms and Conditions to continue.",
+        "warning"
+      );
       return;
     }
 
-    const fullName =
-      formData.fullName.trim();
-
-    const email =
-      formData.email
-        .trim()
-        .toLowerCase();
-
-    const phone =
-      formData.phone.trim();
-
-    // ========================================================
-    // VALIDATE NAME
-    // ========================================================
-
-    if (fullName.length < 2) {
-      Swal.fire({
-        icon: "error",
-        title: "Invalid name",
-        text:
-          "Full name must be at least 2 characters.",
-        confirmButtonText: "OK",
-      });
-
+    if (password !== confirmPassword) {
+      await Swal.fire(
+        "Password mismatch",
+        "Your passwords do not match.",
+        "error"
+      );
       return;
     }
 
-    // ========================================================
-    // VALIDATE EMAIL
-    // ========================================================
-
-    if (!email) {
-      Swal.fire({
-        icon: "error",
-        title: "Email required",
-        text:
-          "Please enter your email address.",
-        confirmButtonText: "OK",
-      });
-
-      return;
-    }
-
-    // ========================================================
-    // VALIDATE PASSWORD
-    // ========================================================
-
-    if (formData.password.length < 8) {
-      Swal.fire({
-        icon: "error",
-        title: "Invalid password",
-        text:
-          "Password must be at least 8 characters.",
-        confirmButtonText: "OK",
-      });
-
-      return;
-    }
-
-    // ========================================================
-    // CONFIRM PASSWORD
-    // ========================================================
-
-    if (
-      formData.password !==
-      formData.confirmPassword
-    ) {
-      Swal.fire({
-        icon: "error",
-        title: "Passwords do not match",
-        text:
-          "Please make sure both passwords are the same.",
-        confirmButtonText: "OK",
-      });
-
+    if (password.length < 8) {
+      await Swal.fire(
+        "Invalid password",
+        "Your password must contain at least 8 characters.",
+        "warning"
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      // ======================================================
-      // CREATE ACCOUNT
-      // ======================================================
-
-      const response = await signup({
-        full_name: fullName,
-        email,
-        phone: phone || undefined,
-        password: formData.password,
-        role:
-          formData.role as
-            | "customer"
-            | "seller",
+      await signup({
+        full_name: fullName.trim(),
+        email: normalizedEmail,
+        phone: phone.trim() || undefined,
+        password,
+        role,
       });
 
-      // ======================================================
-      // SIGNUP FAILED
-      // ======================================================
+      sessionStorage.setItem("verification_email", normalizedEmail);
+      sessionStorage.setItem("verification_method", "email");
 
-      if (!response.success) {
-        Swal.fire({
-          icon: "error",
-          title: "Signup failed",
-          text:
-            response.data?.detail ||
-            "Unable to create your account.",
-          confirmButtonText: "OK",
-        });
+      setEmail(normalizedEmail);
+      setOtp("");
+      setOtpMode("email");
 
-        return;
-      }
-
-      // ======================================================
-      // SAVE EMAIL FOR VERIFICATION
-      // ======================================================
-
-      sessionStorage.setItem(
-        "verification_email",
-        email
+      await Swal.fire(
+        "Verification code sent",
+        "Check your email for the six-digit verification code.",
+        "success"
       );
-
-      // ======================================================
-      // SHOW OTP MODE
-      // ======================================================
-
-      setOtpMode(true);
-
-      await Swal.fire({
-        icon: "success",
-        title: "Account created",
-        text:
-          `A verification code has been sent to ${email}. Enter the code below to verify your email.`,
-        confirmButtonText: "Enter Code",
-      });
     } catch (error) {
-      console.error(
-        "Signup error:",
-        error
-      );
-
-      Swal.fire({
-        icon: "error",
-        title: "Connection Error",
-        text:
-          "Unable to connect to the server. Please try again.",
-        confirmButtonText: "OK",
-      });
+      await showError("Signup failed", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  // ==========================================================
-  // VERIFY OTP
-  // ==========================================================
+  // =====================================================
+  // NORMAL EMAIL SIGNUP OTP VERIFICATION
+  // =====================================================
 
-  async function handleVerifyOTP(
+  const handleVerifyEmail = async (
     event: FormEvent<HTMLFormElement>
-  ) {
+  ) => {
     event.preventDefault();
 
-    if (loading) {
+    if (!/^\d{6}$/.test(otp.trim())) {
+      await Swal.fire(
+        "Invalid code",
+        "Enter the six-digit verification code from your email.",
+        "warning"
+      );
       return;
     }
 
-    const email =
-      formData.email
-        .trim()
-        .toLowerCase();
+    const verificationEmail = getVerificationEmail();
 
-    const normalizedCode =
-      otp.trim();
-
-    // ========================================================
-    // EMAIL VALIDATION
-    // ========================================================
-
-    if (!email) {
-      Swal.fire({
-        icon: "error",
-        title: "Email missing",
-        text:
-          "Verification email is missing.",
-        confirmButtonText: "OK",
-      });
-
-      return;
-    }
-
-    // ========================================================
-    // OTP VALIDATION
-    // ========================================================
-
-    if (!normalizedCode) {
-      Swal.fire({
-        icon: "error",
-        title: "OTP required",
-        text:
-          "Please enter the verification code.",
-        confirmButtonText: "OK",
-      });
-
-      return;
-    }
-
-    if (
-      !/^\d{6}$/.test(
-        normalizedCode
-      )
-    ) {
-      Swal.fire({
-        icon: "error",
-        title: "Invalid OTP",
-        text:
-          "Please enter the 6-digit verification code.",
-        confirmButtonText:
-          "Try Again",
-      });
-
+    if (!verificationEmail) {
+      await Swal.fire(
+        "Email required",
+        "Please enter the email address used to create your account.",
+        "warning"
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      // ======================================================
-      // VERIFY EMAIL
-      // ======================================================
-
-      const response =
-        await verifyEmail({
-          email,
-          code: normalizedCode,
-        });
-
-      // ======================================================
-      // VERIFICATION FAILED
-      // ======================================================
-
-      if (!response.success) {
-        Swal.fire({
-          icon: "error",
-          title: "Invalid OTP",
-          text:
-            response.data?.detail ||
-            "The verification code is incorrect or expired. Please try again.",
-          confirmButtonText:
-            "Try Again",
-        });
-
-        return;
-      }
-
-      // ======================================================
-      // REMOVE OLD AUTH DATA
-      //
-      // IMPORTANT:
-      // User is verified, but NOT logged in yet.
-      //
-      // Therefore:
-      // - No access token
-      // - No refresh token
-      // - No stored user
-      // - No isLoggedIn
-      // ======================================================
-
-      localStorage.removeItem(
-        "access_token"
-      );
-
-      localStorage.removeItem(
-        "refresh_token"
-      );
-
-      localStorage.removeItem(
-        "isLoggedIn"
-      );
-
-      localStorage.removeItem(
-        "user"
-      );
-
-      // ======================================================
-      // REMOVE VERIFICATION EMAIL
-      // ======================================================
-
-      sessionStorage.removeItem(
-        "verification_email"
-      );
-
-      // ======================================================
-      // NOTIFY HEADER
-      // ======================================================
-
-      window.dispatchEvent(
-        new Event("auth-change")
-      );
-
-      // ======================================================
-      // SUCCESS MESSAGE
-      // ======================================================
-
-      await Swal.fire({
-        icon: "success",
-        title: "Email verified!",
-        text:
-          "Your account has been verified successfully. Please login to continue.",
-        confirmButtonText:
-          "Go to Login",
+      await verifyEmail({
+        email: verificationEmail,
+        code: otp.trim(),
       });
 
-      // ======================================================
-      // GO TO LOGIN PAGE
-      // ======================================================
+      sessionStorage.removeItem("verification_email");
+      sessionStorage.removeItem("verification_method");
 
-      router.push("/login");
+      await Swal.fire(
+        "Email verified",
+        "Your account is verified. You can now log in.",
+        "success"
+      );
+
+      router.replace("/login");
     } catch (error) {
-      console.error(
-        "OTP verification error:",
-        error
-      );
-
-      Swal.fire({
-        icon: "error",
-        title: "Connection Error",
-        text:
-          "Unable to verify your email. Please try again.",
-        confirmButtonText: "OK",
-      });
+      await showError("Verification failed", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  // ==========================================================
-  // RESEND OTP
-  // ==========================================================
+  // =====================================================
+  // RESEND NORMAL EMAIL SIGNUP OTP
+  // =====================================================
 
-  async function handleResendOTP() {
-    if (
-      resending ||
-      loading
-    ) {
+  const handleResendEmailCode = async () => {
+    const verificationEmail = getVerificationEmail();
+
+    if (!verificationEmail) {
+      await Swal.fire(
+        "Email required",
+        "Please provide the email address used to create your account.",
+        "warning"
+      );
       return;
     }
 
-    const email =
-      formData.email
-        .trim()
-        .toLowerCase();
-
-    if (!email) {
-      Swal.fire({
-        icon: "error",
-        title: "Email missing",
-        text:
-          "Please enter your email address.",
-        confirmButtonText: "OK",
-      });
-
-      return;
-    }
-
-    setResending(true);
+    setLoading(true);
 
     try {
-      const response =
-        await sendVerificationCode(
-          email
+      await sendVerificationCode(verificationEmail);
+
+      await Swal.fire(
+        "Code sent",
+        "Check your email for the new verification code.",
+        "success"
+      );
+    } catch (error) {
+      await showError("Unable to resend code", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // GOOGLE SIGNUP / LOGIN
+  // =====================================================
+
+  const handleGoogleSuccess = async (
+    credentialResponse: CredentialResponse
+  ) => {
+    if (!credentialResponse.credential) {
+      await Swal.fire(
+        "Google authentication failed",
+        "Google did not return a valid credential. Please try again.",
+        "error"
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await googleLogin(
+        credentialResponse.credential
+      );
+
+      // New Google signup: the backend sends an OTP and returns
+      // requires_otp without issuing authentication tokens.
+      if (response.requires_otp) {
+        if (!response.email) {
+          throw new Error(
+            "The server requested OTP verification but did not return the email address."
+          );
+        }
+
+        const googleEmail = response.email.trim().toLowerCase();
+
+        sessionStorage.setItem("verification_email", googleEmail);
+        sessionStorage.setItem("verification_method", "google");
+
+        setEmail(googleEmail);
+        setOtp("");
+        setOtpMode("google");
+
+        await Swal.fire(
+          "Verify your Google email",
+          response.message ||
+            `A verification code has been sent to ${googleEmail}. Enter the code to complete signup.`,
+          "success"
         );
 
-      if (!response.success) {
-        Swal.fire({
-          icon: "error",
-          title: "Unable to resend OTP",
-          text:
-            response.data?.detail ||
-            "Unable to send a new verification code.",
-          confirmButtonText: "OK",
-        });
-
         return;
       }
 
-      setOtp("");
+      // Existing verified Google account: backend can return tokens
+      // directly, so save the session and redirect by role.
+      if (
+        !response.access_token ||
+        !response.refresh_token ||
+        !response.user
+      ) {
+        throw new Error(
+          response.message ||
+            "The server returned an invalid Google authentication response."
+        );
+      }
 
-      await Swal.fire({
-        icon: "success",
-        title: "New OTP sent",
-        text:
-          `A new verification code has been sent to ${email}.`,
-        confirmButtonText: "OK",
+      saveAuthSession({
+        access_token: response.access_token,
+        refresh_token: response.refresh_token,
+        token_type: response.token_type,
+        user: response.user,
+        message: response.message,
       });
-    } catch (error) {
-      console.error(
-        "Resend OTP error:",
-        error
+
+      sessionStorage.removeItem("verification_email");
+      sessionStorage.removeItem("verification_method");
+
+      await Swal.fire(
+        "Welcome to ShopSphere",
+        "You have signed in successfully with Google.",
+        "success"
       );
 
-      Swal.fire({
-        icon: "error",
-        title: "Connection Error",
-        text:
-          "Unable to resend the verification code.",
-        confirmButtonText: "OK",
-      });
+      router.replace(getRedirectPath(response.user.role));
+    } catch (error) {
+      await showError("Google authentication failed", error);
     } finally {
-      setResending(false);
+      setLoading(false);
     }
-  }
+  };
 
-  // ==========================================================
-  // FORM CHANGE
-  // ==========================================================
+  // =====================================================
+  // GOOGLE OTP VERIFICATION
+  // =====================================================
 
-  function handleChange(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const {
-      name,
-      value,
-    } = event.target;
+  const handleVerifyGoogleOtp = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-    setFormData(
-      (previous) => ({
-        ...previous,
-        [name]: value,
-      })
+    if (!/^\d{6}$/.test(otp.trim())) {
+      await Swal.fire(
+        "Invalid code",
+        "Enter the six-digit verification code from your email.",
+        "warning"
+      );
+      return;
+    }
+
+    const verificationEmail = getVerificationEmail();
+
+    if (!verificationEmail) {
+      await Swal.fire(
+        "Email required",
+        "The Google signup email could not be found. Please try Google signup again.",
+        "warning"
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await verifyGoogleOtp({
+        email: verificationEmail,
+        code: otp.trim(),
+      });
+
+      if (
+        !response.access_token ||
+        !response.refresh_token ||
+        !response.user
+      ) {
+        throw new Error(
+          "Email verification succeeded, but the server did not return a valid authentication session."
+        );
+      }
+
+      // Save authentication only after successful OTP verification.
+      saveAuthSession(response);
+
+      sessionStorage.removeItem("verification_email");
+      sessionStorage.removeItem("verification_method");
+
+      await Swal.fire(
+        "Google signup completed",
+        "Your email has been verified and your ShopSphere account is ready.",
+        "success"
+      );
+
+      router.replace(getRedirectPath(response.user.role));
+    } catch (error) {
+      await showError("Google verification failed", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // RESEND GOOGLE OTP
+  // =====================================================
+
+  const handleResendGoogleOtp = async () => {
+    const verificationEmail = getVerificationEmail();
+
+    if (!verificationEmail) {
+      await Swal.fire(
+        "Email required",
+        "The Google signup email could not be found. Please try Google signup again.",
+        "warning"
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await resendGoogleOtp({
+        email: verificationEmail,
+      });
+
+      if (response.requires_otp === false && response.access_token) {
+        await Swal.fire(
+          "Already verified",
+          "Your account is already verified. Please log in.",
+          "info"
+        );
+
+        router.replace("/login");
+        return;
+      }
+
+      await Swal.fire(
+        "Verification code sent",
+        response.message ||
+          `A new verification code has been requested for ${verificationEmail}.`,
+        "success"
+      );
+    } catch (error) {
+      await showError("Unable to resend Google OTP", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    void Swal.fire(
+      "Google authentication failed",
+      "Google authentication could not be completed. Please try again.",
+      "error"
     );
-  }
+  };
 
-  // ==========================================================
-  // OTP SCREEN
-  // ==========================================================
+  // =====================================================
+  // UI
+  // =====================================================
 
-  if (otpMode) {
-    return (
-      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-2 text-center">
-            <CardTitle className="text-2xl font-bold">
-              Verify your email
-            </CardTitle>
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10 dark:bg-gray-950">
+      <Card className="w-full max-w-lg">
+        <CardHeader className="space-y-2 text-center">
+          <CardTitle className="text-2xl font-bold">
+            {otpMode === "google"
+              ? "Verify Google signup"
+              : otpMode === "email"
+                ? "Verify your email"
+                : "Create your account"}
+          </CardTitle>
 
-            <CardDescription>
-              We sent a 6-digit verification code to
-              <br />
+          <CardDescription>
+            {otpMode === "google"
+              ? "Enter the verification code sent to your Google email address."
+              : otpMode === "email"
+                ? "Enter the verification code sent to your email."
+                : "Join ShopSphere and start shopping or selling."}
+          </CardDescription>
+        </CardHeader>
 
-              <span className="font-medium text-foreground">
-                {formData.email
-                  .trim()
-                  .toLowerCase()}
-              </span>
-            </CardDescription>
-          </CardHeader>
+        <CardContent className="space-y-6">
+          {!otpMode && (
+            <>
+              <div className="flex items-center gap-4">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">
+                  SIGN UP WITH EMAIL
+                </span>
+                <Separator className="flex-1" />
+              </div>
 
-          <CardContent>
+              <form onSubmit={handleSignup} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="fullName"
+                      className="pl-9"
+                      placeholder="Enter your full name"
+                      value={fullName}
+                      onChange={(event) =>
+                        setFullName(event.target.value)
+                      }
+                      minLength={2}
+                      maxLength={100}
+                      autoComplete="name"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      className="pl-9"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone number (optional)</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      className="pl-9"
+                      placeholder="Enter your phone number"
+                      value={phone}
+                      onChange={(event) =>
+                        setPhone(event.target.value)
+                      }
+                      autoComplete="tel"
+                      maxLength={20}
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">Account type</Label>
+                  <select
+                    id="role"
+                    value={role}
+                    onChange={(event) =>
+                      setRole(event.target.value as SignupRole)
+                    }
+                    disabled={loading}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="customer">Customer</option>
+                    <option value="seller">Seller</option>
+                  </select>
+
+                  <p className="text-xs text-muted-foreground">
+                    Admin accounts cannot be created through signup.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      className="pl-9 pr-10"
+                      placeholder="At least 8 characters"
+                      value={password}
+                      onChange={(event) =>
+                        setPassword(event.target.value)
+                      }
+                      minLength={8}
+                      maxLength={128}
+                      autoComplete="new-password"
+                      required
+                      disabled={loading}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowPassword((current) => !current)
+                      }
+                      className="absolute right-3 top-2.5 text-muted-foreground"
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      disabled={loading}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">
+                    Confirm password
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      className="pl-9 pr-10"
+                      placeholder="Enter your password again"
+                      value={confirmPassword}
+                      onChange={(event) =>
+                        setConfirmPassword(event.target.value)
+                      }
+                      minLength={8}
+                      maxLength={128}
+                      autoComplete="new-password"
+                      required
+                      disabled={loading}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword((current) => !current)
+                      }
+                      className="absolute right-3 top-2.5 text-muted-foreground"
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                      disabled={loading}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(event) =>
+                      setAcceptedTerms(event.target.checked)
+                    }
+                    disabled={loading}
+                    className="mt-1"
+                  />
+                  <span>
+                    I agree to the ShopSphere Terms and Conditions and
+                    Privacy Policy.
+                  </span>
+                </label>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={loading}
+                >
+                  {loading ? "Creating account..." : "Create account"}
+                </Button>
+              </form>
+
+              <div className="flex items-center gap-4">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">
+                  OR
+                </span>
+                <Separator className="flex-1" />
+              </div>
+
+              {googleClientId ? (
+                <div className="flex justify-center">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
+                    theme="outline"
+                    size="large"
+                    text="continue_with"
+                    shape="rectangular"
+                    width="320"
+                    useOneTap={false}
+                  />
+                </div>
+              ) : (
+                <p className="text-center text-sm text-red-600">
+                  Google login is not configured. Set
+                  NEXT_PUBLIC_GOOGLE_CLIENT_ID in .env.local and
+                  restart the frontend.
+                </p>
+              )}
+            </>
+          )}
+
+          {otpMode !== null && (
             <form
               onSubmit={
-                handleVerifyOTP
+                otpMode === "google"
+                  ? handleVerifyGoogleOtp
+                  : handleVerifyEmail
               }
               className="space-y-5"
             >
-              <div className="space-y-2">
-                <Label htmlFor="otp-email">
-                  Email Address
-                </Label>
+              <div className="flex justify-center">
+                <div className="rounded-full bg-primary/10 p-4">
+                  <ShieldCheck className="h-8 w-8 text-primary" />
+                </div>
+              </div>
 
-                <Input
-                  id="otp-email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(
-                    event
-                  ) =>
-                    setFormData(
-                      (
-                        previous
-                      ) => ({
-                        ...previous,
-                        email:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
-                  disabled={
-                    loading ||
-                    resending
-                  }
-                />
+              <div className="rounded-md bg-muted p-3 text-center text-sm">
+                Verification email:{" "}
+                <span className="font-medium">
+                  {getVerificationEmail() || normalizedEmail}
+                </span>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="otp">
-                  Verification Code
+                  Six-digit verification code
                 </Label>
-
                 <Input
                   id="otp"
-                  name="otp"
-                  type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="Enter 6-digit OTP"
+                  placeholder="000000"
                   value={otp}
-                  onChange={(
-                    event
-                  ) => {
-                    const value =
-                      event.target.value
-                        .replace(
-                          /\D/g,
-                          ""
-                        )
-                        .slice(
-                          0,
-                          6
-                        );
-
-                    setOtp(value);
-                  }}
-                  maxLength={6}
-                  className="text-center text-lg tracking-[0.4em]"
-                  required
-                  disabled={
-                    loading ||
-                    resending
+                  onChange={(event) =>
+                    setOtp(
+                      event.target.value.replace(/\D/g, "").slice(0, 6)
+                    )
                   }
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  required
+                  disabled={loading}
+                  className="text-center text-xl tracking-[0.5em]"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Enter the latest six-digit code sent to your email.
+                </p>
               </div>
 
               <Button
                 type="submit"
                 className="w-full"
-                size="lg"
-                disabled={
-                  loading ||
-                  resending
-                }
+                disabled={loading || otp.length !== 6}
               >
                 {loading
                   ? "Verifying..."
-                  : "Verify Email"}
+                  : otpMode === "google"
+                    ? "Verify and complete signup"
+                    : "Verify email"}
               </Button>
 
               <Button
@@ -653,410 +769,53 @@ export default function SignupPage() {
                 variant="outline"
                 className="w-full"
                 onClick={
-                  handleResendOTP
+                  otpMode === "google"
+                    ? handleResendGoogleOtp
+                    : handleResendEmailCode
                 }
-                disabled={
-                  loading ||
-                  resending
-                }
+                disabled={loading}
               >
-                {resending
-                  ? "Sending..."
-                  : "Resend Verification Code"}
+                Resend verification code
               </Button>
-
-              <p className="text-center text-sm text-muted-foreground">
-                Entered the wrong email?
-              </p>
 
               <Button
                 type="button"
                 variant="ghost"
                 className="w-full"
                 onClick={() => {
-                  setOtpMode(false);
+                  setOtpMode(null);
                   setOtp("");
 
-                  sessionStorage.removeItem(
-                    "verification_email"
-                  );
+                  if (otpMode === "google") {
+                    sessionStorage.removeItem("verification_email");
+                    sessionStorage.removeItem("verification_method");
+                  }
                 }}
-                disabled={
-                  loading ||
-                  resending
-                }
+                disabled={loading}
               >
-                Use Another Email
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to signup
               </Button>
             </form>
+          )}
 
-            <p className="mt-6 text-center text-sm text-muted-foreground">
+          {!otpMode && (
+            <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link
                 href="/login"
-                className="font-medium text-foreground underline underline-offset-4"
+                className="font-medium text-primary hover:underline"
               >
-                Login
+                Log in
               </Link>
             </p>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
-
-  // ==========================================================
-  // SIGNUP SCREEN
-  // ==========================================================
-
-  return (
-    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-muted/30 px-4 py-10">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <CardTitle className="text-2xl font-bold">
-            Create your account
-          </CardTitle>
-
-          <CardDescription>
-            Join ShopSphere and start shopping smarter.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent>
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="fullName">
-                Full Name
-              </Label>
-
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-
-                <Input
-                  id="fullName"
-                  name="fullName"
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={
-                    formData.fullName
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="pl-9"
-                  required
-                  disabled={
-                    loading
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">
-                Email Address
-              </Label>
-
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={
-                    formData.email
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="pl-9"
-                  required
-                  disabled={
-                    loading
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">
-                Phone Number
-                <span className="ml-1 text-muted-foreground">
-                  (Optional)
-                </span>
-              </Label>
-
-              <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="Enter your phone number"
-                  value={
-                    formData.phone
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="pl-9"
-                  maxLength={20}
-                  disabled={
-                    loading
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">
-                Role
-              </Label>
-
-              <select
-                id="role"
-                name="role"
-                value={
-                  formData.role
-                }
-                onChange={(
-                  event
-                ) =>
-                  setFormData(
-                    (
-                      previous
-                    ) => ({
-                      ...previous,
-                      role:
-                        event
-                          .target
-                          .value,
-                    })
-                  )
-                }
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                required
-                disabled={
-                  loading
-                }
-              >
-                <option value="customer">
-                  Customer
-                </option>
-
-                <option value="seller">
-                  Seller
-                </option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">
-                Password
-              </Label>
-
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-
-                <Input
-                  id="password"
-                  name="password"
-                  type={
-                    showPassword
-                      ? "text"
-                      : "password"
-                  }
-                  placeholder="Create a password"
-                  value={
-                    formData.password
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="pl-9 pr-10"
-                  required
-                  minLength={8}
-                  maxLength={128}
-                  disabled={
-                    loading
-                  }
-                />
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowPassword(
-                      (
-                        previous
-                      ) =>
-                        !previous
-                    )
-                  }
-                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                  aria-label={
-                    showPassword
-                      ? "Hide password"
-                      : "Show password"
-                  }
-                  disabled={
-                    loading
-                  }
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Password must be at least 8 characters.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">
-                Confirm Password
-              </Label>
-
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={
-                    showConfirmPassword
-                      ? "text"
-                      : "password"
-                  }
-                  placeholder="Confirm your password"
-                  value={
-                    formData.confirmPassword
-                  }
-                  onChange={
-                    handleChange
-                  }
-                  className="pl-9 pr-10"
-                  required
-                  minLength={8}
-                  maxLength={128}
-                  disabled={
-                    loading
-                  }
-                />
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowConfirmPassword(
-                      (
-                        previous
-                      ) =>
-                        !previous
-                    )
-                  }
-                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                  aria-label={
-                    showConfirmPassword
-                      ? "Hide password"
-                      : "Show password"
-                  }
-                  disabled={
-                    loading
-                  }
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="terms"
-                required
-                disabled={
-                  loading
-                }
-              />
-
-              <Label
-                htmlFor="terms"
-                className="text-sm font-normal leading-5"
-              >
-                I agree to the{" "}
-                <Link
-                  href="/terms"
-                  className="font-medium underline underline-offset-4"
-                >
-                  Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link
-                  href="/privacy"
-                  className="font-medium underline underline-offset-4"
-                >
-                  Privacy Policy
-                </Link>
-                .
-              </Label>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={
-                loading
-              }
-            >
-              {loading
-                ? "Creating Account..."
-                : "Create Account"}
-            </Button>
-          </form>
-
-          <div className="my-6 flex items-center gap-4">
-            <Separator className="flex-1" />
-
-            <span className="text-xs text-muted-foreground">
-              OR
-            </span>
-
-            <Separator className="flex-1" />
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={loading}
-          >
-            Continue with Google
-          </Button>
-
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              className="font-medium text-foreground underline underline-offset-4"
-            >
-              Login
-            </Link>
-          </p>
+          )}
         </CardContent>
       </Card>
     </main>
   );
+}
+
+export default function SignupPage() {
+  return <SignupForm />;
 }
