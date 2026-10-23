@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -29,43 +28,34 @@ import {
   type User as AuthUser,
 } from "@/services/auth";
 
-import {
-  getCategories,
-  type Category,
-} from "@/services/categories";
-
-import {
-  getProducts,
-  type Product,
-} from "@/services/products";
-
-import {
-  getCart,
-  CART_UPDATED_EVENT,
-} from "@/services/cart";
+import { getCategories, type Category } from "@/services/categories";
+import { getProducts, type Product } from "@/services/products";
+import { getCart, CART_UPDATED_EVENT } from "@/services/cart";
 
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Hide For You and Categories only on product detail pages.
+  // Examples: /products/42 and /products/my-product
+  // Keep them visible on / and /products.
+  const isProductDetailPage = /^\/products\/[^/]+\/?$/.test(pathname);
+
   const [mobileMenu, setMobileMenu] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [mobileCategoriesOpen, setMobileCategoriesOpen] =
-    useState(false);
+  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
-
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [searchSuggestions, setSearchSuggestions] =
-    useState<Product[]>([]);
+  const [searchSuggestions, setSearchSuggestions] = useState<Product[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // Number of different products, not total quantity.
+  // Count distinct products, not total item quantity.
   const [cartCount, setCartCount] = useState(0);
 
   const profileRef = useRef<HTMLDivElement>(null);
@@ -80,7 +70,7 @@ export default function Header() {
     return pathname === path || pathname.startsWith(`${path}/`);
   }
 
-  // Load the current user.
+  // Load the current authenticated user.
   const loadAuthUser = useCallback(() => {
     const accessToken =
       sessionStorage.getItem("access_token") ||
@@ -108,7 +98,7 @@ export default function Header() {
     };
   }, [loadAuthUser]);
 
-  // Load categories.
+  // Load categories from the backend.
   useEffect(() => {
     let active = true;
 
@@ -148,7 +138,7 @@ export default function Header() {
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Load products for search suggestions.
+  // Load real products for search suggestions.
   useEffect(() => {
     let active = true;
 
@@ -188,7 +178,6 @@ export default function Header() {
 
       const storedUser = getStoredUser();
 
-      // Do not call the protected cart endpoint for guests.
       if (!accessToken || !storedUser) {
         if (active) {
           setCartCount(0);
@@ -214,19 +203,14 @@ export default function Header() {
             return;
           }
 
-          // Use the cart's product ID to count each product once.
-          // Different quantities of the same product still count as 1.
-          const items = Array.isArray(cart.items)
-            ? cart.items
-            : [];
+          const items = Array.isArray(cart.items) ? cart.items : [];
 
           const uniqueProductIds = new Set(
             items
               .map((item) => item.product_id)
               .filter(
                 (productId) =>
-                  productId !== undefined &&
-                  productId !== null
+                  productId !== undefined && productId !== null
               )
           );
 
@@ -267,12 +251,7 @@ export default function Header() {
         CART_UPDATED_EVENT,
         handleCartUpdated
       );
-
-      window.removeEventListener(
-        "auth-change",
-        handleCartUpdated
-      );
-
+      window.removeEventListener("auth-change", handleCartUpdated);
       window.removeEventListener("focus", handleCartUpdated);
 
       document.removeEventListener(
@@ -317,6 +296,14 @@ export default function Header() {
       );
     };
   }, []);
+
+  // Close menus when the route changes.
+  useEffect(() => {
+    setMobileMenu(false);
+    setMobileCategoriesOpen(false);
+    setProfileOpen(false);
+    setSearchFocused(false);
+  }, [pathname]);
 
   function handleLogout() {
     clearAuthSession();
@@ -530,6 +517,7 @@ export default function Header() {
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2"
+            aria-label="ShopSphere home"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-lg font-bold text-white shadow-sm">
               S
@@ -612,7 +600,6 @@ export default function Header() {
                 <ShoppingCart className="h-5 w-5" />
                 <CartCountBadge />
               </span>
-
               <span>Cart</span>
             </Link>
 
@@ -706,7 +693,6 @@ export default function Header() {
                         }`}
                       >
                         <User className="h-4 w-4" />
-
                         <div>
                           <p className="font-medium">My Profile</p>
                           <p className="text-xs text-gray-400">
@@ -723,7 +709,6 @@ export default function Header() {
                           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                         >
                           <LayoutDashboard className="h-4 w-4" />
-
                           <div>
                             <p className="font-medium">
                               {getDashboardLabel()}
@@ -741,7 +726,6 @@ export default function Header() {
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                       >
                         <Package className="h-4 w-4" />
-
                         <div>
                           <p className="font-medium">My Orders</p>
                           <p className="text-xs text-gray-400">
@@ -756,7 +740,6 @@ export default function Header() {
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                       >
                         <Heart className="h-4 w-4" />
-
                         <div>
                           <p className="font-medium">Wishlist</p>
                           <p className="text-xs text-gray-400">
@@ -773,7 +756,6 @@ export default function Header() {
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition hover:bg-red-50"
                       >
                         <LogOut className="h-4 w-4" />
-
                         <div className="text-left">
                           <p className="font-medium">Logout</p>
                           <p className="text-xs text-red-400">
@@ -807,43 +789,47 @@ export default function Header() {
         </div>
       </div>
 
-      {/* DESKTOP CATEGORY NAVIGATION */}
-      <div className="hidden border-b bg-white md:block">
-        <div className="mx-auto flex h-12 max-w-7xl items-center justify-center gap-8 overflow-x-auto px-4">
-          <Link
-            href="/"
-            className={`shrink-0 text-sm font-semibold transition ${
-              isActive("/")
-                ? "text-blue-600"
-                : "text-gray-700 hover:text-blue-600"
-            }`}
-          >
-            Home
-          </Link>
+      {/* DESKTOP NAVIGATION */}
+      {!isProductDetailPage && (
+        <div className="hidden border-b bg-white md:block">
+          <nav className="mx-auto flex h-12 max-w-7xl items-center justify-center gap-8 overflow-x-auto px-4">
+            {/* FOR YOU */}
+            <Link
+              href="/for-you"
+              className={`shrink-0 text-sm font-semibold transition ${
+                isActive("/for-you")
+                  ? "text-blue-600"
+                  : "text-gray-700 hover:text-blue-600"
+              }`}
+            >
+              For You
+            </Link>
 
-          {categoriesLoading ? (
-            <span className="shrink-0 text-sm text-gray-400">
-              Loading categories...
-            </span>
-          ) : (
-            mainCategories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/categories/${category.slug}`}
-                className={`shrink-0 text-sm font-semibold transition ${
-                  pathname.startsWith(
-                    `/categories/${category.slug}`
-                  )
-                    ? "text-blue-600"
-                    : "text-gray-700 hover:text-blue-600"
-                }`}
-              >
-                {category.name}
-              </Link>
-            ))
-          )}
+            {/* CATEGORIES */}
+            {categoriesLoading ? (
+              <span className="shrink-0 text-sm text-gray-400">
+                Loading categories...
+              </span>
+            ) : (
+              mainCategories.map((category) => (
+                <Link
+                  key={category.id}
+                  href={`/categories/${category.slug}`}
+                  className={`shrink-0 text-sm font-semibold transition ${
+                    pathname.startsWith(
+                      `/categories/${category.slug}`
+                    )
+                      ? "text-blue-600"
+                      : "text-gray-700 hover:text-blue-600"
+                  }`}
+                >
+                  {category.name}
+                </Link>
+              ))
+            )}
+          </nav>
         </div>
-      </div>
+      )}
 
       {/* MOBILE MENU */}
       {mobileMenu && (
@@ -902,7 +888,6 @@ export default function Header() {
                         <p className="truncate text-sm font-medium">
                           {product.name}
                         </p>
-
                         <p className="text-xs text-gray-500">
                           ₹{product.price}
                         </p>
@@ -915,85 +900,88 @@ export default function Header() {
 
             {/* MOBILE NAVIGATION */}
             <nav className="flex flex-col gap-1">
-              <Link
-                href="/"
-                onClick={closeMobileMenu}
-                className={`rounded-lg px-3 py-3 text-sm font-semibold transition ${
-                  isActive("/")
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                Home
-              </Link>
-
-              {/* MOBILE CATEGORIES */}
-              <div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setMobileCategoriesOpen(
-                      (previous) => !previous
-                    )
-                  }
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
-                  aria-expanded={mobileCategoriesOpen}
-                >
-                  <span>Categories</span>
-
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      mobileCategoriesOpen ? "rotate-180" : ""
+              {/* Hide For You and Categories on product details */}
+              {!isProductDetailPage && (
+                <>
+                  <Link
+                    href="/for-you"
+                    onClick={closeMobileMenu}
+                    className={`rounded-lg px-3 py-3 text-sm font-semibold transition ${
+                      isActive("/for-you")
+                        ? "bg-blue-50 text-blue-600"
+                        : "text-gray-700 hover:bg-gray-100"
                     }`}
-                  />
-                </button>
+                  >
+                    For You
+                  </Link>
 
-                {mobileCategoriesOpen && (
-                  <div className="mt-1 rounded-lg bg-gray-50 p-2">
-                    {categoriesLoading ? (
-                      <p className="px-3 py-3 text-sm text-gray-500">
-                        Loading categories...
-                      </p>
-                    ) : mainCategories.length === 0 ? (
-                      <p className="px-3 py-3 text-sm text-gray-500">
-                        No categories available.
-                      </p>
-                    ) : (
-                      mainCategories.map((category) => (
-                        <Link
-                          key={category.id}
-                          href={`/categories/${category.slug}`}
-                          onClick={closeMobileMenu}
-                          className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
-                            pathname.startsWith(
-                              `/categories/${category.slug}`
-                            )
-                              ? "bg-white font-semibold text-blue-600"
-                              : "text-gray-700 hover:bg-white hover:text-blue-600"
-                          }`}
-                        >
-                          <span>{category.name}</span>
-                          <span className="text-xs text-gray-400">
-                            →
-                          </span>
-                        </Link>
-                      ))
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMobileCategoriesOpen(
+                          (previous) => !previous
+                        )
+                      }
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
+                      aria-expanded={mobileCategoriesOpen}
+                    >
+                      <span>Categories</span>
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform ${
+                          mobileCategoriesOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {mobileCategoriesOpen && (
+                      <div className="mt-1 rounded-lg bg-gray-50 p-2">
+                        {categoriesLoading ? (
+                          <p className="px-3 py-3 text-sm text-gray-500">
+                            Loading categories...
+                          </p>
+                        ) : mainCategories.length === 0 ? (
+                          <p className="px-3 py-3 text-sm text-gray-500">
+                            No categories available.
+                          </p>
+                        ) : (
+                          mainCategories.map((category) => (
+                            <Link
+                              key={category.id}
+                              href={`/categories/${category.slug}`}
+                              onClick={closeMobileMenu}
+                              className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
+                                pathname.startsWith(
+                                  `/categories/${category.slug}`
+                                )
+                                  ? "bg-white font-semibold text-blue-600"
+                                  : "text-gray-700 hover:bg-white hover:text-blue-600"
+                              }`}
+                            >
+                              <span>{category.name}</span>
+                              <span className="text-xs text-gray-400">
+                                →
+                              </span>
+                            </Link>
+                          ))
+                        )}
+
+                        <div className="mt-1 border-t pt-1">
+                          <Link
+                            href="/categories"
+                            onClick={closeMobileMenu}
+                            className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-blue-600 transition hover:bg-white"
+                          >
+                            View all categories
+                          </Link>
+                        </div>
+                      </div>
                     )}
-
-                    <div className="mt-1 border-t pt-1">
-                      <Link
-                        href="/categories"
-                        onClick={closeMobileMenu}
-                        className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-blue-600 transition hover:bg-white"
-                      >
-                        View all categories
-                      </Link>
-                    </div>
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
-              {/* MOBILE CART: UNIQUE PRODUCT COUNT */}
+              {/* MOBILE CART */}
               <Link
                 href="/cart"
                 onClick={closeMobileMenu}

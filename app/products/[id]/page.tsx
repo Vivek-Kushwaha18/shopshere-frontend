@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -38,6 +37,9 @@ import {
 } from "@/services/wishlist";
 
 import { getStoredUser } from "@/services/auth";
+import { recordViewedProduct } from "@/services/recently-viewed";
+
+const BUY_NOW_STORAGE_KEY = "shopsphere-buy-now-checkout";
 
 export default function ProductDetailsPage() {
   const params = useParams();
@@ -67,9 +69,7 @@ export default function ProductDetailsPage() {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [wishlistBusy, setWishlistBusy] = useState(false);
 
-  // =====================================================
   // LOAD PRODUCT
-  // =====================================================
 
   useEffect(() => {
     let isMounted = true;
@@ -80,7 +80,6 @@ export default function ProductDetailsPage() {
           setError("Invalid product.");
           setLoading(false);
         }
-
         return;
       }
 
@@ -90,11 +89,10 @@ export default function ProductDetailsPage() {
 
         const productData = await getProduct(productSlug);
 
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         setProduct(productData);
+        recordViewedProduct(productData.id);
         setQuantity(1);
 
         const activeVariants = (productData.variants ?? []).filter(
@@ -122,9 +120,7 @@ export default function ProductDetailsPage() {
         setCartMessage("");
         setCartError("");
 
-        // =================================================
-        // WISHLIST
-        // =================================================
+        // CHECK WISHLIST
 
         try {
           const user = getStoredUser();
@@ -134,9 +130,7 @@ export default function ProductDetailsPage() {
 
             const wishlistStatus = await checkWishlist(productData.id);
 
-            if (!isMounted) {
-              return;
-            }
+            if (!isMounted) return;
 
             setIsWishlisted(wishlistStatus.is_wishlisted);
           } else {
@@ -154,9 +148,7 @@ export default function ProductDetailsPage() {
           }
         }
 
-        // =================================================
         // INITIAL PRODUCT IMAGE
-        // =================================================
 
         const productImages = productData.images ?? [];
 
@@ -170,27 +162,21 @@ export default function ProductDetailsPage() {
           );
         }
 
-        // =================================================
         // RELATED PRODUCTS
-        // =================================================
 
         try {
           const category = await getCategory(productData.category_id);
 
-          if (!isMounted) {
-            return;
-          }
+          if (!isMounted) return;
 
-          const categoryProducts = await getProductsByCategory(
-            category.slug
-          );
+          const categoryProducts = await getProductsByCategory(category.slug);
 
-          if (!isMounted) {
-            return;
-          }
+          if (!isMounted) return;
 
           setRelatedProducts(
-            categoryProducts.filter((item) => item.id !== productData.id)
+            categoryProducts.filter(
+              (item) => Number(item.id) !== Number(productData.id)
+            )
           );
         } catch (relatedError) {
           console.error("Related products error:", relatedError);
@@ -199,13 +185,13 @@ export default function ProductDetailsPage() {
             setRelatedProducts([]);
           }
         }
-      } catch (error) {
-        console.error("Product details error:", error);
+      } catch (loadError) {
+        console.error("Product details error:", loadError);
 
         if (isMounted) {
           setError(
-            error instanceof Error
-              ? error.message
+            loadError instanceof Error
+              ? loadError.message
               : "Unable to load product."
           );
         }
@@ -223,27 +209,21 @@ export default function ProductDetailsPage() {
     };
   }, [productSlug]);
 
-  // =====================================================
-  // REFRESH RATING WHEN THE USER RETURNS TO THIS PAGE
-  // =====================================================
+  // REFRESH RATING WHEN RETURNING TO THE PAGE
 
   useEffect(() => {
     let isMounted = true;
     let isRefreshing = false;
 
     async function refreshProductRating() {
-      if (!productSlug.trim() || isRefreshing) {
-        return;
-      }
+      if (!productSlug.trim() || isRefreshing) return;
 
       isRefreshing = true;
 
       try {
         const latestProduct = await getProduct(productSlug);
 
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         setProduct((currentProduct) => {
           if (
@@ -273,17 +253,11 @@ export default function ProductDetailsPage() {
     }
 
     window.addEventListener("focus", refreshProductRating);
-
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange
-    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isMounted = false;
-
       window.removeEventListener("focus", refreshProductRating);
-
       document.removeEventListener(
         "visibilitychange",
         handleVisibilityChange
@@ -291,17 +265,13 @@ export default function ProductDetailsPage() {
     };
   }, [productSlug]);
 
-  // =====================================================
-  // CHECK WHETHER THIS PRODUCT IS ALREADY IN THE CART
-  // =====================================================
+  // CHECK WHETHER PRODUCT IS ALREADY IN CART
 
   useEffect(() => {
     let isMounted = true;
 
     async function checkProductInCart() {
-      if (!product) {
-        return;
-      }
+      if (!product) return;
 
       const user = getStoredUser();
 
@@ -313,9 +283,7 @@ export default function ProductDetailsPage() {
       try {
         const cart = await getCart();
 
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         const alreadyInCart =
           Array.isArray(cart.items) &&
@@ -324,8 +292,8 @@ export default function ProductDetailsPage() {
           );
 
         setIsProductInCart(alreadyInCart);
-      } catch (error) {
-        console.error("Product cart check error:", error);
+      } catch (cartCheckError) {
+        console.error("Product cart check error:", cartCheckError);
 
         if (isMounted) {
           setIsProductInCart(false);
@@ -340,14 +308,10 @@ export default function ProductDetailsPage() {
     };
   }, [product?.id]);
 
-  // =====================================================
   // WISHLIST
-  // =====================================================
 
   const handleWishlist = async () => {
-    if (!product) {
-      return;
-    }
+    if (!product) return;
 
     const user = getStoredUser();
 
@@ -366,63 +330,51 @@ export default function ProductDetailsPage() {
         await addToWishlist(product.id);
         setIsWishlisted(true);
       }
-    } catch (error) {
-      console.error("Wishlist error:", error);
+    } catch (wishlistError) {
+      console.error("Wishlist error:", wishlistError);
+      setCartError("Unable to update your wishlist. Please try again.");
     } finally {
       setWishlistBusy(false);
     }
   };
 
-  // =====================================================
   // SHARE PRODUCT
-  // =====================================================
 
   const handleShareProduct = async () => {
-    if (!product) {
-      return;
-    }
+    if (!product) return;
 
-    const productUrl = `${window.location.origin}/products/${product.slug}`;
+    const productUrl = `${window.location.origin}/products/${product.slug || product.id}`;
 
     try {
-      if (
-        navigator.share &&
-        typeof navigator.share === "function"
-      ) {
+      if (typeof navigator.share === "function") {
         await navigator.share({
           title: product.name,
           text: `Check out this product: ${product.name}`,
           url: productUrl,
         });
-
         return;
       }
 
-      if (
-        navigator.clipboard &&
-        typeof navigator.clipboard.writeText === "function"
-      ) {
+      if (typeof navigator.clipboard?.writeText === "function") {
         await navigator.clipboard.writeText(productUrl);
         window.alert("Product link copied.");
         return;
       }
 
       window.prompt("Copy this product link:", productUrl);
-    } catch (error) {
+    } catch (shareError) {
       if (
-        error instanceof DOMException &&
-        error.name === "AbortError"
+        shareError instanceof DOMException &&
+        shareError.name === "AbortError"
       ) {
         return;
       }
 
-      console.error("Share product error:", error);
+      console.error("Share product error:", shareError);
     }
   };
 
-  // =====================================================
-  // LOADING
-  // =====================================================
+  // LOADING STATE
 
   if (loading) {
     return (
@@ -451,9 +403,7 @@ export default function ProductDetailsPage() {
     );
   }
 
-  // =====================================================
-  // ERROR
-  // =====================================================
+  // ERROR STATE
 
   if (error) {
     return (
@@ -461,10 +411,7 @@ export default function ProductDetailsPage() {
         <div className="mx-auto max-w-6xl px-3 py-8 sm:px-5">
           <div className="border border-red-200 bg-white p-6">
             <div className="bg-red-50 p-4 text-red-700">
-              <h1 className="text-lg font-semibold">
-                Unable to load product
-              </h1>
-
+              <h1 className="text-lg font-semibold">Unable to load product</h1>
               <p className="mt-1 text-sm">{error}</p>
             </div>
 
@@ -481,13 +428,9 @@ export default function ProductDetailsPage() {
     );
   }
 
-  if (!product) {
-    return null;
-  }
+  if (!product) return null;
 
-  // =====================================================
-  // PRODUCT OPTIONS
-  // =====================================================
+  // PRODUCT OPTIONS AND VARIANTS
 
   const optionGroups = product.option_groups ?? [];
 
@@ -495,18 +438,13 @@ export default function ProductDetailsPage() {
     (variant) => variant.is_active
   );
 
-  const hasVariants =
-    optionGroups.length > 0 && variants.length > 0;
+  const hasVariants = optionGroups.length > 0 && variants.length > 0;
 
   const allRequiredOptionsSelected =
     hasVariants &&
     optionGroups.every(
       (group) => selectedOptions[group.id] !== undefined
     );
-
-  // =====================================================
-  // EXACT VARIANT MATCHING
-  // =====================================================
 
   const selectedValueIds = Object.values(selectedOptions);
 
@@ -515,84 +453,58 @@ export default function ProductDetailsPage() {
       ? variants.find((variant) => {
           const variantValueIds = variant.option_value_ids;
 
-          if (
-            variantValueIds.length !== optionGroups.length ||
-            selectedValueIds.length !== optionGroups.length
-          ) {
-            return false;
-          }
-
           return (
-            variantValueIds.every((valueId) =>
-              selectedValueIds.includes(valueId)
-            ) &&
-            selectedValueIds.every((valueId) =>
-              variantValueIds.includes(valueId)
-            )
+            variantValueIds.length === optionGroups.length &&
+            selectedValueIds.length === optionGroups.length &&
+            variantValueIds.every((id) => selectedValueIds.includes(id)) &&
+            selectedValueIds.every((id) => variantValueIds.includes(id))
           );
         }) ?? null
       : null;
 
-  // =====================================================
   // OPTION AVAILABILITY
-  // =====================================================
 
   const isOptionValueAvailable = (
     groupId: number,
     valueId: number
   ) => {
-    if (!hasVariants) {
-      return true;
-    }
+    if (!hasVariants) return true;
 
     const candidateSelections = {
       ...selectedOptions,
       [groupId]: valueId,
     };
 
-    const selectedEntries = Object.entries(
-      candidateSelections
-    ).map(
+    const selectedEntries = Object.entries(candidateSelections).map(
       ([selectedGroupId, selectedValueId]) =>
-        [Number(selectedGroupId), selectedValueId] as [
-          number,
-          number
-        ]
+        [Number(selectedGroupId), selectedValueId] as [number, number]
     );
 
     return variants.some((variant) => {
-      const variantValueIds = variant.option_value_ids;
-
-      if (variantValueIds.length !== optionGroups.length) {
+      if (variant.option_value_ids.length !== optionGroups.length) {
         return false;
       }
 
       return selectedEntries.every(([, selectedValueId]) =>
-        variantValueIds.includes(selectedValueId)
+        variant.option_value_ids.includes(selectedValueId)
       );
     });
   };
 
-  // =====================================================
-  // CURRENT PRICE / STOCK
-  // =====================================================
+  // PRICE AND STOCK
 
-  const currentPrice = selectedVariant?.price ?? product.price;
+  const currentPrice = Number(selectedVariant?.price ?? product.price);
 
   const currentOriginalPrice =
     selectedVariant?.original_price ?? product.original_price;
 
-  const currentStock = selectedVariant?.stock ?? product.stock;
+  const currentStock = Number(selectedVariant?.stock ?? product.stock ?? 0);
 
-  // =====================================================
-  // PRODUCT IMAGES
-  // =====================================================
+  // PRODUCT IMAGE GALLERY
 
   const productImages = product.images ?? [];
 
-  const selectedOptionEntries = Object.entries(
-    selectedOptions
-  ).map(
+  const selectedOptionEntries = Object.entries(selectedOptions).map(
     ([groupId, valueId]) =>
       [Number(groupId), valueId] as [number, number]
   );
@@ -607,49 +519,34 @@ export default function ProductDetailsPage() {
 
   let galleryImages: ProductImage[] = [];
 
-  // =====================================================
-  // SELECTED VARIANT IMAGES
-  // =====================================================
-
   if (
-    selectedVariant &&
-    selectedVariant.images &&
+    selectedVariant?.images &&
     selectedVariant.images.length > 0
   ) {
-    galleryImages = selectedVariant.images
-      .slice()
-      .sort((a, b) => a.sort_order - b.sort_order);
+    galleryImages = [...selectedVariant.images].sort(
+      (a, b) => a.sort_order - b.sort_order
+    );
   }
-
-  // =====================================================
-  // PARTIAL OPTION MATCHING
-  // =====================================================
 
   if (
     galleryImages.length === 0 &&
     selectedOptionEntries.length > 0 &&
     matchingVariants.length > 0
   ) {
-    const matchingImages = matchingVariants.flatMap(
-      (variant) => variant.images ?? []
-    );
-
     const uniqueImages = new Map<number, ProductImage>();
 
-    matchingImages.forEach((image) => {
-      if (!uniqueImages.has(image.id)) {
-        uniqueImages.set(image.id, image);
-      }
-    });
+    matchingVariants
+      .flatMap((variant) => variant.images ?? [])
+      .forEach((image) => {
+        if (!uniqueImages.has(image.id)) {
+          uniqueImages.set(image.id, image);
+        }
+      });
 
-    galleryImages = Array.from(uniqueImages.values()).sort(
+    galleryImages = [...uniqueImages.values()].sort(
       (a, b) => a.sort_order - b.sort_order
     );
   }
-
-  // =====================================================
-  // PRODUCT LEVEL IMAGES
-  // =====================================================
 
   if (
     galleryImages.length === 0 &&
@@ -660,40 +557,30 @@ export default function ProductDetailsPage() {
       .sort((a, b) => a.sort_order - b.sort_order);
   }
 
-  // =====================================================
-  // FALLBACK TO ALL VARIANT IMAGES
-  // =====================================================
-
   if (
     galleryImages.length === 0 &&
     selectedOptionEntries.length === 0 &&
     hasVariants
   ) {
-    const allVariantImages = variants.flatMap(
-      (variant) => variant.images ?? []
-    );
-
     const uniqueImages = new Map<number, ProductImage>();
 
-    allVariantImages.forEach((image) => {
-      if (!uniqueImages.has(image.id)) {
-        uniqueImages.set(image.id, image);
-      }
-    });
+    variants
+      .flatMap((variant) => variant.images ?? [])
+      .forEach((image) => {
+        if (!uniqueImages.has(image.id)) {
+          uniqueImages.set(image.id, image);
+        }
+      });
 
-    galleryImages = Array.from(uniqueImages.values()).sort(
+    galleryImages = [...uniqueImages.values()].sort(
       (a, b) => a.sort_order - b.sort_order
     );
   }
 
-  // =====================================================
-  // FINAL IMAGE FALLBACK
-  // =====================================================
-
   if (galleryImages.length === 0) {
-    galleryImages = productImages
-      .slice()
-      .sort((a, b) => a.sort_order - b.sort_order);
+    galleryImages = [...productImages].sort(
+      (a, b) => a.sort_order - b.sort_order
+    );
   }
 
   const images = galleryImages;
@@ -705,27 +592,22 @@ export default function ProductDetailsPage() {
 
   const currentImage = images[safeImageIndex]?.image_url ?? null;
 
-  // =====================================================
   // DISCOUNT
-  // =====================================================
 
   const hasDiscount =
     currentOriginalPrice != null &&
-    currentOriginalPrice > currentPrice;
+    Number(currentOriginalPrice) > currentPrice;
 
   const discountPercentage =
-    hasDiscount && currentOriginalPrice
+    hasDiscount && Number(currentOriginalPrice) > 0
       ? Math.round(
-          ((currentOriginalPrice - currentPrice) /
-            currentOriginalPrice) *
+          ((Number(currentOriginalPrice) - currentPrice) /
+            Number(currentOriginalPrice)) *
             100
         )
       : 0;
 
-  // =====================================================
-  // RATING DISPLAY
-  // Customers can view ratings only. No review actions.
-  // =====================================================
+  // READ-ONLY RATINGS
 
   const productRating = Math.min(
     5,
@@ -737,17 +619,13 @@ export default function ProductDetailsPage() {
     Number(product.reviews_count ?? 0)
   );
 
-  // =====================================================
   // OPTION SELECTION
-  // =====================================================
 
   const handleOptionSelect = (
     group: ProductOptionGroup,
     valueId: number
   ) => {
-    if (!isOptionValueAvailable(group.id, valueId)) {
-      return;
-    }
+    if (!isOptionValueAvailable(group.id, valueId)) return;
 
     setSelectedOptions((current) => ({
       ...current,
@@ -760,49 +638,51 @@ export default function ProductDetailsPage() {
     setCartError("");
   };
 
-  // =====================================================
   // QUANTITY
-  // =====================================================
 
   const handleDecreaseQuantity = () => {
-    setQuantity((currentQuantity) =>
-      Math.max(1, currentQuantity - 1)
-    );
+    setQuantity((current) => Math.max(1, current - 1));
   };
 
   const handleIncreaseQuantity = () => {
-    setQuantity((currentQuantity) =>
-      Math.min(currentStock, currentQuantity + 1)
-    );
+    setQuantity((current) => Math.min(currentStock, current + 1));
   };
 
-  // =====================================================
-  // ADD TO CART
-  // =====================================================
+  // VALIDATE PRODUCT BEFORE CART OR BUY NOW
 
-  const handleAddToCart = async () => {
-    if (
-      hasVariants &&
-      (!allRequiredOptionsSelected || !selectedVariant)
-    ) {
+  const validateSelection = () => {
+    if (hasVariants && (!allRequiredOptionsSelected || !selectedVariant)) {
       setCartError(
         allRequiredOptionsSelected
           ? "This variant is not available."
           : "Please select all product options."
       );
-
-      return;
+      return false;
     }
 
     if (currentStock <= 0) {
       setCartError("This product is out of stock.");
-      return;
+      return false;
     }
 
     if (quantity > currentStock) {
       setCartError(`Only ${currentStock} items are available.`);
-      return;
+      return false;
     }
+
+    if (!Number.isFinite(currentPrice) || currentPrice < 0) {
+      setCartError("The product price is invalid.");
+      return false;
+    }
+
+    return true;
+  };
+
+  // ADD TO CART
+  // This adds the item to the customer's normal cart.
+
+  const handleAddToCart = async () => {
+    if (!validateSelection()) return;
 
     try {
       setAddingToCart(true);
@@ -821,11 +701,9 @@ export default function ProductDetailsPage() {
       }
 
       if (!response.success) {
-        const message =
-          response.data?.detail ||
-          "Unable to add product to cart.";
-
-        throw new Error(message);
+        throw new Error(
+          response.data?.detail || "Unable to add product to cart."
+        );
       }
 
       setIsProductInCart(true);
@@ -837,12 +715,12 @@ export default function ProductDetailsPage() {
       window.setTimeout(() => {
         setCartMessage("");
       }, 3000);
-    } catch (error) {
-      console.error("Add to cart error:", error);
+    } catch (addError) {
+      console.error("Add to cart error:", addError);
 
       setCartError(
-        error instanceof Error
-          ? error.message
+        addError instanceof Error
+          ? addError.message
           : "Unable to add product to cart."
       );
     } finally {
@@ -850,31 +728,17 @@ export default function ProductDetailsPage() {
     }
   };
 
-  // =====================================================
   // BUY NOW
-  // =====================================================
+  // This prepares a temporary one-product checkout.
+  // It does not add this product to, or replace, the normal cart.
 
   const handleBuyNow = async () => {
-    if (
-      hasVariants &&
-      (!allRequiredOptionsSelected || !selectedVariant)
-    ) {
-      setCartError(
-        allRequiredOptionsSelected
-          ? "This variant is not available."
-          : "Please select all product options."
-      );
+    if (!validateSelection()) return;
 
-      return;
-    }
+    const user = getStoredUser();
 
-    if (currentStock <= 0) {
-      setCartError("This product is out of stock.");
-      return;
-    }
-
-    if (quantity > currentStock) {
-      setCartError(`Only ${currentStock} items are available.`);
+    if (user?.role !== "customer") {
+      router.push("/login");
       return;
     }
 
@@ -883,80 +747,68 @@ export default function ProductDetailsPage() {
       setCartMessage("");
       setCartError("");
 
-      const response = await addToCart(
-        product.id,
-        quantity,
-        selectedVariant?.id ?? null
+      const itemTotal = currentPrice * quantity;
+
+      const buyNowCheckout = {
+        items: [
+          {
+            id: `buy-now-${product.id}-${selectedVariant?.id ?? "default"}`,
+            product_id: product.id,
+            variant_id: selectedVariant?.id ?? null,
+            quantity,
+            product,
+            variant: selectedVariant,
+            item_total: itemTotal,
+          },
+        ],
+        total_items: quantity,
+        total: itemTotal,
+      };
+
+      sessionStorage.setItem(
+        BUY_NOW_STORAGE_KEY,
+        JSON.stringify(buyNowCheckout)
       );
 
-      if (response.status === 401) {
-        router.push("/login");
-        return;
-      }
-
-      if (!response.success) {
-        const message =
-          response.data?.detail || "Unable to proceed.";
-
-        throw new Error(message);
-      }
-
-      setIsProductInCart(true);
-      router.push("/cart");
-    } catch (error) {
-      console.error("Buy now error:", error);
+      router.push("/checkout?mode=buy-now");
+    } catch (buyError) {
+      console.error("Buy Now error:", buyError);
 
       setCartError(
-        error instanceof Error
-          ? error.message
-          : "Unable to proceed to cart."
+        buyError instanceof Error
+          ? buyError.message
+          : "Unable to proceed to checkout."
       );
-    } finally {
+
       setBuyingNow(false);
     }
   };
 
-  // =====================================================
   // IMAGE NAVIGATION
-  // =====================================================
 
   const handleNextImage = () => {
-    if (images.length <= 1) {
-      return;
-    }
+    if (images.length <= 1) return;
 
-    setSelectedImageIndex((currentIndex) =>
-      currentIndex >= images.length - 1 ? 0 : currentIndex + 1
+    setSelectedImageIndex((index) =>
+      index >= images.length - 1 ? 0 : index + 1
     );
   };
 
   const handlePreviousImage = () => {
-    if (images.length <= 1) {
-      return;
-    }
+    if (images.length <= 1) return;
 
-    setSelectedImageIndex((currentIndex) =>
-      currentIndex <= 0 ? images.length - 1 : currentIndex - 1
+    setSelectedImageIndex((index) =>
+      index <= 0 ? images.length - 1 : index - 1
     );
   };
 
-  // =====================================================
   // PAGE
-  // =====================================================
 
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5">
-        <Link
-          href="/products"
-          className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Products
-        </Link>
-
         <section className="grid gap-4 lg:grid-cols-2">
-          {/* GALLERY */}
+          {/* PRODUCT GALLERY */}
 
           <div className="border border-gray-200 bg-white">
             <div className="relative overflow-hidden bg-white">
@@ -1048,6 +900,7 @@ export default function ProductDetailsPage() {
                         ? "border-gray-900"
                         : "border-gray-200 hover:border-gray-400"
                     }`}
+                    aria-label={`View product image ${index + 1}`}
                   >
                     <img
                       src={image.image_url}
@@ -1068,8 +921,6 @@ export default function ProductDetailsPage() {
                 <h1 className="text-xl font-medium leading-7 text-gray-900 sm:text-2xl">
                   {product.name}
                 </h1>
-
-                {/* READ-ONLY PRODUCT RATING */}
 
                 <div
                   className="mt-2 flex flex-wrap items-center gap-2"
@@ -1177,15 +1028,13 @@ export default function ProductDetailsPage() {
               <div className="border-b border-gray-100 py-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-3xl font-semibold text-gray-900">
-                    ₹{Number(currentPrice).toLocaleString("en-IN")}
+                    ₹{currentPrice.toLocaleString("en-IN")}
                   </span>
 
                   {hasDiscount && (
                     <span className="text-sm text-gray-400 line-through">
                       ₹
-                      {Number(currentOriginalPrice).toLocaleString(
-                        "en-IN"
-                      )}
+                      {Number(currentOriginalPrice).toLocaleString("en-IN")}
                     </span>
                   )}
 
@@ -1209,7 +1058,6 @@ export default function ProductDetailsPage() {
                     <p className="text-sm font-semibold text-green-600">
                       In Stock
                     </p>
-
                     <p className="mt-1 text-xs text-gray-500">
                       {currentStock} units available
                     </p>
@@ -1219,7 +1067,6 @@ export default function ProductDetailsPage() {
                     <p className="text-sm font-semibold text-red-600">
                       Out of Stock
                     </p>
-
                     <p className="mt-1 text-xs text-gray-500">
                       This product is currently unavailable
                     </p>
@@ -1249,7 +1096,6 @@ export default function ProductDetailsPage() {
                     <p className="text-sm font-semibold text-gray-900">
                       Quantity
                     </p>
-
                     <span className="text-xs text-gray-400">
                       Max {currentStock}
                     </span>
@@ -1291,17 +1137,14 @@ export default function ProductDetailsPage() {
                     <span className="text-sm text-gray-500">
                       Total:{" "}
                       <strong className="text-gray-900">
-                        ₹
-                        {(currentPrice * quantity).toLocaleString(
-                          "en-IN"
-                        )}
+                        ₹{(currentPrice * quantity).toLocaleString("en-IN")}
                       </strong>
                     </span>
                   </div>
                 </div>
               )}
 
-              {/* MESSAGES */}
+              {/* SUCCESS AND ERROR MESSAGES */}
 
               {cartMessage && (
                 <div className="mt-3 border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
@@ -1310,12 +1153,15 @@ export default function ProductDetailsPage() {
               )}
 
               {cartError && (
-                <div className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                <div
+                  role="alert"
+                  className="mt-3 border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
+                >
                   {cartError}
                 </div>
               )}
 
-              {/* ACTIONS */}
+              {/* CART AND BUY NOW BUTTONS */}
 
               {currentStock > 0 && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1334,8 +1180,7 @@ export default function ProductDetailsPage() {
                       buyingNow ||
                       (!isProductInCart &&
                         hasVariants &&
-                        (!allRequiredOptionsSelected ||
-                          !selectedVariant))
+                        (!allRequiredOptionsSelected || !selectedVariant))
                     }
                     className={`flex h-11 items-center justify-center gap-2 px-3 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       isProductInCart
@@ -1354,18 +1199,16 @@ export default function ProductDetailsPage() {
 
                   <button
                     type="button"
-                    onClick={handleBuyNow}
+                    onClick={() => void handleBuyNow()}
                     disabled={
                       addingToCart ||
                       buyingNow ||
                       (hasVariants &&
-                        (!allRequiredOptionsSelected ||
-                          !selectedVariant))
+                        (!allRequiredOptionsSelected || !selectedVariant))
                     }
                     className="flex h-11 items-center justify-center gap-2 bg-yellow-500 px-3 text-sm font-semibold text-gray-900 transition hover:bg-yellow-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Zap className="h-4 w-4" />
-
                     {buyingNow ? "Processing..." : "Buy Now"}
                   </button>
                 </div>
@@ -1375,11 +1218,9 @@ export default function ProductDetailsPage() {
                 <span className="text-xs text-gray-500">
                   ✓ Secure Payment
                 </span>
-
                 <span className="text-xs text-gray-500">
                   ✓ Quality Products
                 </span>
-
                 <span className="text-xs text-gray-500">
                   ✓ Easy Shopping
                 </span>
@@ -1396,7 +1237,6 @@ export default function ProductDetailsPage() {
               <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
                 More Products From This Category
               </h2>
-
               <p className="mt-1 text-xs text-gray-500">
                 Explore similar products you may like.
               </p>
@@ -1407,21 +1247,20 @@ export default function ProductDetailsPage() {
                 const relatedImages = item.images ?? [];
 
                 const relatedImage =
-                  relatedImages.find((image) => image.is_primary)
-                    ?.image_url ||
+                  relatedImages.find((image) => image.is_primary)?.image_url ||
                   relatedImages[0]?.image_url ||
                   item.image ||
                   null;
 
                 const itemHasDiscount =
                   item.original_price != null &&
-                  item.original_price > item.price;
+                  Number(item.original_price) > Number(item.price);
 
                 const itemDiscount =
-                  itemHasDiscount && item.original_price
+                  itemHasDiscount && Number(item.original_price) > 0
                     ? Math.round(
-                        ((item.original_price - item.price) /
-                          item.original_price) *
+                        ((Number(item.original_price) - Number(item.price)) /
+                          Number(item.original_price)) *
                           100
                       )
                     : 0;
@@ -1434,7 +1273,7 @@ export default function ProductDetailsPage() {
                 return (
                   <Link
                     key={item.id}
-                    href={`/products/${item.slug}`}
+                    href={`/products/${item.slug || item.id}`}
                     className="group block"
                   >
                     <article className="overflow-hidden border border-gray-200 bg-white transition hover:border-gray-300 hover:shadow-md">
@@ -1443,6 +1282,7 @@ export default function ProductDetailsPage() {
                           <img
                             src={relatedImage}
                             alt={item.name}
+                            loading="lazy"
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
                         ) : (
@@ -1462,8 +1302,6 @@ export default function ProductDetailsPage() {
                         <h3 className="line-clamp-2 min-h-[40px] text-sm font-medium leading-5 text-gray-900">
                           {item.name}
                         </h3>
-
-                        {/* READ-ONLY RELATED PRODUCT RATING */}
 
                         <div
                           className="mt-1 flex items-center gap-1"
@@ -1489,24 +1327,21 @@ export default function ProductDetailsPage() {
 
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <p className="text-base font-semibold text-gray-900">
-                            ₹
-                            {Number(item.price).toLocaleString(
-                              "en-IN"
-                            )}
+                            ₹{Number(item.price).toLocaleString("en-IN")}
                           </p>
 
                           {itemHasDiscount && (
                             <span className="text-xs text-gray-400 line-through">
                               ₹
-                              {Number(
-                                item.original_price
-                              ).toLocaleString("en-IN")}
+                              {Number(item.original_price).toLocaleString(
+                                "en-IN"
+                              )}
                             </span>
                           )}
                         </div>
 
                         <div className="mt-1">
-                          {item.stock > 0 ? (
+                          {Number(item.stock) > 0 ? (
                             <span className="text-[11px] font-medium text-green-600">
                               In stock
                             </span>

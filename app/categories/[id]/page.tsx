@@ -294,13 +294,13 @@ export default function CategoryPage() {
       <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         {/* BACK TO PRODUCTS */}
         <div className="mb-3">
-          <Link
+          {/*<Link
             href="/products"
             className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-500 transition-all duration-200 hover:bg-white hover:text-gray-900 hover:shadow-sm"
           >
             <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" />
-            All products
-          </Link>
+            All product
+          </Link>*/}
         </div>
 
         {/* MOBILE CATEGORY BUTTON */}
@@ -383,9 +383,9 @@ export default function CategoryPage() {
                 {category.name} products
               </h2>
 
-              <p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">
+              {/*<p className="mt-0.5 text-[11px] text-gray-400 sm:text-xs">
                 Explore products in this category
-              </p>
+              </p>*/}
             </div>
 
             {products.length === 0 ? (

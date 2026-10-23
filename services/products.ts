@@ -85,88 +85,108 @@ export interface Product {
 // =====================================================
 
 function normalizeProduct(product: any): Product {
-  const variants: ProductVariant[] =
-    Array.isArray(product.variants)
-      ? product.variants.map((variant: any) => ({
-          id: variant.id,
-          product_id: variant.product_id,
-          sku: variant.sku ?? null,
-          price: Number(variant.price),
-          original_price:
-            variant.original_price != null
-              ? Number(variant.original_price)
-              : null,
-          stock: Number(variant.stock),
-          is_active: variant.is_active ?? true,
-          option_value_ids: Array.isArray(
-            variant.option_value_ids
-          )
-            ? variant.option_value_ids.map(
-                (id: any) => Number(id)
-              )
-            : [],
-          images: Array.isArray(variant.images)
-            ? variant.images
-            : [],
-        }))
-      : [];
+  const variants: ProductVariant[] = Array.isArray(
+    product?.variants
+  )
+    ? product.variants.map((variant: any) => ({
+        id: Number(variant.id),
+        product_id: Number(variant.product_id),
+        sku: variant.sku ?? null,
+        price: Number(variant.price ?? 0),
+        original_price:
+          variant.original_price != null
+            ? Number(variant.original_price)
+            : null,
+        stock: Number(variant.stock ?? 0),
+        is_active: variant.is_active ?? true,
+        option_value_ids: Array.isArray(
+          variant.option_value_ids
+        )
+          ? variant.option_value_ids.map((id: any) =>
+              Number(id)
+            )
+          : [],
+        images: Array.isArray(variant.images)
+          ? variant.images.map((image: any) => ({
+              id: Number(image.id),
+              image_url: String(image.image_url ?? ""),
+              variant_id:
+                image.variant_id != null
+                  ? Number(image.variant_id)
+                  : null,
+              view_type: image.view_type ?? null,
+              sort_order: Number(image.sort_order ?? 0),
+              is_primary: image.is_primary ?? false,
+            }))
+          : [],
+      }))
+    : [];
 
-  const optionGroups: ProductOptionGroup[] =
-    Array.isArray(product.option_groups)
-      ? product.option_groups.map((group: any) => ({
-          id: group.id,
-          product_id: group.product_id,
-          name: group.name,
-          sort_order: Number(group.sort_order ?? 0),
-          values: Array.isArray(group.values)
-            ? group.values.map((value: any) => ({
-                id: value.id,
-                option_group_id: value.option_group_id,
-                value: value.value,
-                sort_order: Number(value.sort_order ?? 0),
-              }))
-            : [],
-        }))
-      : [];
+  const optionGroups: ProductOptionGroup[] = Array.isArray(
+    product?.option_groups
+  )
+    ? product.option_groups.map((group: any) => ({
+        id: Number(group.id),
+        product_id: Number(group.product_id),
+        name: String(group.name ?? ""),
+        sort_order: Number(group.sort_order ?? 0),
+        values: Array.isArray(group.values)
+          ? group.values.map((value: any) => ({
+              id: Number(value.id),
+              option_group_id: Number(
+                value.option_group_id
+              ),
+              value: String(value.value ?? ""),
+              sort_order: Number(
+                value.sort_order ?? 0
+              ),
+            }))
+          : [],
+      }))
+    : [];
 
-  const images: ProductImage[] =
-    Array.isArray(product.images)
-      ? product.images.map((image: any) => ({
-          id: image.id,
-          image_url: image.image_url,
-          variant_id: image.variant_id ?? null,
-          view_type: image.view_type ?? null,
-          sort_order: Number(image.sort_order ?? 0),
-          is_primary: image.is_primary ?? false,
-        }))
-      : [];
+  const images: ProductImage[] = Array.isArray(
+    product?.images
+  )
+    ? product.images.map((image: any) => ({
+        id: Number(image.id),
+        image_url: String(image.image_url ?? ""),
+        variant_id:
+          image.variant_id != null
+            ? Number(image.variant_id)
+            : null,
+        view_type: image.view_type ?? null,
+        sort_order: Number(image.sort_order ?? 0),
+        is_primary: image.is_primary ?? false,
+      }))
+    : [];
 
   return {
-    id: product.id,
-    seller_id: product.seller_id,
-    category_id: product.category_id,
-    name: product.name,
-    slug: product.slug,
-    description: product.description ?? null,
-    price: Number(product.price),
+    id: Number(product?.id),
+    seller_id: Number(product?.seller_id),
+    category_id: Number(product?.category_id),
+    name: String(product?.name ?? ""),
+    slug: String(product?.slug ?? "").trim(),
+    description: product?.description ?? null,
+    price: Number(product?.price ?? 0),
     original_price:
-      product.original_price != null
+      product?.original_price != null
         ? Number(product.original_price)
         : null,
-    stock: Number(product.stock),
-    image: product.image_url ?? null,
+    stock: Number(product?.stock ?? 0),
+    image: product?.image_url ?? product?.image ?? null,
     rating:
-      product.rating != null
+      product?.rating != null
         ? Number(product.rating)
         : 0,
     reviews_count:
-      product.reviews_count != null
+      product?.reviews_count != null
         ? Number(product.reviews_count)
         : 0,
-    is_active: product.is_active ?? true,
-    is_deleted: product.is_deleted ?? false,
-    created_at: product.created_at,
-    updated_at: product.updated_at,
+    is_active: product?.is_active ?? true,
+    is_deleted: product?.is_deleted ?? false,
+    created_at: product?.created_at,
+    updated_at: product?.updated_at,
     images,
     option_groups: optionGroups,
     variants,
@@ -178,11 +198,13 @@ function normalizeProduct(product: any): Product {
 // =====================================================
 
 let productsCache: Product[] | null = null;
-
 let productsRequest: Promise<Product[]> | null = null;
 
-// Share simultaneous requests for the same product slug.
-const productRequests = new Map<string, Promise<Product>>();
+// Share simultaneous requests for the same product identifier.
+const productRequests = new Map<
+  string,
+  Promise<Product>
+>();
 
 // Share simultaneous requests for the same category slug.
 const categoryProductsRequests = new Map<
@@ -232,20 +254,19 @@ export async function getProducts(): Promise<Product[]> {
 }
 
 // =====================================================
-// GET SINGLE PRODUCT BY SLUG
-// Prevent duplicate simultaneous requests
+// GET SINGLE PRODUCT BY SLUG OR NUMERIC ID
 // =====================================================
 
 export async function getProduct(
   productSlug: string
 ): Promise<Product> {
-  const slug = productSlug.trim();
+  const identifier = String(productSlug ?? "").trim();
 
-  if (!slug) {
-    throw new Error("Product slug is required.");
+  if (!identifier) {
+    throw new Error("Product slug or ID is required.");
   }
 
-  const existingRequest = productRequests.get(slug);
+  const existingRequest = productRequests.get(identifier);
 
   if (existingRequest) {
     return existingRequest;
@@ -253,24 +274,71 @@ export async function getProduct(
 
   const request = (async (): Promise<Product> => {
     try {
-      const response = await apiFetch(
-        `/api/products/slug/${encodeURIComponent(slug)}`
+      // First, try the existing backend slug endpoint.
+      let slugError: unknown;
+
+      try {
+        const response = await apiFetch(
+          `/api/products/slug/${encodeURIComponent(
+            identifier
+          )}`
+        );
+
+        if (response.success && response.data) {
+          const product = normalizeProduct(response.data);
+
+          if (
+            product.id > 0 &&
+            product.slug &&
+            !product.is_deleted &&
+            product.is_active
+          ) {
+            return product;
+          }
+        } else {
+          slugError = new Error(
+            response.data?.detail ||
+              "Product slug lookup failed."
+          );
+        }
+      } catch (error) {
+        slugError = error;
+      }
+
+      // Fallback: look for the slug or ID in the public list.
+      const products = await getProducts();
+
+      const product = products.find(
+        (item) =>
+          item.slug === identifier ||
+          String(item.id) === identifier
       );
 
-      if (!response.success) {
+      if (product) {
+        if (product.is_deleted || !product.is_active) {
+          throw new Error(
+            "This product is not currently available."
+          );
+        }
+
+        return product;
+      }
+
+      if (slugError instanceof Error) {
         throw new Error(
-          response.data?.detail ||
-            "Unable to fetch product."
+          `Product not found for "${identifier}". ${slugError.message}`
         );
       }
 
-      return normalizeProduct(response.data);
+      throw new Error(
+        `Product not found for "${identifier}".`
+      );
     } finally {
-      productRequests.delete(slug);
+      productRequests.delete(identifier);
     }
   })();
 
-  productRequests.set(slug, request);
+  productRequests.set(identifier, request);
 
   return request;
 }
@@ -300,7 +368,6 @@ export async function getMyProducts(): Promise<Product[]> {
 
 // =====================================================
 // GET PRODUCTS BY CATEGORY SLUG
-// Prevent duplicate simultaneous requests
 // =====================================================
 
 export async function getProductsByCategory(
@@ -312,7 +379,8 @@ export async function getProductsByCategory(
     throw new Error("Category slug is required.");
   }
 
-  const existingRequest = categoryProductsRequests.get(slug);
+  const existingRequest =
+    categoryProductsRequests.get(slug);
 
   if (existingRequest) {
     return existingRequest;
@@ -321,7 +389,9 @@ export async function getProductsByCategory(
   const request = (async (): Promise<Product[]> => {
     try {
       const response = await apiFetch(
-        `/api/products/category/${encodeURIComponent(slug)}`
+        `/api/products/category/${encodeURIComponent(
+          slug
+        )}`
       );
 
       if (!response.success) {
@@ -363,7 +433,10 @@ export async function createProduct(
 
     if (Array.isArray(detail)) {
       const message = detail
-        .map((item: any) => item?.msg || "Validation error")
+        .map(
+          (item: any) =>
+            item?.msg || "Validation error"
+        )
         .join(", ");
 
       throw new Error(message);
