@@ -346,11 +346,11 @@ export default function ForYouPage() {
               Start exploring products
             </h2>
 
-            <p className="mx-auto mt-2 max-w-lg text-sm text-gray-500">
+            {/*<p className="mx-auto mt-2 max-w-lg text-sm text-gray-500">
               When you open a product, it can appear here so you can
               easily find it again. Recently viewed products are saved
               in this browser.
-            </p>
+            </p>*/}
 
             <Link
               href="/products"
