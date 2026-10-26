@@ -2,20 +2,172 @@ const API_URL =
   typeof window !== "undefined" &&
   (window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1")
-    ? "http://127.0.0.1:8000"
+  ? "http://localhost:8000"
     : process.env.NEXT_PUBLIC_API_URL ||
       "http://127.0.0.1:8000";
+
+type RefreshResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  user?: unknown;
+};
+
+const LOGOUT_EVENT_KEY = "shopsphere_auth_logout";
+let refreshRequest: Promise<RefreshResponse | null> | null = null;
+
+function getStoredValue(key: string): string | null {
+  return (
+    sessionStorage.getItem(key) ||
+    localStorage.getItem(key)
+  );
+}
+
+export function refreshAuthSession(): Promise<RefreshResponse | null> {
+  if (refreshRequest) {
+    return refreshRequest;
+  }
+
+  if (typeof window === "undefined") {
+    return Promise.resolve(null);
+  }
+
+  const persistentSession =
+    localStorage.getItem("remember_me") === "true";
+  const logoutEventAtStart =
+    localStorage.getItem(LOGOUT_EVENT_KEY);
+  const sessionRefreshToken =
+    sessionStorage.getItem("refresh_token");
+  const localRefreshToken =
+    localStorage.getItem("refresh_token");
+  const refreshToken =
+    sessionRefreshToken || localRefreshToken;
+  const refreshStorage = sessionRefreshToken
+    ? sessionStorage
+    : localRefreshToken
+      ? localStorage
+      : null;
+
+  if (!refreshToken && !persistentSession) {
+    return Promise.resolve(null);
+  }
+
+  refreshRequest = (async () => {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        ...(refreshToken ? { refresh_token: refreshToken } : {}),
+        remember_me: persistentSession,
+      }),
+    });
+
+    const text = await response.text();
+    if (
+      localStorage.getItem(LOGOUT_EVENT_KEY) !== logoutEventAtStart ||
+      (persistentSession &&
+        localStorage.getItem("remember_me") !== "true")
+    ) {
+      return null;
+    }
+
+    let data: RefreshResponse = {};
+
+    try {
+      data = text ? (JSON.parse(text) as RefreshResponse) : {};
+    } catch {
+      return null;
+    }
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        clearAuth();
+      }
+      return null;
+    }
+
+    if (
+      !data.access_token ||
+      (!data.refresh_token && !persistentSession)
+    ) {
+      return null;
+    }
+
+    if (
+      refreshStorage &&
+      refreshToken &&
+      refreshStorage.getItem("refresh_token") !== refreshToken
+    ) {
+      return null;
+    }
+
+    if (
+      persistentSession &&
+      localStorage.getItem("remember_me") !== "true"
+    ) {
+      return null;
+    }
+
+    const storage = persistentSession
+      ? localStorage
+      : sessionStorage;
+    if (persistentSession) {
+      for (const key of [
+        "access_token",
+        "refresh_token",
+        "user",
+        "isLoggedIn",
+        "login_time",
+      ]) {
+        sessionStorage.removeItem(key);
+      }
+    }
+    storage.setItem("isLoggedIn", "true");
+
+    if (data.user) {
+      storage.setItem("user", JSON.stringify(data.user));
+    }
+
+    storage.setItem("login_time", new Date().toISOString());
+    storage.setItem("access_token", data.access_token);
+
+    if (!persistentSession && data.refresh_token) {
+      storage.setItem("refresh_token", data.refresh_token);
+    } else if (refreshStorage === localStorage) {
+      localStorage.removeItem("refresh_token");
+    }
+
+    window.dispatchEvent(new Event("auth-change"));
+
+    return data;
+  })().finally(() => {
+    refreshRequest = null;
+  });
+
+  return refreshRequest;
+}
 
 function clearAuth() {
   if (typeof window === "undefined") {
     return;
   }
 
-  sessionStorage.removeItem("access_token");
-  sessionStorage.removeItem("refresh_token");
-  sessionStorage.removeItem("user");
-  sessionStorage.removeItem("isLoggedIn");
-  sessionStorage.removeItem("login_time");
+  localStorage.setItem(
+    LOGOUT_EVENT_KEY,
+    `${Date.now()}-${Math.random()}`
+  );
+
+  for (const storage of [sessionStorage, localStorage]) {
+    storage.removeItem("access_token");
+    storage.removeItem("refresh_token");
+    storage.removeItem("user");
+    storage.removeItem("isLoggedIn");
+    storage.removeItem("login_time");
+  }
+
+  localStorage.removeItem("remember_me");
 
   window.dispatchEvent(
     new Event("auth-change")
@@ -38,7 +190,7 @@ export async function apiFetch(
 ) {
   let token =
     typeof window !== "undefined"
-      ? sessionStorage.getItem("access_token")
+      ? getStoredValue("access_token")
       : null;
 
   async function makeRequest(
@@ -79,15 +231,11 @@ export async function apiFetch(
     const url =
       `${API_URL}${normalizedEndpoint}`;
 
-    console.log(
-      "API REQUEST:",
-      url
-    );
-
     try {
       return await fetch(url, {
         ...options,
         headers,
+        credentials: options.credentials ?? "include",
       });
     } catch (error) {
       console.error(
@@ -128,12 +276,13 @@ export async function apiFetch(
     if (shouldTryRefresh) {
       const refreshToken =
         typeof window !== "undefined"
-          ? sessionStorage.getItem(
-              "refresh_token"
-            )
+          ? getStoredValue("refresh_token")
           : null;
+      const persistentSession =
+        typeof window !== "undefined" &&
+        localStorage.getItem("remember_me") === "true";
 
-      if (!refreshToken) {
+      if (!refreshToken && !persistentSession) {
         redirectToLogin();
 
         return {
@@ -146,70 +295,14 @@ export async function apiFetch(
         };
       }
 
-      const refreshResponse =
-        await fetch(
-          `${API_URL}/auth/refresh`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              refresh_token:
-                refreshToken,
-            }),
-          }
-        );
-
-      const refreshText =
-        await refreshResponse.text();
-
-      let refreshData: any = {};
-
-      try {
-        refreshData = refreshText
-          ? JSON.parse(refreshText)
-          : {};
-      } catch {
-        refreshData = {};
-      }
+      const refreshData = await refreshAuthSession();
 
       if (
-        refreshResponse.ok &&
-        refreshData.access_token &&
-        refreshData.refresh_token
+        refreshData?.access_token &&
+        (persistentSession || refreshData.refresh_token)
       ) {
         token =
           refreshData.access_token;
-
-        sessionStorage.setItem(
-          "access_token",
-          refreshData.access_token
-        );
-
-        sessionStorage.setItem(
-          "refresh_token",
-          refreshData.refresh_token
-        );
-
-        sessionStorage.setItem(
-          "isLoggedIn",
-          "true"
-        );
-
-        if (refreshData.user) {
-          sessionStorage.setItem(
-            "user",
-            JSON.stringify(
-              refreshData.user
-            )
-          );
-        }
-
-        window.dispatchEvent(
-          new Event("auth-change")
-        );
 
         response =
           await makeRequest(token);
@@ -243,12 +336,6 @@ export async function apiFetch(
           "Invalid server response.",
       };
     }
-
-    console.log(
-      "API RESPONSE:",
-      response.status,
-      data
-    );
 
     return {
       success: response.ok,

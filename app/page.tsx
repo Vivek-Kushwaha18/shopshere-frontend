@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Package } from "lucide-react";
 
@@ -202,21 +202,36 @@ export default function Home() {
     );
   }
 
-  const categoryRows = categories
-    .map((category) => ({
-      category,
-      products: products.filter(
-        (product) => product.category_id === category.id
-      ),
-    }))
-    .filter((row) => row.products.length > 0);
+  const categoryRows = useMemo(() => {
+    const productsByCategory = new Map<number, Product[]>();
 
-  const categoryIds = new Set(
-    categories.map((category) => category.id)
+    for (const product of products) {
+      const categoryProducts =
+        productsByCategory.get(product.category_id) ?? [];
+      categoryProducts.push(product);
+      productsByCategory.set(product.category_id, categoryProducts);
+    }
+
+    return categories.flatMap((category) => {
+      const categoryProducts = productsByCategory.get(category.id);
+
+      return categoryProducts
+        ? [{ category, products: categoryProducts }]
+        : [];
+    });
+  }, [categories, products]);
+
+  const categoryIds = useMemo(
+    () => new Set(categories.map((category) => category.id)),
+    [categories]
   );
 
-  const uncategorizedProducts = products.filter(
-    (product) => !categoryIds.has(product.category_id)
+  const uncategorizedProducts = useMemo(
+    () =>
+      products.filter(
+        (product) => !categoryIds.has(product.category_id)
+      ),
+    [categoryIds, products]
   );
 
   return (

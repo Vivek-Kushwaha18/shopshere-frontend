@@ -3,8 +3,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { FormEvent } from "react";
+import Swal from "sweetalert2";
 
 import {
   ShoppingCart,
@@ -24,8 +31,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import {
-  clearAuthSession,
   getStoredUser,
+  logoutSession,
   type User as AuthUser,
 } from "@/services/auth";
 
@@ -126,12 +133,27 @@ export default function Header() {
     };
   }, []);
 
-  const mainCategories = categories
-    .filter(
-      (category) =>
-        category.parent_id === null && category.is_active
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const mainCategories = useMemo(
+    () =>
+      categories
+        .filter(
+          (category) =>
+            category.parent_id === null && category.is_active
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [categories]
+  );
+
+  const searchableProducts = useMemo(
+    () =>
+      products.map((product) => ({
+        product,
+        normalizedName: (product.name ?? "")
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, " "),
+      })),
+    [products]
+  );
 
   useEffect(() => {
     let active = true;
@@ -279,8 +301,22 @@ export default function Header() {
     setSearchFocused(false);
   }, [pathname]);
 
-  function handleLogout() {
-    clearAuthSession();
+  async function handleLogout() {
+    try {
+      await logoutSession();
+    } catch (error) {
+      console.error("Unable to revoke the logout session:", error);
+      await Swal.fire({
+        icon: "error",
+        title: "Logout failed",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Please try again.",
+      });
+      router.replace("/login");
+      return;
+    }
 
     setIsLoggedIn(false);
     setUser(null);
@@ -290,7 +326,7 @@ export default function Header() {
     setMobileCategoriesOpen(false);
     setMobileMenu(false);
 
-    router.push("/");
+    router.replace("/login");
   }
 
   function getInitials() {
@@ -350,17 +386,23 @@ export default function Header() {
       return [];
     }
 
-    return products
-      .filter((product) => {
-        const productName = (product.name ?? "")
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}]+/gu, " ");
+    const suggestions: Product[] = [];
 
-        return searchTerms.every((term) =>
-          productName.includes(term)
-        );
-      })
-      .slice(0, 6);
+    for (const { product, normalizedName } of searchableProducts) {
+      if (
+        searchTerms.every((term) =>
+          normalizedName.includes(term)
+        )
+      ) {
+        suggestions.push(product);
+
+        if (suggestions.length === 6) {
+          break;
+        }
+      }
+    }
+
+    return suggestions;
   }
 
   function handleSearchChange(value: string) {
@@ -391,7 +433,7 @@ export default function Header() {
     setSearchFocused(false);
     setMobileMenu(false);
 
-    router.push(`/products/${product.id}`);
+    router.push(`/products/${product.slug}`);
   }
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {

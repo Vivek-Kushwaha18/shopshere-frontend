@@ -1,7 +1,13 @@
 
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
@@ -15,6 +21,7 @@ import {
   resendGoogleOtp,
   saveAuthSession,
   getRedirectPath,
+  getStoredUser,
   type AuthUser,
 } from "@/services/auth";
 
@@ -28,7 +35,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 
 type AuthPayload = {
@@ -59,6 +65,7 @@ function getErrorMessage(data: AuthPayload): string | undefined {
 
 export default function LoginPage() {
   const router = useRouter();
+  const authRequestInProgress = useRef(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -69,8 +76,25 @@ export default function LoginPage() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    rememberMe: false,
   });
+
+  useEffect(() => {
+    function handleStorageChange(event: StorageEvent) {
+      if (event.key !== "access_token") {
+        return;
+      }
+
+      const user = getStoredUser();
+      if (user) {
+        router.replace(getRedirectPath(user.role));
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [router]);
 
   function clearVerificationData() {
     if (typeof window === "undefined") return;
@@ -78,16 +102,6 @@ export default function LoginPage() {
     sessionStorage.removeItem("verification_email");
     sessionStorage.removeItem("verification_method");
     localStorage.removeItem("verification_email");
-  }
-
-  function saveRememberMe() {
-    if (typeof window === "undefined") return;
-
-    if (formData.rememberMe) {
-      localStorage.setItem("remember_me", "true");
-    } else {
-      localStorage.removeItem("remember_me");
-    }
   }
 
   function redirectByRole(role: AuthUser["role"]) {
@@ -113,7 +127,7 @@ export default function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (loading) return;
+    if (loading || authRequestInProgress.current) return;
 
     const email = formData.email.trim().toLowerCase();
     const password = formData.password;
@@ -128,10 +142,14 @@ export default function LoginPage() {
       return;
     }
 
+    authRequestInProgress.current = true;
     setLoading(true);
 
     try {
-      const response = await login({ email, password });
+      const response = await login({
+        email,
+        password,
+      });
 
       if (!response.success) {
         const errorData = response.data as AuthPayload | undefined;
@@ -152,7 +170,10 @@ export default function LoginPage() {
       const refreshToken = data?.refresh_token;
       const user = data?.user;
 
-      if (!accessToken || !refreshToken || !user) {
+      if (
+        !accessToken ||
+        !user
+      ) {
         throw new Error(
           "The server returned incomplete login information."
         );
@@ -167,8 +188,7 @@ export default function LoginPage() {
           access_token: accessToken,
           refresh_token: refreshToken,
           user,
-        },
-        formData.rememberMe
+        }
       );
 
       clearVerificationData();
@@ -184,6 +204,7 @@ export default function LoginPage() {
     } catch (error) {
       await showError("Login failed", error);
     } finally {
+      authRequestInProgress.current = false;
       setLoading(false);
     }
   }
@@ -204,7 +225,7 @@ export default function LoginPage() {
   async function handleGoogleSuccess(
     credentialResponse: CredentialResponse
   ) {
-    if (loading) return;
+    if (loading || authRequestInProgress.current) return;
 
     const credential = credentialResponse.credential;
 
@@ -218,6 +239,7 @@ export default function LoginPage() {
       return;
     }
 
+    authRequestInProgress.current = true;
     setLoading(true);
 
     try {
@@ -256,7 +278,6 @@ export default function LoginPage() {
       // Existing verified Google accounts can sign in directly.
       if (
         !response.access_token ||
-        !response.refresh_token ||
         !response.user
       ) {
         throw new Error(
@@ -280,8 +301,7 @@ export default function LoginPage() {
           token_type: response.token_type,
           user: response.user,
           message: response.message,
-        },
-        formData.rememberMe
+        }
       );
 
       clearVerificationData();
@@ -297,6 +317,7 @@ export default function LoginPage() {
     } catch (error) {
       await showError("Google login failed", error);
     } finally {
+      authRequestInProgress.current = false;
       setLoading(false);
     }
   }
@@ -319,7 +340,7 @@ export default function LoginPage() {
   ) {
     event.preventDefault();
 
-    if (loading) return;
+    if (loading || authRequestInProgress.current) return;
 
     if (!/^\d{6}$/.test(googleOtp)) {
       await Swal.fire({
@@ -347,6 +368,7 @@ export default function LoginPage() {
       return;
     }
 
+    authRequestInProgress.current = true;
     setLoading(true);
 
     try {
@@ -357,7 +379,6 @@ export default function LoginPage() {
 
       if (
         !response.access_token ||
-        !response.refresh_token ||
         !response.user
       ) {
         throw new Error(
@@ -366,10 +387,7 @@ export default function LoginPage() {
       }
 
       // Create the session only after the backend verifies the OTP.
-      saveAuthSession(
-        response,
-        formData.rememberMe
-      );
+      saveAuthSession(response);
 
       clearVerificationData();
 
@@ -384,6 +402,7 @@ export default function LoginPage() {
     } catch (error) {
       await showError("OTP verification failed", error);
     } finally {
+      authRequestInProgress.current = false;
       setLoading(false);
     }
   }
@@ -393,7 +412,7 @@ export default function LoginPage() {
   // =====================================================
 
   async function handleResendGoogleOtp() {
-    if (loading) return;
+    if (loading || authRequestInProgress.current) return;
 
     const email =
       googleOtpEmail ||
@@ -411,6 +430,7 @@ export default function LoginPage() {
       return;
     }
 
+    authRequestInProgress.current = true;
     setLoading(true);
 
     try {
@@ -429,6 +449,7 @@ export default function LoginPage() {
     } catch (error) {
       await showError("Unable to resend verification code", error);
     } finally {
+      authRequestInProgress.current = false;
       setLoading(false);
     }
   }
@@ -609,27 +630,6 @@ export default function LoginPage() {
                       )}
                     </button>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id="rememberMe"
-                    checked={formData.rememberMe}
-                    onCheckedChange={(checked) =>
-                      setFormData((previous) => ({
-                        ...previous,
-                        rememberMe: checked === true,
-                      }))
-                    }
-                    disabled={loading}
-                  />
-
-                  <Label
-                    htmlFor="rememberMe"
-                    className="text-sm font-normal"
-                  >
-                    Remember me
-                  </Label>
                 </div>
 
                 <Button

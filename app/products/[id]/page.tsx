@@ -752,12 +752,54 @@ export default function ProductDetailsPage() {
       const buyNowCheckout = {
         items: [
           {
-            id: `buy-now-${product.id}-${selectedVariant?.id ?? "default"}`,
+            id: -product.id,
             product_id: product.id,
             variant_id: selectedVariant?.id ?? null,
             quantity,
-            product,
-            variant: selectedVariant,
+            product: {
+              id: product.id,
+              name: product.name,
+              description: product.description ?? null,
+              price: product.price,
+              original_price: product.original_price ?? null,
+              stock: product.stock,
+              image_url:
+                product.image ??
+                product.images?.find((image) => image.is_primary)?.image_url ??
+                product.images?.[0]?.image_url ??
+                null,
+              rating: product.rating ?? 0,
+              reviews_count: product.reviews_count ?? 0,
+            },
+            variant: selectedVariant
+              ? {
+                  id: selectedVariant.id,
+                  sku: selectedVariant.sku ?? null,
+                  price: selectedVariant.price,
+                  original_price: selectedVariant.original_price ?? null,
+                  stock: selectedVariant.stock,
+                  is_active: selectedVariant.is_active,
+                  option_values: optionGroups.flatMap((group) => {
+                    const value = group.values.find((option) =>
+                      selectedVariant.option_value_ids.includes(option.id)
+                    );
+                    return value
+                      ? [{
+                          id: value.id,
+                          option_group_id: group.id,
+                          value: value.value,
+                        }]
+                      : [];
+                  }),
+                  images: selectedVariant.images.map((image) => ({
+                    id: image.id,
+                    image_url: image.image_url,
+                    view_type: image.view_type ?? null,
+                    sort_order: image.sort_order,
+                    is_primary: image.is_primary,
+                  })),
+                }
+              : null,
             item_total: itemTotal,
           },
         ],

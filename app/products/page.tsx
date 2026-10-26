@@ -59,6 +59,17 @@ export default function ProductsPage() {
 
   const [inStockOnly, setInStockOnly] = useState(false);
 
+  const normalizedProducts = useMemo(
+    () =>
+      products.map((product) => ({
+        product,
+        normalizedName: (product.name ?? "")
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, " "),
+      })),
+    [products]
+  );
+
   useEffect(() => {
     let active = true;
 
@@ -103,9 +114,11 @@ export default function ProductsPage() {
       return 20000;
     }
 
-    const highestPrice = Math.max(
-      ...products.map((product) => product.price)
-    );
+    let highestPrice = 0;
+
+    for (const product of products) {
+      highestPrice = Math.max(highestPrice, product.price);
+    }
 
     const roundedPrice = Math.ceil(highestPrice / 1000) * 1000;
 
@@ -129,15 +142,13 @@ export default function ProductsPage() {
   }, [categories]);
 
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const productName = (product.name ?? "")
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}]+/gu, " ");
+    const filtered: Product[] = [];
 
+    for (const { product, normalizedName } of normalizedProducts) {
       // Every search term must occur in the product name.
       // Descriptions are deliberately not searched.
       const matchesSearch = searchTerms.every((term) =>
-        productName.includes(term)
+        normalizedName.includes(term)
       );
 
       const matchesPrice =
@@ -157,15 +168,19 @@ export default function ProductsPage() {
             100 >=
             selectedDiscount);
 
-      return (
+      if (
         matchesSearch &&
         matchesPrice &&
         matchesStock &&
         matchesDiscount
-      );
-    });
+      ) {
+        filtered.push(product);
+      }
+    }
+
+    return filtered;
   }, [
-    products,
+    normalizedProducts,
     searchTerms,
     appliedMinPrice,
     appliedMaxPrice,

@@ -23,7 +23,7 @@ import {
   type CartData,
 } from "@/services/cart";
 
-const SELECTED_CART_ITEMS_KEY = "shopsphere_selected_cart_item_ids";
+const BUY_NOW_STORAGE_KEY = "shopsphere-buy-now-checkout";
 
 export default function CartPage() {
   const router = useRouter();
@@ -135,8 +135,7 @@ export default function CartPage() {
     if (!allItems.length || busy) return;
 
     try {
-      // Remove the Buy Now selection so checkout uses the full cart.
-      localStorage.removeItem(SELECTED_CART_ITEMS_KEY);
+      sessionStorage.removeItem(BUY_NOW_STORAGE_KEY);
 
       router.push("/checkout");
     } catch (err) {

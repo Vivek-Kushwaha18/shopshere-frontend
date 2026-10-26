@@ -23,8 +23,6 @@ export default function CartItem({
   const product = item.product;
 
   function handleBuyNow() {
-    // Passing the cart item ID in the URL keeps this purchase separate from
-    // normal checkout, which opens /checkout without the buyNow parameter.
     setBuying(true);
     router.push(`/checkout?buyNow=${encodeURIComponent(String(item.id))}`);
   }

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getStoredUser } from "@/services/auth";
+import {
+  getStoredUser,
+  restoreRememberedSession,
+} from "@/services/auth";
 
 export default function RoleGuard({
   children,
@@ -16,74 +19,103 @@ export default function RoleGuard({
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    const user = getStoredUser();
+    let active = true;
 
-    // Not logged in
-    if (!user) {
-      setAllowed(true);
-      setChecking(false);
-      return;
+    function handleAuthChange() {
+      if (!getStoredUser() && pathname !== "/login") {
+        router.replace("/login");
+      }
     }
 
-    // =========================
-    // ADMIN
-    // =========================
+    window.addEventListener("auth-change", handleAuthChange);
 
-    if (user.role === "admin") {
-      if (pathname.startsWith("/admin")) {
+    async function checkRole() {
+      let user = getStoredUser();
+
+      if (!user) {
+        try {
+          user = await restoreRememberedSession();
+        } catch (error) {
+          console.error("Unable to restore remembered session:", error);
+        }
+      }
+
+      if (!active) return;
+
+      // Not logged in
+      if (!user) {
         setAllowed(true);
         setChecking(false);
         return;
       }
 
-      setChecking(false);
-      setAllowed(false);
+      // =========================
+      // ADMIN
+      // =========================
 
-      router.replace("/admin/dashboard");
-      return;
-    }
+      if (user.role === "admin") {
+        if (pathname.startsWith("/admin")) {
+          setAllowed(true);
+          setChecking(false);
+          return;
+        }
 
-    // =========================
-    // SELLER
-    // =========================
-
-    if (user.role === "seller") {
-      if (pathname.startsWith("/seller")) {
-        setAllowed(true);
-        setChecking(false);
-        return;
-      }
-
-      setChecking(false);
-      setAllowed(false);
-
-      router.replace("/seller/dashboard");
-      return;
-    }
-
-    // =========================
-    // CUSTOMER
-    // =========================
-
-    if (user.role === "customer") {
-      if (
-        pathname.startsWith("/seller") ||
-        pathname.startsWith("/admin")
-      ) {
         setChecking(false);
         setAllowed(false);
 
-        router.replace("/");
+        router.replace("/admin/dashboard");
+        return;
+      }
+
+      // =========================
+      // SELLER
+      // =========================
+
+      if (user.role === "seller") {
+        if (pathname.startsWith("/seller")) {
+          setAllowed(true);
+          setChecking(false);
+          return;
+        }
+
+        setChecking(false);
+        setAllowed(false);
+
+        router.replace("/seller/dashboard");
+        return;
+      }
+
+      // =========================
+      // CUSTOMER
+      // =========================
+
+      if (user.role === "customer") {
+        if (
+          pathname.startsWith("/seller") ||
+          pathname.startsWith("/admin")
+        ) {
+          setChecking(false);
+          setAllowed(false);
+
+          router.replace("/");
+          return;
+        }
+
+        setAllowed(true);
+        setChecking(false);
         return;
       }
 
       setAllowed(true);
       setChecking(false);
-      return;
     }
 
-    setAllowed(true);
-    setChecking(false);
+    void checkRole();
+
+    return () => {
+      active = false;
+      window.removeEventListener("auth-change", handleAuthChange);
+    };
   }, [pathname, router]);
 
   if (checking) {

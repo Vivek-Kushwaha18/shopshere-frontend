@@ -1,5 +1,5 @@
 
-import { apiFetch } from "./api";
+import { API_URL, apiFetch, refreshAuthSession } from "./api";
 
 // =====================================================
 // TYPES
@@ -31,7 +31,7 @@ export type User = AuthUser;
 
 export interface AuthResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   token_type?: string;
   user: AuthUser;
   message?: string;
@@ -92,6 +92,39 @@ const USER_KEY = "user";
 const LOGIN_STATUS_KEY = "isLoggedIn";
 const REMEMBER_ME_KEY = "remember_me";
 const LOGIN_TIME_KEY = "login_time";
+const LOGOUT_EVENT_KEY = "shopsphere_auth_logout";
+
+function redirectToLogin(): void {
+  if (window.location.pathname !== "/login") {
+    window.location.replace("/login");
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === LOGOUT_EVENT_KEY && event.newValue) {
+      clearAuthSession(false);
+      redirectToLogin();
+      return;
+    }
+
+    if (event.key !== ACCESS_TOKEN_KEY) {
+      return;
+    }
+
+    for (const key of [
+      ACCESS_TOKEN_KEY,
+      REFRESH_TOKEN_KEY,
+      USER_KEY,
+      LOGIN_STATUS_KEY,
+      LOGIN_TIME_KEY,
+    ]) {
+      sessionStorage.removeItem(key);
+    }
+
+    window.dispatchEvent(new Event("auth-change"));
+  });
+}
 
 // =====================================================
 // API RESPONSE HELPERS
@@ -144,8 +177,7 @@ function getErrorMessage(error: unknown): string {
 // =====================================================
 
 export function saveAuthSession(
-  response: AuthResponse,
-  rememberMe = false
+  response: AuthResponse
 ): void {
   if (typeof window === "undefined") {
     return;
@@ -153,33 +185,27 @@ export function saveAuthSession(
 
   if (
     !response?.access_token ||
-    !response?.refresh_token ||
     !response?.user
   ) {
     throw new Error("Invalid authentication response.");
   }
 
-  const storage = rememberMe ? localStorage : sessionStorage;
+  for (const key of [
+    ACCESS_TOKEN_KEY,
+    REFRESH_TOKEN_KEY,
+    USER_KEY,
+    LOGIN_STATUS_KEY,
+    LOGIN_TIME_KEY,
+  ]) {
+    sessionStorage.removeItem(key);
+  }
 
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.setItem(REMEMBER_ME_KEY, "true");
   localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-  localStorage.removeItem(LOGIN_STATUS_KEY);
-  localStorage.removeItem(LOGIN_TIME_KEY);
-
-  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-  sessionStorage.removeItem(USER_KEY);
-  sessionStorage.removeItem(LOGIN_STATUS_KEY);
-  sessionStorage.removeItem(LOGIN_TIME_KEY);
-
-  storage.setItem(ACCESS_TOKEN_KEY, response.access_token);
-  storage.setItem(REFRESH_TOKEN_KEY, response.refresh_token);
-  storage.setItem(USER_KEY, JSON.stringify(response.user));
-  storage.setItem(LOGIN_STATUS_KEY, "true");
-  storage.setItem(LOGIN_TIME_KEY, new Date().toISOString());
-
-  localStorage.setItem(REMEMBER_ME_KEY, String(rememberMe));
+  localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+  localStorage.setItem(LOGIN_STATUS_KEY, "true");
+  localStorage.setItem(LOGIN_TIME_KEY, new Date().toISOString());
+  localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
 
   window.dispatchEvent(new Event("auth-change"));
 }
@@ -200,10 +226,8 @@ export function getRefreshToken(): string | null {
     return null;
   }
 
-  return (
-    sessionStorage.getItem(REFRESH_TOKEN_KEY) ||
-    localStorage.getItem(REFRESH_TOKEN_KEY)
-  );
+  return sessionStorage.getItem(REFRESH_TOKEN_KEY) ||
+    localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -260,9 +284,16 @@ export function updateStoredUser(user: AuthUser): void {
   window.dispatchEvent(new Event("auth-change"));
 }
 
-export function clearAuthSession(): void {
+export function clearAuthSession(broadcast = true): void {
   if (typeof window === "undefined") {
     return;
+  }
+
+  if (broadcast) {
+    localStorage.setItem(
+      LOGOUT_EVENT_KEY,
+      `${Date.now()}-${Math.random()}`
+    );
   }
 
   localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -279,6 +310,63 @@ export function clearAuthSession(): void {
   sessionStorage.removeItem(LOGIN_TIME_KEY);
 
   window.dispatchEvent(new Event("auth-change"));
+}
+
+export async function restoreRememberedSession(): Promise<AuthUser | null> {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const currentUser = getStoredUser();
+  if (getAccessToken() && currentUser) {
+    return currentUser;
+  }
+
+  if (localStorage.getItem(REMEMBER_ME_KEY) !== "true") {
+    return null;
+  }
+
+  const result =
+    await refreshAuthSession() as AuthResponse | null;
+
+  if (!result) {
+    return null;
+  }
+
+  if (
+    !result?.access_token ||
+    !result.user
+  ) {
+    throw new Error("Invalid remembered-session response.");
+  }
+
+  saveAuthSession(result);
+  return result.user;
+}
+
+export async function logoutSession(): Promise<void> {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const refreshToken = getRefreshToken();
+
+  const logoutRequest = fetch(`${API_URL}/auth/logout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    keepalive: true,
+    body: JSON.stringify({
+      ...(refreshToken ? { refresh_token: refreshToken } : {}),
+    }),
+  });
+
+  clearAuthSession();
+
+  const response = await logoutRequest;
+  if (!response.ok) {
+    throw new Error(`Logout failed with status ${response.status}.`);
+  }
 }
 
 // =====================================================
@@ -396,7 +484,9 @@ export async function googleLogin(
     const response = await apiFetch("/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential }),
+      body: JSON.stringify({
+        credential,
+      }),
     });
 
     return unwrapResponse<GoogleLoginResult>(response);
@@ -443,8 +533,11 @@ export async function resendGoogleOtp(
 
 export async function refreshAccessToken(): Promise<AuthResponse> {
   const refreshToken = getRefreshToken();
+  const persistentSession =
+    typeof window !== "undefined" &&
+    localStorage.getItem(REMEMBER_ME_KEY) === "true";
 
-  if (!refreshToken) {
+  if (!refreshToken && !persistentSession) {
     clearAuthSession();
     throw new Error("Your session has expired. Please log in again.");
   }
@@ -453,24 +546,22 @@ export async function refreshAccessToken(): Promise<AuthResponse> {
     const response = await apiFetch("/auth/refresh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({
+        ...(refreshToken ? { refresh_token: refreshToken } : {}),
+        remember_me: true,
+      }),
     });
 
     const result = unwrapResponse<AuthResponse>(response);
 
     if (
       !result?.access_token ||
-      !result?.refresh_token ||
       !result?.user
     ) {
       throw new Error("Invalid token refresh response.");
     }
 
-    const rememberMe =
-      typeof window !== "undefined" &&
-      localStorage.getItem(REMEMBER_ME_KEY) === "true";
-
-    saveAuthSession(result, rememberMe);
+    saveAuthSession(result);
 
     return result;
   } catch (error) {
@@ -642,7 +733,7 @@ export async function verifyEmailChange(payload: {
 // =====================================================
 
 export async function logout(): Promise<void> {
-  clearAuthSession();
+  await logoutSession();
 
   if (typeof window !== "undefined") {
     window.location.assign("/login");

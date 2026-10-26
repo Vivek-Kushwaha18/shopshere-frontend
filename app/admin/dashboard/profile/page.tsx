@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Swal from "sweetalert2";
 
 import {
   User,
@@ -31,9 +32,9 @@ import { Separator } from "@/components/ui/separator";
 
 import {
   changeEmail,
-  clearAuthSession,
   getMyProfile,
   getStoredUser,
+  logoutSession,
   updateMyProfile,
   updateStoredUser,
   verifyEmailChange,
@@ -462,8 +463,23 @@ export default function AdminProfilePage() {
   // LOGOUT
   // =====================================================
 
-  function logout() {
-    clearAuthSession();
+  async function logout() {
+    try {
+      await logoutSession();
+    } catch (error) {
+      console.error("Unable to revoke the logout session:", error);
+      await Swal.fire({
+        icon: "error",
+        title: "Logout failed",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Please try again.",
+      });
+      router.replace("/login");
+      return;
+    }
+
     router.replace("/login");
   }
 

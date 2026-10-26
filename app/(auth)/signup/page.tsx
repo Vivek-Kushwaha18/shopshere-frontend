@@ -61,7 +61,6 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const normalizedEmail = email.trim().toLowerCase();
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -92,15 +91,6 @@ function SignupForm() {
 
   const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    if (!acceptedTerms) {
-      await Swal.fire(
-        "Terms required",
-        "Please accept the Terms and Conditions to continue.",
-        "warning"
-      );
-      return;
-    }
 
     if (password !== confirmPassword) {
       await Swal.fire(
@@ -292,7 +282,6 @@ function SignupForm() {
       // directly, so save the session and redirect by role.
       if (
         !response.access_token ||
-        !response.refresh_token ||
         !response.user
       ) {
         throw new Error(
@@ -365,7 +354,6 @@ function SignupForm() {
 
       if (
         !response.access_token ||
-        !response.refresh_token ||
         !response.user
       ) {
         throw new Error(
@@ -648,21 +636,23 @@ function SignupForm() {
                   </div>
                 </div>
 
-                <label className="flex items-start gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={acceptedTerms}
-                    onChange={(event) =>
-                      setAcceptedTerms(event.target.checked)
-                    }
-                    disabled={loading}
-                    className="mt-1"
-                  />
-                  <span>
-                    I agree to the ShopSphere Terms and Conditions and
-                    Privacy Policy.
-                  </span>
-                </label>
+                <p className="text-sm text-muted-foreground">
+                  By creating an account, you acknowledge our{" "}
+                  <Link
+                    href="/terms"
+                    className="font-medium text-primary underline underline-offset-4"
+                  >
+                    Terms and Conditions
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    href="/privacy"
+                    className="font-medium text-primary underline underline-offset-4"
+                  >
+                    Privacy Policy
+                  </Link>
+                  .
+                </p>
 
                 <Button
                   type="submit"
