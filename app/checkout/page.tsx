@@ -26,13 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 
-import {
-  getCart,
-  removeCartItem,
-  updateCartItem,
-  type CartData,
-  type CartItem,
-} from "@/services/cart";
+import { getCart, removeCartItem, type CartData } from "@/services/cart";
 import {
   createOrder,
   getOrder,
@@ -57,6 +51,7 @@ import {
   getSavedCards,
   createRazorpayQr,
   getRazorpayQrStatus,
+  verifyStripePayment,
   type SavedCard,
   type RazorpayQrResponse,
 } from "@/services/payments";
@@ -70,7 +65,7 @@ import {
 } from "@stripe/react-stripe-js";
 
 const BLUE = "#2874F0";
-const BUY_NOW_STORAGE_KEY = "shopsphere-buy-now-checkout";
+const SELECTED_CART_ITEM_IDS_KEY = "shopsphere_selected_cart_item_ids";
 
 type CheckoutPaymentOption = "stripe" | "razorpay" | "cod";
 type RazorpayPaymentOption =
@@ -184,7 +179,7 @@ function PaymentForm({
   clientSecret,
   selectedSavedCardId,
 }: {
-  onSuccess: () => Promise<void>;
+  onSuccess: (paymentIntentId: string) => Promise<void>;
   onCancel: () => Promise<void>;
   processing: boolean;
   clientSecret: string;
@@ -252,7 +247,7 @@ function PaymentForm({
       }
 
       if (paymentIntent?.status === "succeeded") {
-        await onSuccess();
+        await onSuccess(paymentIntent.id);
         return;
       }
 
@@ -386,13 +381,8 @@ export default function CheckoutPage() {
   const paymentSuccessInProgress = useRef(false);
 
   const [cart, setCart] = useState<CartData | null>(null);
-  const [checkoutMode, setCheckoutMode] = useState<
-    "all" | "cart-item" | "product" | null
-  >(null);
-  const [selectedCartItemId, setSelectedCartItemId] = useState<number | null>(
-    null
-  );
-  const [buyNowProductItems, setBuyNowProductItems] = useState<CartItem[]>([]);
+  // null means normal checkout (all cart items); an array means Buy This Now.
+  const [selectedCartItemIds, setSelectedCartItemIds] = useState<number[] | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] =
     useState<number | null>(null);
@@ -483,29 +473,19 @@ export default function CheckoutPage() {
     if (initialLoadStarted.current) return;
     initialLoadStarted.current = true;
 
+    // Buy This Now passes its cart item ID in the URL. A normal /checkout visit
+    // intentionally includes every cart item, even if an old localStorage key exists.
     const query = new URLSearchParams(window.location.search);
-    const cartItemId = Number(query.get("buyNow"));
-    if (Number.isInteger(cartItemId) && cartItemId > 0) {
-      setCheckoutMode("cart-item");
-      setSelectedCartItemId(cartItemId);
-    } else if (query.get("mode") === "buy-now") {
-      try {
-        const savedCheckout = sessionStorage.getItem(BUY_NOW_STORAGE_KEY);
-        const items = savedCheckout
-          ? (JSON.parse(savedCheckout) as { items?: CartItem[] }).items
-          : null;
-
-        if (items?.length) {
-          setBuyNowProductItems(items);
-        }
-        setCheckoutMode("product");
-      } catch (error) {
-        console.error("Unable to restore Buy Now product:", error);
-        setCheckoutMode("product");
-      }
+    const buyNowItemId = Number(query.get("buyNow"));
+    if (Number.isInteger(buyNowItemId) && buyNowItemId > 0) {
+      setSelectedCartItemIds([buyNowItemId]);
     } else {
-      setCheckoutMode("all");
-      sessionStorage.removeItem(BUY_NOW_STORAGE_KEY);
+      setSelectedCartItemIds(null);
+      try {
+        localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
+      } catch (error) {
+        console.error("Unable to clear old selected cart item state:", error);
+      }
     }
 
     void loadCart();
@@ -541,13 +521,10 @@ export default function CheckoutPage() {
   }, [paymentMethod]);
 
   const checkoutItems = useMemo(() => {
-    if (checkoutMode === "product") return buyNowProductItems;
-    if (!cart || checkoutMode === null) return [];
-    if (checkoutMode === "cart-item") {
-      return cart.items.filter((item) => item.id === selectedCartItemId);
-    }
-    return cart.items;
-  }, [buyNowProductItems, cart, checkoutMode, selectedCartItemId]);
+    if (!cart) return [];
+    if (selectedCartItemIds === null) return cart.items;
+    return cart.items.filter((item) => selectedCartItemIds.includes(item.id));
+  }, [cart, selectedCartItemIds]);
 
   const checkoutItemCount = useMemo(
     () => checkoutItems.reduce((total, item) => total + Number(item.quantity || 0), 0),
@@ -568,47 +545,21 @@ export default function CheckoutPage() {
   const finalAmount = Math.max(subtotal - discountAmount, 0);
 
   const removePurchasedCartItems = useCallback(async (): Promise<boolean> => {
-    const cartItemsToUpdate =
-      checkoutMode === "product"
-        ? checkoutItems.flatMap((purchasedItem) =>
-            (cart?.items ?? [])
-              .filter(
-                (cartItem) =>
-                  cartItem.product_id === purchasedItem.product_id &&
-                  cartItem.variant_id === purchasedItem.variant_id
-              )
-              .map((cartItem) => ({
-                itemId: cartItem.id,
-                remainingQuantity:
-                  cartItem.quantity - purchasedItem.quantity,
-              }))
-          )
-        : checkoutItems
-            .filter((item) => item.id > 0)
-            .map((item) => ({
-              itemId: item.id,
-              remainingQuantity: 0,
-            }));
+    const purchasedIds = checkoutItems.map((item) => item.id);
     const failedIds: number[] = [];
 
-    for (const item of cartItemsToUpdate) {
+    // Remove only items that were included in this order. Never clear the full cart.
+    for (const itemId of purchasedIds) {
       try {
-        if (item.remainingQuantity > 0) {
-          await updateCartItem(item.itemId, item.remainingQuantity);
-        } else {
-          await removeCartItem(item.itemId);
-        }
+        await removeCartItem(itemId);
       } catch (error) {
-        failedIds.push(item.itemId);
-        console.error(
-          `Unable to update purchased cart item ${item.itemId}:`,
-          error
-        );
+        failedIds.push(itemId);
+        console.error(`Unable to remove purchased cart item ${itemId}:`, error);
       }
     }
 
     try {
-      sessionStorage.removeItem(BUY_NOW_STORAGE_KEY);
+      localStorage.removeItem(SELECTED_CART_ITEM_IDS_KEY);
     } catch (error) {
       console.error("Unable to clear selected checkout item state:", error);
     }
@@ -617,7 +568,7 @@ export default function CheckoutPage() {
       return false;
     }
     return true;
-  }, [cart, checkoutItems, checkoutMode]);
+  }, [checkoutItems]);
 
   function handleAddressChange(
     event: React.ChangeEvent<
@@ -973,7 +924,7 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!cart || checkoutMode === null || checkoutItems.length === 0) {
+    if (!cart || checkoutItems.length === 0) {
       await Swal.fire({
         icon: "warning",
         title: "Your Cart Is Empty",
@@ -1069,22 +1020,61 @@ export default function CheckoutPage() {
     }
   }
 
-  async function handlePaymentSuccess() {
-    if (paymentOrderId === null || paymentSuccessInProgress.current) return;
+  async function handlePaymentSuccess(paymentIntentId: string) {
+    if (paymentOrderId === null || paymentSuccessInProgress.current) {
+      return;
+    }
 
     paymentSuccessInProgress.current = true;
     const orderId = paymentOrderId;
     setPaymentProcessing(true);
 
     try {
-      const order = await getOrder(orderId);
+      let confirmed = false;
+      let lastError: unknown = null;
 
-      if (order.payment_status !== "paid") {
+      // Verify directly with ShopSphere. This endpoint must be present
+      // in the backend and must verify the PaymentIntent with Stripe.
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        try {
+          const result = await verifyStripePayment({
+            order_id: orderId,
+            payment_intent_id: paymentIntentId,
+          });
+
+          if (
+            result.verified === true &&
+            result.payment_status === "paid"
+          ) {
+            confirmed = true;
+            break;
+          }
+        } catch (error) {
+          lastError = error;
+          console.error(
+            `Stripe confirmation attempt ${attempt + 1} failed:`,
+            error
+          );
+        }
+
+        if (attempt < 9) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 2000);
+          });
+        }
+      }
+
+      if (!confirmed) {
+        console.error(
+          "Stripe succeeded, but ShopSphere has not confirmed the order.",
+          { orderId, paymentIntentId, lastError }
+        );
+
         await Swal.fire({
-          icon: "info",
-          title: "Payment Confirmation Pending",
+          icon: "warning",
+          title: "Payment Confirmation Delayed",
           text:
-            "Your payment has not been confirmed yet. Your cart has been preserved. Please check My Orders before attempting another payment.",
+            "Stripe reports that your payment succeeded, but ShopSphere has not confirmed the order yet. Do not pay again. Please check My Orders or contact support with your order number.",
           confirmButtonText: "View Orders",
         });
 
@@ -1097,23 +1087,26 @@ export default function CheckoutPage() {
       await Swal.fire({
         icon: "success",
         title: "Payment Successful",
-        text: `Your order #${orderId} has been confirmed.`,
+        text: `Your payment for order #${orderId} has been confirmed.`,
         confirmButtonText: "View Orders",
       });
 
       router.push("/orders");
     } catch (error) {
-      console.error("Payment confirmation failed:", error);
+      console.error("Stripe payment confirmation failed:", error);
+
       await Swal.fire({
         icon: "warning",
-        title: "Payment Status Could Not Be Verified",
+        title: "Payment Confirmation Delayed",
         text:
-          "We could not verify your payment status. Please check My Orders before attempting another payment. Your cart has been preserved.",
+          "Your payment may have succeeded, but ShopSphere could not confirm the order status. Do not pay again. Please check My Orders or contact support with your order number.",
         confirmButtonText: "View Orders",
       });
+
       router.push("/orders");
     } finally {
       setPaymentProcessing(false);
+      paymentSuccessInProgress.current = false;
     }
   }
 
@@ -1333,16 +1326,12 @@ export default function CheckoutPage() {
               <ShoppingBag className="h-10 w-10 text-[#2874F0]" />
             </div>
             <h1 className="mt-5 text-2xl font-bold text-gray-900">
-              {(checkoutMode === "cart-item" || checkoutMode === "product") &&
-              checkoutMode !== null &&
-              cart?.items.length
+              {selectedCartItemIds !== null && cart?.items.length
                 ? "Selected Item Is No Longer Available"
                 : "Your Cart Is Empty"}
             </h1>
             <p className="mt-2 text-sm text-gray-500">
-              {(checkoutMode === "cart-item" || checkoutMode === "product") &&
-              checkoutMode !== null &&
-              cart?.items.length
+              {selectedCartItemIds !== null && cart?.items.length
                 ? "Please return to your cart and choose an available item to purchase."
                 : "Your next favourite purchase is waiting for you."}
             </p>

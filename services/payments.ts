@@ -100,6 +100,68 @@ export async function createPaymentIntent(
 }
 
 // =====================================================
+// STRIPE PAYMENT VERIFICATION
+// Requires backend POST /payments/stripe/verify
+// =====================================================
+
+export interface StripePaymentVerifyData {
+  order_id: number;
+  payment_intent_id: string;
+}
+
+export interface StripePaymentVerifyResponse {
+  verified: boolean;
+  order_id: number;
+  payment_status: string;
+  message?: string;
+}
+
+export async function verifyStripePayment(
+  data: StripePaymentVerifyData
+): Promise<StripePaymentVerifyResponse> {
+  if (
+    !Number.isInteger(data.order_id) ||
+    data.order_id <= 0 ||
+    typeof data.payment_intent_id !== "string" ||
+    !data.payment_intent_id.trim()
+  ) {
+    throw new Error("Invalid Stripe payment verification details.");
+  }
+
+  const response = await apiFetch("/payments/stripe/verify", {
+    method: "POST",
+    body: JSON.stringify({
+      order_id: data.order_id,
+      payment_intent_id: data.payment_intent_id.trim(),
+    }),
+  });
+
+  if (!response.success) {
+    throw new Error(
+      getApiErrorMessage(
+        response.data,
+        "Unable to verify Stripe payment."
+      )
+    );
+  }
+
+  const result = response.data as StripePaymentVerifyResponse;
+
+  if (
+    !result ||
+    typeof result.verified !== "boolean" ||
+    typeof result.order_id !== "number" ||
+    typeof result.payment_status !== "string"
+  ) {
+    throw new Error(
+      "The server returned an invalid Stripe payment status."
+    );
+  }
+
+  return result;
+}
+
+// =====================================================
 // SAVED STRIPE CARDS
 // =====================================================
 

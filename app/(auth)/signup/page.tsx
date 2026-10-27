@@ -46,6 +46,91 @@ import { Separator } from "@/components/ui/separator";
 type SignupRole = "customer" | "seller";
 type OtpMode = "email" | "google" | null;
 
+type SignupApiResponse = {
+  success?: boolean;
+  status?: number;
+  message?: string;
+  detail?: string | { msg?: string }[];
+  is_verified?: boolean;
+  requires_otp?: boolean;
+  user?: { is_verified?: boolean };
+  data?: {
+    success?: boolean;
+    message?: string;
+    detail?: string | { msg?: string }[];
+    is_verified?: boolean;
+    requires_otp?: boolean;
+    user?: { is_verified?: boolean };
+  };
+};
+
+function getResponseMessage(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) =>
+        item && typeof item === "object" && "msg" in item
+          ? String(item.msg ?? "")
+          : ""
+      )
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return "";
+}
+
+function isAlreadyVerifiedError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message : String(error ?? "");
+
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("already") &&
+    (
+      normalized.includes("verified") ||
+      normalized.includes("registered") ||
+      normalized.includes("exists")
+    )
+  );
+}
+
+function isAlreadyVerifiedResponse(
+  response: SignupApiResponse
+): boolean {
+  const data = response.data;
+
+  const message = [
+    response.message,
+    getResponseMessage(response.detail),
+    data?.message,
+    getResponseMessage(data?.detail),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const explicitlyVerified =
+    response.is_verified === true ||
+    response.user?.is_verified === true ||
+    data?.is_verified === true ||
+    data?.user?.is_verified === true;
+
+  const verifiedMessage =
+    message.includes("already") &&
+    (
+      message.includes("verified") ||
+      message.includes("registered") ||
+      message.includes("exists")
+    );
+
+  return explicitlyVerified || verifiedMessage;
+}
+
 function SignupForm() {
   const router = useRouter();
 
@@ -73,7 +158,16 @@ function SignupForm() {
     return (
       sessionStorage.getItem("verification_email") ||
       normalizedEmail
-    ).trim().toLowerCase();
+    )
+      .trim()
+      .toLowerCase();
+  };
+
+  const clearVerificationState = () => {
+    sessionStorage.removeItem("verification_email");
+    sessionStorage.removeItem("verification_method");
+    setOtp("");
+    setOtpMode(null);
   };
 
   const showError = async (title: string, error: unknown) => {
@@ -85,9 +179,20 @@ function SignupForm() {
     await Swal.fire(title, message, "error");
   };
 
-  // =====================================================
-  // NORMAL EMAIL/PASSWORD SIGNUP
-  // =====================================================
+  const handleAlreadyVerified = async () => {
+    clearVerificationState();
+
+    await Swal.fire({
+      title: "Already verified",
+      text: "Your account is already verified. Please log in.",
+      icon: "info",
+      confirmButtonText: "Go to login",
+    });
+
+    router.replace("/login");
+  };
+
+  // EMAIL/PASSWORD SIGNUP
 
   const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -113,13 +218,18 @@ function SignupForm() {
     setLoading(true);
 
     try {
-      await signup({
+      const response = (await signup({
         full_name: fullName.trim(),
         email: normalizedEmail,
         phone: phone.trim() || undefined,
         password,
         role,
-      });
+      })) as SignupApiResponse;
+
+      if (isAlreadyVerifiedResponse(response)) {
+        await handleAlreadyVerified();
+        return;
+      }
 
       sessionStorage.setItem("verification_email", normalizedEmail);
       sessionStorage.setItem("verification_method", "email");
@@ -134,15 +244,18 @@ function SignupForm() {
         "success"
       );
     } catch (error) {
+      if (isAlreadyVerifiedError(error)) {
+        await handleAlreadyVerified();
+        return;
+      }
+
       await showError("Signup failed", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================================================
-  // NORMAL EMAIL SIGNUP OTP VERIFICATION
-  // =====================================================
+  // EMAIL OTP VERIFICATION
 
   const handleVerifyEmail = async (
     event: FormEvent<HTMLFormElement>
@@ -177,8 +290,7 @@ function SignupForm() {
         code: otp.trim(),
       });
 
-      sessionStorage.removeItem("verification_email");
-      sessionStorage.removeItem("verification_method");
+      clearVerificationState();
 
       await Swal.fire(
         "Email verified",
@@ -194,9 +306,7 @@ function SignupForm() {
     }
   };
 
-  // =====================================================
-  // RESEND NORMAL EMAIL SIGNUP OTP
-  // =====================================================
+  // RESEND EMAIL OTP
 
   const handleResendEmailCode = async () => {
     const verificationEmail = getVerificationEmail();
@@ -221,15 +331,18 @@ function SignupForm() {
         "success"
       );
     } catch (error) {
+      if (isAlreadyVerifiedError(error)) {
+        await handleAlreadyVerified();
+        return;
+      }
+
       await showError("Unable to resend code", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================================================
   // GOOGLE SIGNUP / LOGIN
-  // =====================================================
 
   const handleGoogleSuccess = async (
     credentialResponse: CredentialResponse
@@ -250,8 +363,6 @@ function SignupForm() {
         credentialResponse.credential
       );
 
-      // New Google signup: the backend sends an OTP and returns
-      // requires_otp without issuing authentication tokens.
       if (response.requires_otp) {
         if (!response.email) {
           throw new Error(
@@ -278,12 +389,7 @@ function SignupForm() {
         return;
       }
 
-      // Existing verified Google account: backend can return tokens
-      // directly, so save the session and redirect by role.
-      if (
-        !response.access_token ||
-        !response.user
-      ) {
+      if (!response.access_token || !response.user) {
         throw new Error(
           response.message ||
             "The server returned an invalid Google authentication response."
@@ -298,8 +404,7 @@ function SignupForm() {
         message: response.message,
       });
 
-      sessionStorage.removeItem("verification_email");
-      sessionStorage.removeItem("verification_method");
+      clearVerificationState();
 
       await Swal.fire(
         "Welcome to ShopSphere",
@@ -315,9 +420,7 @@ function SignupForm() {
     }
   };
 
-  // =====================================================
   // GOOGLE OTP VERIFICATION
-  // =====================================================
 
   const handleVerifyGoogleOtp = async (
     event: FormEvent<HTMLFormElement>
@@ -352,20 +455,14 @@ function SignupForm() {
         code: otp.trim(),
       });
 
-      if (
-        !response.access_token ||
-        !response.user
-      ) {
+      if (!response.access_token || !response.user) {
         throw new Error(
           "Email verification succeeded, but the server did not return a valid authentication session."
         );
       }
 
-      // Save authentication only after successful OTP verification.
       saveAuthSession(response);
-
-      sessionStorage.removeItem("verification_email");
-      sessionStorage.removeItem("verification_method");
+      clearVerificationState();
 
       await Swal.fire(
         "Google signup completed",
@@ -381,9 +478,7 @@ function SignupForm() {
     }
   };
 
-  // =====================================================
   // RESEND GOOGLE OTP
-  // =====================================================
 
   const handleResendGoogleOtp = async () => {
     const verificationEmail = getVerificationEmail();
@@ -405,13 +500,7 @@ function SignupForm() {
       });
 
       if (response.requires_otp === false && response.access_token) {
-        await Swal.fire(
-          "Already verified",
-          "Your account is already verified. Please log in.",
-          "info"
-        );
-
-        router.replace("/login");
+        await handleAlreadyVerified();
         return;
       }
 
@@ -422,6 +511,11 @@ function SignupForm() {
         "success"
       );
     } catch (error) {
+      if (isAlreadyVerifiedError(error)) {
+        await handleAlreadyVerified();
+        return;
+      }
+
       await showError("Unable to resend Google OTP", error);
     } finally {
       setLoading(false);
@@ -436,9 +530,7 @@ function SignupForm() {
     );
   };
 
-  // =====================================================
   // UI
-  // =====================================================
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10 dark:bg-gray-950">
@@ -482,9 +574,7 @@ function SignupForm() {
                       className="pl-9"
                       placeholder="Enter your full name"
                       value={fullName}
-                      onChange={(event) =>
-                        setFullName(event.target.value)
-                      }
+                      onChange={(event) => setFullName(event.target.value)}
                       minLength={2}
                       maxLength={100}
                       autoComplete="name"
@@ -522,9 +612,7 @@ function SignupForm() {
                       className="pl-9"
                       placeholder="Enter your phone number"
                       value={phone}
-                      onChange={(event) =>
-                        setPhone(event.target.value)
-                      }
+                      onChange={(event) => setPhone(event.target.value)}
                       autoComplete="tel"
                       maxLength={20}
                       disabled={loading}
@@ -562,9 +650,7 @@ function SignupForm() {
                       className="pl-9 pr-10"
                       placeholder="At least 8 characters"
                       value={password}
-                      onChange={(event) =>
-                        setPassword(event.target.value)
-                      }
+                      onChange={(event) => setPassword(event.target.value)}
                       minLength={8}
                       maxLength={128}
                       autoComplete="new-password"
@@ -574,13 +660,9 @@ function SignupForm() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setShowPassword((current) => !current)
-                      }
+                      onClick={() => setShowPassword((current) => !current)}
                       className="absolute right-3 top-2.5 text-muted-foreground"
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
-                      }
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                       disabled={loading}
                     >
                       {showPassword ? (
@@ -593,9 +675,7 @@ function SignupForm() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">
-                    Confirm password
-                  </Label>
+                  <Label htmlFor="confirmPassword">Confirm password</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -654,20 +734,14 @@ function SignupForm() {
                   .
                 </p>
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={loading}
-                >
+                <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Creating account..." : "Create account"}
                 </Button>
               </form>
 
               <div className="flex items-center gap-4">
                 <Separator className="flex-1" />
-                <span className="text-xs text-muted-foreground">
-                  OR
-                </span>
+                <span className="text-xs text-muted-foreground">OR</span>
                 <Separator className="flex-1" />
               </div>
 
@@ -687,8 +761,7 @@ function SignupForm() {
               ) : (
                 <p className="text-center text-sm text-red-600">
                   Google login is not configured. Set
-                  NEXT_PUBLIC_GOOGLE_CLIENT_ID in .env.local and
-                  restart the frontend.
+                  NEXT_PUBLIC_GOOGLE_CLIENT_ID in .env.local and restart the frontend.
                 </p>
               )}
             </>
@@ -717,9 +790,7 @@ function SignupForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="otp">
-                  Six-digit verification code
-                </Label>
+                <Label htmlFor="otp">Six-digit verification code</Label>
                 <Input
                   id="otp"
                   inputMode="numeric"
@@ -727,9 +798,7 @@ function SignupForm() {
                   placeholder="000000"
                   value={otp}
                   onChange={(event) =>
-                    setOtp(
-                      event.target.value.replace(/\D/g, "").slice(0, 6)
-                    )
+                    setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
                   }
                   maxLength={6}
                   pattern="[0-9]{6}"
