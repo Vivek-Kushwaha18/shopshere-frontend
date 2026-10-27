@@ -11,12 +11,10 @@ import {
 } from "lucide-react";
 
 import ProductGrid from "@/components/products/ProductGrid";
-
 import {
   getCategories,
   type Category,
 } from "@/services/categories";
-
 import {
   getProducts,
   type Product,
@@ -39,13 +37,11 @@ export default function ProductsPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(20000);
-
   const [appliedMinPrice, setAppliedMinPrice] = useState(0);
   const [appliedMaxPrice, setAppliedMaxPrice] = useState(20000);
 
@@ -56,19 +52,7 @@ export default function ProductsPage() {
 
   const [selectedDiscount, setSelectedDiscount] =
     useState<number | null>(null);
-
   const [inStockOnly, setInStockOnly] = useState(false);
-
-  const normalizedProducts = useMemo(
-    () =>
-      products.map((product) => ({
-        product,
-        normalizedName: (product.name ?? "")
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}]+/gu, " "),
-      })),
-    [products]
-  );
 
   useEffect(() => {
     let active = true;
@@ -81,9 +65,7 @@ export default function ProductsPage() {
         const [productsResponse, categoriesResponse] =
           await Promise.all([getProducts(), getCategories()]);
 
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         setProducts(productsResponse);
         setCategories(categoriesResponse);
@@ -96,9 +78,7 @@ export default function ProductsPage() {
           );
         }
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 
@@ -110,19 +90,14 @@ export default function ProductsPage() {
   }, []);
 
   const highestProductPrice = useMemo(() => {
-    if (products.length === 0) {
-      return 20000;
-    }
+    const highestPrice = products.reduce(
+      (highest, product) => Math.max(highest, product.price),
+      0
+    );
 
-    let highestPrice = 0;
-
-    for (const product of products) {
-      highestPrice = Math.max(highestPrice, product.price);
-    }
-
-    const roundedPrice = Math.ceil(highestPrice / 1000) * 1000;
-
-    return roundedPrice > 0 ? roundedPrice : 20000;
+    return highestPrice > 0
+      ? Math.ceil(highestPrice / 1000) * 1000
+      : 20000;
   }, [products]);
 
   useEffect(() => {
@@ -132,21 +107,23 @@ export default function ProductsPage() {
     setAppliedMaxPrice(highestProductPrice);
   }, [highestProductPrice]);
 
-  const mainCategories = useMemo(() => {
-    return categories
-      .filter(
-        (category) =>
-          category.parent_id === null && category.is_active
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [categories]);
+  const mainCategories = useMemo(
+    () =>
+      categories
+        .filter(
+          (category) =>
+            category.parent_id === null && category.is_active
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [categories]
+  );
 
   const filteredProducts = useMemo(() => {
-    const filtered: Product[] = [];
+    return products.filter((product) => {
+      const normalizedName = (product.name ?? "")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ");
 
-    for (const { product, normalizedName } of normalizedProducts) {
-      // Every search term must occur in the product name.
-      // Descriptions are deliberately not searched.
       const matchesSearch = searchTerms.every((term) =>
         normalizedName.includes(term)
       );
@@ -160,32 +137,27 @@ export default function ProductsPage() {
 
       const matchesDiscount =
         selectedDiscount === null ||
-        (product.original_price !== null &&
-          product.original_price !== undefined &&
+        (product.original_price != null &&
           product.original_price > product.price &&
           ((product.original_price - product.price) /
             product.original_price) *
             100 >=
             selectedDiscount);
 
-      if (
+      return (
         matchesSearch &&
         matchesPrice &&
         matchesStock &&
         matchesDiscount
-      ) {
-        filtered.push(product);
-      }
-    }
-
-    return filtered;
+      );
+    });
   }, [
-    normalizedProducts,
+    products,
     searchTerms,
     appliedMinPrice,
     appliedMaxPrice,
-    selectedDiscount,
     inStockOnly,
+    selectedDiscount,
   ]);
 
   const minPosition =
@@ -204,13 +176,14 @@ export default function ProductsPage() {
     selectedDiscount !== null ||
     inStockOnly;
 
-  const handleCategoryClick = (category: Category) => {
-    router.push(`/categories/${category.slug}`);
-  };
-
   const handleMinPriceChange = (value: number) => {
-    const safeValue = Math.max(0, Math.min(value, maxPrice - 1));
+    const safeValue = Math.max(
+      0,
+      Math.min(value, Math.max(0, maxPrice - 1))
+    );
+
     setMinPrice(safeValue);
+    setAppliedMinPrice(safeValue);
   };
 
   const handleMaxPriceChange = (value: number) => {
@@ -220,11 +193,24 @@ export default function ProductsPage() {
     );
 
     setMaxPrice(safeValue);
+    setAppliedMaxPrice(safeValue);
   };
 
-  const applyPriceFilter = () => {
-    setAppliedMinPrice(minPrice);
-    setAppliedMaxPrice(maxPrice);
+  const applyQuickPriceRange = (range: {
+    min: number;
+    max: number;
+  }) => {
+    const maxAllowed = Math.max(1, highestProductPrice);
+    const nextMin = Math.min(range.min, maxAllowed - 1);
+    const nextMax = Math.min(
+      maxAllowed,
+      Math.max(range.max, nextMin + 1)
+    );
+
+    setMinPrice(nextMin);
+    setMaxPrice(nextMax);
+    setAppliedMinPrice(nextMin);
+    setAppliedMaxPrice(nextMax);
   };
 
   const clearAllFilters = () => {
@@ -238,6 +224,10 @@ export default function ProductsPage() {
 
   const clearSearch = () => {
     router.push("/products");
+  };
+
+  const handleCategoryClick = (category: Category) => {
+    router.push(`/categories/${category.slug}`);
   };
 
   const quickPriceRanges = [
@@ -256,14 +246,12 @@ export default function ProductsPage() {
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="animate-pulse">
           <div className="mb-8 h-8 w-48 rounded bg-gray-200" />
-
           <div className="flex gap-6">
             <div className="hidden w-64 shrink-0 rounded-lg border bg-white p-5 lg:block">
               <div className="h-6 rounded bg-gray-200" />
               <div className="mt-6 h-32 rounded bg-gray-200" />
               <div className="mt-6 h-32 rounded bg-gray-200" />
             </div>
-
             <div className="flex-1">
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {Array.from({ length: 8 }).map((_, index) => (
@@ -325,7 +313,6 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex items-start gap-6">
-        {/* FILTER SIDEBAR */}
         <aside className="sticky top-20 hidden h-fit w-64 shrink-0 lg:block">
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-md">
             <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
@@ -335,35 +322,32 @@ export default function ProductsPage() {
                   Filters
                 </h2>
               </div>
-
               {hasActiveFilters && (
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="text-xs font-semibold text-blue-600 transition-colors hover:text-blue-800"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                 >
                   CLEAR ALL
                 </button>
               )}
             </div>
 
-            {/* CATEGORY */}
             <section className="border-b border-gray-200">
               <button
                 type="button"
-                onClick={() => setOpenCategory((previous) => !previous)}
-                className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
+                onClick={() => setOpenCategory((v) => !v)}
+                className="flex min-h-12 w-full items-center justify-between px-5 text-left hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Category
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
+                  className={`h-4 w-4 text-gray-500 transition-transform ${
                     openCategory ? "rotate-180" : ""
                   }`}
                 />
               </button>
-
               <div
                 className={`grid transition-all duration-300 ${
                   openCategory ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
@@ -376,10 +360,10 @@ export default function ProductsPage() {
                         key={category.id}
                         type="button"
                         onClick={() => handleCategoryClick(category)}
-                        className="group flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm text-gray-700 transition-all duration-200 hover:bg-blue-50 hover:pl-4 hover:text-blue-700"
+                        className="group flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm text-gray-700 transition-all hover:bg-blue-50 hover:pl-4 hover:text-blue-700"
                       >
                         <span>{category.name}</span>
-                        <ChevronRight className="h-4 w-4 opacity-0 transition-all duration-200 group-hover:translate-x-1 group-hover:opacity-100" />
+                        <ChevronRight className="h-4 w-4 opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
                       </button>
                     ))}
                   </div>
@@ -387,23 +371,22 @@ export default function ProductsPage() {
               </div>
             </section>
 
-            {/* PRICE */}
+            {/* AUTOMATIC PRICE FILTER */}
             <section className="border-b border-gray-200">
               <button
                 type="button"
-                onClick={() => setOpenPrice((previous) => !previous)}
-                className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
+                onClick={() => setOpenPrice((v) => !v)}
+                className="flex min-h-12 w-full items-center justify-between px-5 text-left hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Price
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
+                  className={`h-4 w-4 text-gray-500 transition-transform ${
                     openPrice ? "rotate-180" : ""
                   }`}
                 />
               </button>
-
               <div
                 className={`grid transition-all duration-300 ${
                   openPrice ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
@@ -420,7 +403,6 @@ export default function ProductsPage() {
                           ₹{minPrice.toLocaleString("en-IN")}
                         </p>
                       </div>
-
                       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
                         <p className="text-[10px] uppercase tracking-wide text-gray-400">
                           Max
@@ -437,10 +419,9 @@ export default function ProductsPage() {
                         className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-blue-600 transition-all duration-150"
                         style={{
                           left: `${minPosition}%`,
-                          width: `${maxPosition - minPosition}%`,
+                          width: `${Math.max(0, maxPosition - minPosition)}%`,
                         }}
                       />
-
                       <input
                         type="range"
                         min="0"
@@ -449,10 +430,9 @@ export default function ProductsPage() {
                         onChange={(event) =>
                           handleMinPriceChange(Number(event.target.value))
                         }
-                        className="price-slider pointer-events-none absolute left-0 top-0 h-5 w-full appearance-none bg-transparent"
+                        className="price-slider price-slider-min pointer-events-none absolute left-0 top-0 h-5 w-full appearance-none bg-transparent"
                         aria-label="Minimum price"
                       />
-
                       <input
                         type="range"
                         min="0"
@@ -461,7 +441,7 @@ export default function ProductsPage() {
                         onChange={(event) =>
                           handleMaxPriceChange(Number(event.target.value))
                         }
-                        className="price-slider pointer-events-none absolute left-0 top-0 h-5 w-full appearance-none bg-transparent"
+                        className="price-slider price-slider-max pointer-events-none absolute left-0 top-0 h-5 w-full appearance-none bg-transparent"
                         aria-label="Maximum price"
                       />
                     </div>
@@ -469,29 +449,37 @@ export default function ProductsPage() {
                     <div className="space-y-1">
                       {quickPriceRanges.map((range) => {
                         const active =
-                          minPrice === range.min && maxPrice === range.max;
+                          minPrice ===
+                            Math.min(
+                              range.min,
+                              Math.max(0, highestProductPrice - 1)
+                            ) &&
+                          maxPrice ===
+                            Math.min(
+                              Math.max(1, highestProductPrice),
+                              Math.max(
+                                range.max,
+                                Math.min(
+                                  range.min,
+                                  Math.max(0, highestProductPrice - 1)
+                                ) + 1
+                              )
+                            );
 
                         return (
                           <button
                             key={range.label}
                             type="button"
-                            onClick={() => {
-                              setMinPrice(range.min);
-                              setMaxPrice(
-                                Math.min(range.max, highestProductPrice)
-                              );
-                            }}
-                            className={`flex w-full items-center rounded-md px-2 py-2 text-left text-xs transition-all duration-200 ${
+                            onClick={() => applyQuickPriceRange(range)}
+                            className={`flex w-full items-center rounded-md px-2 py-2 text-left text-xs transition-all ${
                               active
                                 ? "bg-blue-50 font-semibold text-blue-700"
                                 : "text-gray-600 hover:bg-gray-50 hover:pl-3 hover:text-gray-900"
                             }`}
                           >
                             <span
-                              className={`mr-2 h-1.5 w-1.5 rounded-full transition-transform ${
-                                active
-                                  ? "scale-125 bg-blue-600"
-                                  : "bg-gray-300"
+                              className={`mr-2 h-1.5 w-1.5 rounded-full ${
+                                active ? "bg-blue-600" : "bg-gray-300"
                               }`}
                             />
                             {range.label}
@@ -499,36 +487,26 @@ export default function ProductsPage() {
                         );
                       })}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={applyPriceFilter}
-                      className="mt-4 w-full rounded-md bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-all duration-200 hover:bg-blue-700 hover:shadow-md active:scale-[0.98]"
-                    >
-                      Apply Price
-                    </button>
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* DISCOUNT */}
             <section className="border-b border-gray-200">
               <button
                 type="button"
-                onClick={() => setOpenDiscount((previous) => !previous)}
-                className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
+                onClick={() => setOpenDiscount((v) => !v)}
+                className="flex min-h-12 w-full items-center justify-between px-5 text-left hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Discount
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
+                  className={`h-4 w-4 text-gray-500 transition-transform ${
                     openDiscount ? "rotate-180" : ""
                   }`}
                 />
               </button>
-
               <div
                 className={`grid transition-all duration-300 ${
                   openDiscount ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
@@ -538,7 +516,6 @@ export default function ProductsPage() {
                   <div className="space-y-1 px-5 pb-4">
                     {[10, 20, 30, 50].map((discount) => {
                       const active = selectedDiscount === discount;
-
                       return (
                         <button
                           key={discount}
@@ -546,7 +523,7 @@ export default function ProductsPage() {
                           onClick={() =>
                             setSelectedDiscount(active ? null : discount)
                           }
-                          className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-all duration-200 ${
+                          className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm ${
                             active
                               ? "bg-blue-50 font-semibold text-blue-700"
                               : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
@@ -570,25 +547,21 @@ export default function ProductsPage() {
               </div>
             </section>
 
-            {/* AVAILABILITY */}
             <section>
               <button
                 type="button"
-                onClick={() =>
-                  setOpenAvailability((previous) => !previous)
-                }
-                className="flex min-h-12 w-full items-center justify-between px-5 text-left transition-colors hover:bg-gray-50"
+                onClick={() => setOpenAvailability((v) => !v)}
+                className="flex min-h-12 w-full items-center justify-between px-5 text-left hover:bg-gray-50"
               >
                 <span className="text-sm font-semibold text-gray-900">
                   Availability
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 text-gray-500 transition-transform duration-300 ${
+                  className={`h-4 w-4 text-gray-500 transition-transform ${
                     openAvailability ? "rotate-180" : ""
                   }`}
                 />
               </button>
-
               <div
                 className={`grid transition-all duration-300 ${
                   openAvailability
@@ -600,8 +573,8 @@ export default function ProductsPage() {
                   <div className="px-5 pb-5">
                     <button
                       type="button"
-                      onClick={() => setInStockOnly((previous) => !previous)}
-                      className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm text-gray-600 transition-all duration-200 hover:bg-gray-50 hover:text-gray-900"
+                      onClick={() => setInStockOnly((v) => !v)}
+                      className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     >
                       <span
                         className={`flex h-4 w-4 items-center justify-center rounded border ${
@@ -625,7 +598,6 @@ export default function ProductsPage() {
           </div>
         </aside>
 
-        {/* PRODUCT AREA */}
         <section className="min-w-0 flex-1">
           {hasActiveFilters && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -636,7 +608,7 @@ export default function ProductsPage() {
                     setMinPrice(0);
                     setAppliedMinPrice(0);
                   }}
-                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
+                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
                 >
                   Min ₹{appliedMinPrice.toLocaleString("en-IN")}
                   <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
@@ -650,7 +622,7 @@ export default function ProductsPage() {
                     setMaxPrice(highestProductPrice);
                     setAppliedMaxPrice(highestProductPrice);
                   }}
-                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
+                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
                 >
                   Max ₹{appliedMaxPrice.toLocaleString("en-IN")}
                   <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
@@ -661,7 +633,7 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={() => setSelectedDiscount(null)}
-                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
+                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
                 >
                   {selectedDiscount}%+ off
                   <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
@@ -672,7 +644,7 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={() => setInStockOnly(false)}
-                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-100"
+                  className="group flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
                 >
                   In Stock
                   <X className="h-3 w-3 transition-transform group-hover:rotate-90" />
@@ -687,22 +659,19 @@ export default function ProductsPage() {
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm">
                   <SlidersHorizontal className="h-6 w-6 text-gray-400" />
                 </div>
-
                 <h2 className="text-lg font-semibold text-gray-800">
                   No products found
                 </h2>
-
                 <p className="mt-1 text-sm text-gray-500">
                   {searchQuery
                     ? `No products match "${searchQuery}". Try another search.`
                     : "Try changing your filters."}
                 </p>
-
                 {searchQuery ? (
                   <button
                     type="button"
                     onClick={clearSearch}
-                    className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 hover:shadow-md"
+                    className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                   >
                     Clear Search
                   </button>
@@ -710,7 +679,7 @@ export default function ProductsPage() {
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-blue-700 hover:shadow-md"
+                    className="mt-4 rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                   >
                     Clear Filters
                   </button>
@@ -734,18 +703,14 @@ export default function ProductsPage() {
           border: 3px solid #2563eb;
           cursor: grab;
           box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
-          transition: transform 0.15s ease,
-            box-shadow 0.15s ease;
         }
 
         .price-slider::-webkit-slider-thumb:hover {
           transform: scale(1.15);
-          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
         }
 
         .price-slider::-webkit-slider-thumb:active {
           cursor: grabbing;
-          transform: scale(1.2);
         }
 
         .price-slider::-moz-range-thumb {
@@ -757,12 +722,6 @@ export default function ProductsPage() {
           border: 3px solid #2563eb;
           cursor: grab;
           box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
-          transition: transform 0.15s ease,
-            box-shadow 0.15s ease;
-        }
-
-        .price-slider::-moz-range-thumb:hover {
-          transform: scale(1.15);
         }
 
         .price-slider::-moz-range-track {
