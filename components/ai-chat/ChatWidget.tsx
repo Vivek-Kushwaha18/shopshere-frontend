@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import ChatWindow from "./ChatWindow";
@@ -10,10 +11,30 @@ import { sendAIMessage } from "@/services/ai";
 export default function ChatWidget() {
   const pathname = usePathname();
 
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
+
+  useEffect(() => {
+    const checkLoginStatus = () => {
+      const token = localStorage.getItem("access_token");
+      setIsLoggedIn(Boolean(token));
+
+      if (!token) {
+        setOpen(false);
+      }
+    };
+
+    checkLoginStatus();
+
+    window.addEventListener("storage", checkLoginStatus);
+
+    return () => {
+      window.removeEventListener("storage", checkLoginStatus);
+    };
+  }, [pathname]);
 
   const excludedRoutes = [
     "/admin",
@@ -27,6 +48,7 @@ export default function ChatWidget() {
   ];
 
   if (
+    !isLoggedIn ||
     excludedRoutes.some(
       (route) =>
         pathname === route ||

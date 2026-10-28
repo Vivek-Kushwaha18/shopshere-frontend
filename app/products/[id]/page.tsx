@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -12,6 +11,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Heart,
@@ -65,6 +65,9 @@ export default function ProductDetailsPage() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+
+  // Product Description dropdown state.
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
 
   // Amazon-style hover magnification.
   const [isHoverZoomActive, setIsHoverZoomActive] = useState(false);
@@ -1245,15 +1248,33 @@ export default function ProductDetailsPage() {
                 )}
               </div>
 
+              {/* Product Description dropdown: only this section is changed. */}
               {product.description && (
                 <div className="border-b border-gray-100 py-4">
-                  <h2 className="text-sm font-semibold text-gray-900">
-                    Product Description
-                  </h2>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setIsDescriptionOpen((isOpen) => !isOpen)
+                    }
+                    aria-expanded={isDescriptionOpen}
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <h2 className="text-sm font-semibold text-gray-900">
+                      Product Description
+                    </h2>
 
-                  <p className="mt-2 whitespace-pre-line text-sm leading-5 text-gray-600">
-                    {product.description}
-                  </p>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-gray-600 transition-transform duration-200 ${
+                        isDescriptionOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isDescriptionOpen && (
+                    <p className="mt-2 whitespace-pre-line text-sm leading-5 text-gray-600">
+                      {product.description}
+                    </p>
+                  )}
                 </div>
               )}
 
