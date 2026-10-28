@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -69,8 +70,6 @@ export default function ProductDetailsPage() {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [wishlistBusy, setWishlistBusy] = useState(false);
 
-  // LOAD PRODUCT
-
   useEffect(() => {
     let isMounted = true;
 
@@ -120,8 +119,6 @@ export default function ProductDetailsPage() {
         setCartMessage("");
         setCartError("");
 
-        // CHECK WISHLIST
-
         try {
           const user = getStoredUser();
 
@@ -148,8 +145,6 @@ export default function ProductDetailsPage() {
           }
         }
 
-        // INITIAL PRODUCT IMAGE
-
         const productImages = productData.images ?? [];
 
         const primaryImageIndex = productImages.findIndex(
@@ -161,8 +156,6 @@ export default function ProductDetailsPage() {
             primaryImageIndex >= 0 ? primaryImageIndex : 0
           );
         }
-
-        // RELATED PRODUCTS
 
         try {
           const category = await getCategory(productData.category_id);
@@ -208,8 +201,6 @@ export default function ProductDetailsPage() {
       isMounted = false;
     };
   }, [productSlug]);
-
-  // REFRESH RATING WHEN RETURNING TO THE PAGE
 
   useEffect(() => {
     let isMounted = true;
@@ -265,8 +256,6 @@ export default function ProductDetailsPage() {
     };
   }, [productSlug]);
 
-  // CHECK WHETHER PRODUCT IS ALREADY IN CART
-
   useEffect(() => {
     let isMounted = true;
 
@@ -308,8 +297,6 @@ export default function ProductDetailsPage() {
     };
   }, [product?.id]);
 
-  // WISHLIST
-
   const handleWishlist = async () => {
     if (!product) return;
 
@@ -337,8 +324,6 @@ export default function ProductDetailsPage() {
       setWishlistBusy(false);
     }
   };
-
-  // SHARE PRODUCT
 
   const handleShareProduct = async () => {
     if (!product) return;
@@ -374,8 +359,6 @@ export default function ProductDetailsPage() {
     }
   };
 
-  // LOADING STATE
-
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50">
@@ -403,8 +386,6 @@ export default function ProductDetailsPage() {
     );
   }
 
-  // ERROR STATE
-
   if (error) {
     return (
       <main className="min-h-screen bg-gray-50">
@@ -429,8 +410,6 @@ export default function ProductDetailsPage() {
   }
 
   if (!product) return null;
-
-  // PRODUCT OPTIONS AND VARIANTS
 
   const optionGroups = product.option_groups ?? [];
 
@@ -462,8 +441,6 @@ export default function ProductDetailsPage() {
         }) ?? null
       : null;
 
-  // OPTION AVAILABILITY
-
   const isOptionValueAvailable = (
     groupId: number,
     valueId: number
@@ -491,16 +468,12 @@ export default function ProductDetailsPage() {
     });
   };
 
-  // PRICE AND STOCK
-
   const currentPrice = Number(selectedVariant?.price ?? product.price);
 
   const currentOriginalPrice =
     selectedVariant?.original_price ?? product.original_price;
 
   const currentStock = Number(selectedVariant?.stock ?? product.stock ?? 0);
-
-  // PRODUCT IMAGE GALLERY
 
   const productImages = product.images ?? [];
 
@@ -519,10 +492,7 @@ export default function ProductDetailsPage() {
 
   let galleryImages: ProductImage[] = [];
 
-  if (
-    selectedVariant?.images &&
-    selectedVariant.images.length > 0
-  ) {
+  if (selectedVariant?.images && selectedVariant.images.length > 0) {
     galleryImages = [...selectedVariant.images].sort(
       (a, b) => a.sort_order - b.sort_order
     );
@@ -592,8 +562,6 @@ export default function ProductDetailsPage() {
 
   const currentImage = images[safeImageIndex]?.image_url ?? null;
 
-  // DISCOUNT
-
   const hasDiscount =
     currentOriginalPrice != null &&
     Number(currentOriginalPrice) > currentPrice;
@@ -607,8 +575,6 @@ export default function ProductDetailsPage() {
         )
       : 0;
 
-  // READ-ONLY RATINGS
-
   const productRating = Math.min(
     5,
     Math.max(0, Number(product.rating ?? 0))
@@ -618,8 +584,6 @@ export default function ProductDetailsPage() {
     0,
     Number(product.reviews_count ?? 0)
   );
-
-  // OPTION SELECTION
 
   const handleOptionSelect = (
     group: ProductOptionGroup,
@@ -638,8 +602,6 @@ export default function ProductDetailsPage() {
     setCartError("");
   };
 
-  // QUANTITY
-
   const handleDecreaseQuantity = () => {
     setQuantity((current) => Math.max(1, current - 1));
   };
@@ -647,8 +609,6 @@ export default function ProductDetailsPage() {
   const handleIncreaseQuantity = () => {
     setQuantity((current) => Math.min(currentStock, current + 1));
   };
-
-  // VALIDATE PRODUCT BEFORE CART OR BUY NOW
 
   const validateSelection = () => {
     if (hasVariants && (!allRequiredOptionsSelected || !selectedVariant)) {
@@ -677,9 +637,6 @@ export default function ProductDetailsPage() {
 
     return true;
   };
-
-  // ADD TO CART
-  // This adds the item to the customer's normal cart.
 
   const handleAddToCart = async () => {
     if (!validateSelection()) return;
@@ -728,11 +685,8 @@ export default function ProductDetailsPage() {
     }
   };
 
-  // BUY NOW
-  // This prepares a temporary one-product checkout.
-  // It does not add this product to, or replace, the normal cart.
-
   const handleBuyNow = async () => {
+    if (buyingNow || addingToCart) return;
     if (!validateSelection()) return;
 
     const user = getStoredUser();
@@ -783,15 +737,18 @@ export default function ProductDetailsPage() {
                     const value = group.values.find((option) =>
                       selectedVariant.option_value_ids.includes(option.id)
                     );
+
                     return value
-                      ? [{
-                          id: value.id,
-                          option_group_id: group.id,
-                          value: value.value,
-                        }]
+                      ? [
+                          {
+                            id: value.id,
+                            option_group_id: group.id,
+                            value: value.value,
+                          },
+                        ]
                       : [];
                   }),
-                  images: selectedVariant.images.map((image) => ({
+                  images: (selectedVariant.images ?? []).map((image) => ({
                     id: image.id,
                     image_url: image.image_url,
                     view_type: image.view_type ?? null,
@@ -807,12 +764,16 @@ export default function ProductDetailsPage() {
         total: itemTotal,
       };
 
+      const attemptId = crypto.randomUUID();
+
       sessionStorage.setItem(
         BUY_NOW_STORAGE_KEY,
         JSON.stringify(buyNowCheckout)
       );
 
-      router.push("/checkout?mode=buy-now");
+      router.push(
+        `/checkout?mode=buy-now&attempt=${encodeURIComponent(attemptId)}`
+      );
     } catch (buyError) {
       console.error("Buy Now error:", buyError);
 
@@ -825,8 +786,6 @@ export default function ProductDetailsPage() {
       setBuyingNow(false);
     }
   };
-
-  // IMAGE NAVIGATION
 
   const handleNextImage = () => {
     if (images.length <= 1) return;
@@ -844,14 +803,10 @@ export default function ProductDetailsPage() {
     );
   };
 
-  // PAGE
-
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5">
         <section className="grid gap-4 lg:grid-cols-2">
-          {/* PRODUCT GALLERY */}
-
           <div className="border border-gray-200 bg-white">
             <div className="relative overflow-hidden bg-white">
               <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
@@ -955,8 +910,6 @@ export default function ProductDetailsPage() {
             )}
           </div>
 
-          {/* PRODUCT INFORMATION */}
-
           <div className="border border-gray-200 bg-white">
             <div className="p-4 sm:p-5">
               <div className="border-b border-gray-100 pb-4">
@@ -991,8 +944,6 @@ export default function ProductDetailsPage() {
                   </span>
                 </div>
               </div>
-
-              {/* OPTIONS */}
 
               {hasVariants && (
                 <div className="border-b border-gray-100 py-4">
@@ -1065,8 +1016,6 @@ export default function ProductDetailsPage() {
                 </div>
               )}
 
-              {/* PRICE */}
-
               <div className="border-b border-gray-100 py-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-3xl font-semibold text-gray-900">
@@ -1092,8 +1041,6 @@ export default function ProductDetailsPage() {
                 </p>
               </div>
 
-              {/* STOCK */}
-
               <div className="border-b border-gray-100 py-4">
                 {currentStock > 0 ? (
                   <>
@@ -1116,8 +1063,6 @@ export default function ProductDetailsPage() {
                 )}
               </div>
 
-              {/* DESCRIPTION */}
-
               {product.description && (
                 <div className="border-b border-gray-100 py-4">
                   <h2 className="text-sm font-semibold text-gray-900">
@@ -1129,8 +1074,6 @@ export default function ProductDetailsPage() {
                   </p>
                 </div>
               )}
-
-              {/* QUANTITY */}
 
               {currentStock > 0 && (
                 <div className="border-b border-gray-100 py-4">
@@ -1186,8 +1129,6 @@ export default function ProductDetailsPage() {
                 </div>
               )}
 
-              {/* SUCCESS AND ERROR MESSAGES */}
-
               {cartMessage && (
                 <div className="mt-3 border border-green-200 bg-green-50 px-3 py-2 text-xs font-medium text-green-700">
                   {cartMessage}
@@ -1202,8 +1143,6 @@ export default function ProductDetailsPage() {
                   {cartError}
                 </div>
               )}
-
-              {/* CART AND BUY NOW BUTTONS */}
 
               {currentStock > 0 && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1270,8 +1209,6 @@ export default function ProductDetailsPage() {
             </div>
           </div>
         </section>
-
-        {/* RELATED PRODUCTS */}
 
         {relatedProducts.length > 0 && (
           <section className="mt-8">

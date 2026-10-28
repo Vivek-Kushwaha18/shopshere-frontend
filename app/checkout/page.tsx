@@ -71,6 +71,41 @@ import {
 
 const BLUE = "#2874F0";
 const BUY_NOW_STORAGE_KEY = "shopsphere-buy-now-checkout";
+const CHECKOUT_IDEMPOTENCY_STORAGE_KEY = "shopsphere-checkout-idempotency";
+
+function getCheckoutIdempotencyKey(signature: string): string {
+  const stored = sessionStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
+
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as {
+        signature?: string;
+        key?: string;
+      };
+
+      if (
+        parsed.signature === signature &&
+        typeof parsed.key === "string" &&
+        parsed.key.length > 0
+      ) {
+        return parsed.key;
+      }
+    } catch {
+      sessionStorage.removeItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
+    }
+  }
+
+  const key = crypto.randomUUID();
+  sessionStorage.setItem(
+    CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
+    JSON.stringify({ signature, key })
+  );
+  return key;
+}
+
+function clearCheckoutIdempotencyKey(): void {
+  sessionStorage.removeItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
+}
 
 type CheckoutPaymentOption = "stripe" | "razorpay" | "cod";
 type RazorpayPaymentOption =
@@ -821,6 +856,7 @@ export default function CheckoutPage() {
                 );
               }
 
+              clearCheckoutIdempotencyKey();
               await removePurchasedCartItems();
 
               await Swal.fire({
@@ -932,6 +968,7 @@ export default function CheckoutPage() {
           finished = true;
           if (timer) clearInterval(timer);
 
+          clearCheckoutIdempotencyKey();
           await removePurchasedCartItems();
 
           if (!active) return;
@@ -997,8 +1034,48 @@ export default function CheckoutPage() {
 
     orderSubmissionInProgress.current = true;
 
+    // Keep one attempt ID for refreshes/retries of this checkout URL, but use a
+    // new attempt ID whenever the customer starts a new checkout from the cart
+    // or product page. Checkout entry points should add ?attempt=<UUID>.
+    const checkoutQuery = new URLSearchParams(window.location.search);
+    let checkoutAttemptId = checkoutQuery.get("attempt");
+
+    if (!checkoutAttemptId) {
+      const attemptStorageKey = "shopsphere-current-checkout-attempt";
+      checkoutAttemptId = sessionStorage.getItem(attemptStorageKey);
+
+      if (!checkoutAttemptId) {
+        checkoutAttemptId = crypto.randomUUID();
+        sessionStorage.setItem(attemptStorageKey, checkoutAttemptId);
+      }
+    } else {
+      sessionStorage.setItem(
+        "shopsphere-current-checkout-attempt",
+        checkoutAttemptId
+      );
+    }
+
+    const checkoutSignature = JSON.stringify({
+      checkoutAttemptId,
+      checkoutMode,
+      items: checkoutItems
+        .map((item) => ({
+          product_id: item.product_id,
+          variant_id: item.variant_id ?? null,
+          quantity: item.quantity,
+        }))
+        .sort((a, b) =>
+          `${a.product_id}:${a.variant_id ?? ""}`.localeCompare(
+            `${b.product_id}:${b.variant_id ?? ""}`
+          )
+        ),
+      shipping_address: createShippingAddress(selectedAddress),
+      coupon_code: appliedCoupon?.code?.trim().toUpperCase() ?? null,
+    });
+
     try {
       setPlacingOrder(true);
+      const idempotencyKey = getCheckoutIdempotencyKey(checkoutSignature);
 
       const orderPaymentMethod: PaymentMethod =
         paymentMethod === "stripe"
@@ -1007,7 +1084,7 @@ export default function CheckoutPage() {
             ? "cod"
             : "razorpay";
 
-      const order = await createOrder({
+      const orderData = {
         shipping_address: createShippingAddress(selectedAddress),
         items: checkoutItems.map((item) => ({
           product_id: item.product_id,
@@ -1016,9 +1093,48 @@ export default function CheckoutPage() {
         })),
         coupon_code: appliedCoupon?.code,
         payment_method: orderPaymentMethod,
+      };
+
+      let order = await createOrder({
+        ...orderData,
+        idempotency_key: idempotencyKey,
       });
 
+      // Never try to collect payment for an order that has already been cancelled.
+      // If a stale idempotency key resolves to a cancelled order, rotate the key
+      // and make one fresh order-creation request instead.
+      const normalizedOrderStatus = String(order.status ?? "")
+        .trim()
+        .toLowerCase();
+
+      if (
+        normalizedOrderStatus === "cancelled" ||
+        normalizedOrderStatus === "canceled"
+      ) {
+        clearCheckoutIdempotencyKey();
+        const freshIdempotencyKey = getCheckoutIdempotencyKey(checkoutSignature);
+
+        order = await createOrder({
+          ...orderData,
+          idempotency_key: freshIdempotencyKey,
+        });
+
+        const retryOrderStatus = String(order.status ?? "")
+          .trim()
+          .toLowerCase();
+
+        if (
+          retryOrderStatus === "cancelled" ||
+          retryOrderStatus === "canceled"
+        ) {
+          throw new Error(
+            "The previous order is cancelled and a new order could not be created. Please check My Orders before trying again."
+          );
+        }
+      }
+
       if (paymentMethod === "cod") {
+        clearCheckoutIdempotencyKey();
         await removePurchasedCartItems();
 
         await Swal.fire({
@@ -1092,6 +1208,7 @@ export default function CheckoutPage() {
         return;
       }
 
+      clearCheckoutIdempotencyKey();
       await removePurchasedCartItems();
 
       await Swal.fire({
@@ -1125,6 +1242,8 @@ export default function CheckoutPage() {
     try {
       if (paymentOrderId !== null) {
         await cancelOrder(paymentOrderId);
+        // The next purchase must receive a fresh key after successful cancellation.
+        clearCheckoutIdempotencyKey();
       }
 
       setPaymentClientSecret(null);

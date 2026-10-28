@@ -2,13 +2,22 @@
 import { apiFetch } from "./api";
 
 // =====================================================
-// PAYMENT METHOD
+// PAYMENT METHOD AND STATUS
 // =====================================================
 
-export type PaymentMethod =
-  | "stripe"
-  | "razorpay"
-  | "cod";
+export type PaymentMethod = "stripe" | "razorpay" | "cod";
+
+export type PaymentStatus =
+  | "pending"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "cancelled"
+  | "refund_pending"
+  | "refunded"
+  | "partially_refunded"
+  | "refund_failed"
+  | string;
 
 // =====================================================
 // ORDER ITEM CREATE
@@ -29,6 +38,7 @@ export interface OrderCreateData {
   items: OrderItemCreate[];
   coupon_code?: string;
   payment_method?: PaymentMethod;
+  idempotency_key?: string;
 }
 
 // =====================================================
@@ -41,10 +51,14 @@ export interface OrderItem {
   product_id: number;
   variant_id: number | null;
   seller_id: number;
-
+  seller_name: string | null;
   product_name: string;
   product_image: string | null;
-
+  variant_sku?: string | null;
+  variant_options?: {
+    group_name: string;
+    value: string;
+  }[];
   quantity: number;
   price: number;
   total: number;
@@ -57,19 +71,14 @@ export interface OrderItem {
 export interface Order {
   id: number;
   user_id: number;
-
   total_amount: number;
   discount_amount: number;
   coupon_code: string | null;
-
   status: string;
-  payment_status: string;
-
+  payment_status: PaymentStatus;
   shipping_address: string;
-
   created_at: string;
   updated_at: string;
-
   items: OrderItem[];
 }
 
@@ -81,17 +90,12 @@ export interface Shipment {
   id: number;
   order_id: number;
   seller_id: number;
-
   tracking_number: string | null;
-
   status: string;
-
   expected_delivery_date: string | null;
-
   shipped_at: string | null;
   out_for_delivery_at: string | null;
   delivered_at: string | null;
-
   created_at: string;
   updated_at: string;
 }
@@ -103,7 +107,7 @@ export interface Shipment {
 export interface ShipmentStatusUpdate {
   message: string;
   order_status: string;
-  payment_status: string;
+  payment_status: PaymentStatus;
   shipment: Shipment;
 }
 
@@ -114,12 +118,12 @@ export interface ShipmentStatusUpdate {
 export interface CustomerOrderShipments {
   order_id: number;
   order_status: string;
-  payment_status: string;
+  payment_status: PaymentStatus;
   shipments: Shipment[];
 }
 
 // =====================================================
-// SELLER TOP PRODUCT
+// SELLER ANALYTICS
 // =====================================================
 
 export interface SellerTopProduct {
@@ -129,15 +133,10 @@ export interface SellerTopProduct {
   sales: number;
 }
 
-// =====================================================
-// SELLER ANALYTICS
-// =====================================================
-
 export interface SellerAnalytics {
   total_orders: number;
   total_units: number;
   total_sales: number;
-
   orders_by_status: {
     pending: number;
     processing: number;
@@ -145,13 +144,8 @@ export interface SellerAnalytics {
     delivered: number;
     cancelled: number;
   };
-
   top_products: SellerTopProduct[];
 }
-
-// =====================================================
-// SELLER REVENUE
-// =====================================================
 
 export interface SellerRevenue {
   date: string;
@@ -161,21 +155,71 @@ export interface SellerRevenue {
 }
 
 // =====================================================
+// API ERROR HELPER
+// =====================================================
+
+function getErrorMessage(
+  response: { data?: { detail?: unknown } },
+  fallback: string,
+): string {
+  const detail = response.data?.detail;
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  return fallback;
+}
+
+// =====================================================
+// ORDER IDEMPOTENCY KEY
+// =====================================================
+
+/**
+ * Generates a unique key for a new checkout attempt.
+ *
+ * Generate this once when a genuinely new checkout starts.
+ * Reuse that same key when retrying the same checkout request.
+ * Do not generate a new key for every network retry.
+ */
+export function createOrderIdempotencyKey(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return [
+    Date.now().toString(36),
+    Math.random().toString(36).slice(2),
+    Math.random().toString(36).slice(2),
+  ].join("-");
+}
+
+// =====================================================
 // CREATE ORDER - CUSTOMER
 // =====================================================
 
 export async function createOrder(
-  data: OrderCreateData
+  data: OrderCreateData,
 ): Promise<Order> {
+  const providedKey = data.idempotency_key?.trim();
+
+  const idempotencyKey =
+    providedKey || createOrderIdempotencyKey();
+
   const response = await apiFetch("/orders/", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      ...data,
+      idempotency_key: idempotencyKey,
+    }),
   });
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to create order."
+      getErrorMessage(response, "Unable to create order."),
     );
   }
 
@@ -187,14 +231,11 @@ export async function createOrder(
 // =====================================================
 
 export async function getMyOrders(): Promise<Order[]> {
-  const response = await apiFetch(
-    "/orders/my-orders"
-  );
+  const response = await apiFetch("/orders/my-orders");
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch orders."
+      getErrorMessage(response, "Unable to fetch orders."),
     );
   }
 
@@ -206,19 +247,15 @@ export async function getMyOrders(): Promise<Order[]> {
 // =====================================================
 
 export async function cancelOrder(
-  orderId: number
+  orderId: number,
 ): Promise<Order> {
-  const response = await apiFetch(
-    `/orders/${orderId}/cancel`,
-    {
-      method: "PATCH",
-    }
-  );
+  const response = await apiFetch(`/orders/${orderId}/cancel`, {
+    method: "PATCH",
+  });
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to cancel order."
+      getErrorMessage(response, "Unable to cancel order."),
     );
   }
 
@@ -229,17 +266,12 @@ export async function cancelOrder(
 // GET SINGLE ORDER
 // =====================================================
 
-export async function getOrder(
-  orderId: number
-): Promise<Order> {
-  const response = await apiFetch(
-    `/orders/${orderId}`
-  );
+export async function getOrder(orderId: number): Promise<Order> {
+  const response = await apiFetch(`/orders/${orderId}`);
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch order."
+      getErrorMessage(response, "Unable to fetch order."),
     );
   }
 
@@ -251,14 +283,11 @@ export async function getOrder(
 // =====================================================
 
 export async function getSellerAnalytics(): Promise<SellerAnalytics> {
-  const response = await apiFetch(
-    "/orders/seller/analytics"
-  );
+  const response = await apiFetch("/orders/seller/analytics");
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch seller analytics."
+      getErrorMessage(response, "Unable to fetch seller analytics."),
     );
   }
 
@@ -270,14 +299,11 @@ export async function getSellerAnalytics(): Promise<SellerAnalytics> {
 // =====================================================
 
 export async function getSellerRevenue(): Promise<SellerRevenue[]> {
-  const response = await apiFetch(
-    "/orders/seller/revenue"
-  );
+  const response = await apiFetch("/orders/seller/revenue");
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch seller revenue."
+      getErrorMessage(response, "Unable to fetch seller revenue."),
     );
   }
 
@@ -289,14 +315,11 @@ export async function getSellerRevenue(): Promise<SellerRevenue[]> {
 // =====================================================
 
 export async function getSellerOrders(): Promise<Order[]> {
-  const response = await apiFetch(
-    "/orders/seller/orders"
-  );
+  const response = await apiFetch("/orders/seller/orders");
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch seller orders."
+      getErrorMessage(response, "Unable to fetch seller orders."),
     );
   }
 
@@ -309,21 +332,16 @@ export async function getSellerOrders(): Promise<Order[]> {
 
 export async function updateSellerOrderStatus(
   orderId: number,
-  newStatus: string
+  newStatus: string,
 ): Promise<Order> {
   const response = await apiFetch(
-    `/orders/seller/${orderId}/status?new_status=${encodeURIComponent(
-      newStatus
-    )}`,
-    {
-      method: "PATCH",
-    }
+    `/orders/seller/${orderId}/status?new_status=${encodeURIComponent(newStatus)}`,
+    { method: "PATCH" },
   );
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to update order status."
+      getErrorMessage(response, "Unable to update order status."),
     );
   }
 
@@ -335,18 +353,36 @@ export async function updateSellerOrderStatus(
 // =====================================================
 
 export async function getSellerShipments(): Promise<Shipment[]> {
-  const response = await apiFetch(
-    "/shipments/seller/my-shipments"
-  );
+  const response = await apiFetch("/shipments/seller/my-shipments");
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch shipments."
+      getErrorMessage(response, "Unable to fetch shipments."),
     );
   }
 
   return response.data as Shipment[];
+}
+
+// =====================================================
+// SELLER - CREATE DELIVERY SHIPMENT
+// =====================================================
+
+export async function createSellerShipment(
+  orderId: number,
+): Promise<Shipment> {
+  const response = await apiFetch(
+    `/shipments/seller/order/${orderId}`,
+    { method: "POST" },
+  );
+
+  if (!response.success) {
+    throw new Error(
+      getErrorMessage(response, "Unable to create delivery shipment."),
+    );
+  }
+
+  return response.data.shipment as Shipment;
 }
 
 // =====================================================
@@ -355,21 +391,16 @@ export async function getSellerShipments(): Promise<Shipment[]> {
 
 export async function updateShipmentStatusWithOrder(
   shipmentId: number,
-  newStatus: string
+  newStatus: string,
 ): Promise<ShipmentStatusUpdate> {
   const response = await apiFetch(
-    `/shipments/seller/${shipmentId}/status?new_status=${encodeURIComponent(
-      newStatus
-    )}`,
-    {
-      method: "PATCH",
-    }
+    `/shipments/seller/${shipmentId}/status?new_status=${encodeURIComponent(newStatus)}`,
+    { method: "PATCH" },
   );
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to update shipment status."
+      getErrorMessage(response, "Unable to update shipment status."),
     );
   }
 
@@ -378,16 +409,15 @@ export async function updateShipmentStatusWithOrder(
 
 // =====================================================
 // SELLER - UPDATE SHIPMENT STATUS
-// Maintains the existing Shipment return type.
 // =====================================================
 
 export async function updateShipmentStatus(
   shipmentId: number,
-  newStatus: string
+  newStatus: string,
 ): Promise<Shipment> {
   const result = await updateShipmentStatusWithOrder(
     shipmentId,
-    newStatus
+    newStatus,
   );
 
   return result.shipment;
@@ -399,21 +429,16 @@ export async function updateShipmentStatus(
 
 export async function updateShipmentTrackingNumber(
   shipmentId: number,
-  trackingNumber: string
+  trackingNumber: string,
 ): Promise<Shipment> {
   const response = await apiFetch(
-    `/shipments/seller/${shipmentId}/tracking-number?tracking_number=${encodeURIComponent(
-      trackingNumber
-    )}`,
-    {
-      method: "PATCH",
-    }
+    `/shipments/seller/${shipmentId}/tracking-number?tracking_number=${encodeURIComponent(trackingNumber)}`,
+    { method: "PATCH" },
   );
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to update tracking number."
+      getErrorMessage(response, "Unable to update tracking number."),
     );
   }
 
@@ -425,16 +450,15 @@ export async function updateShipmentTrackingNumber(
 // =====================================================
 
 export async function getCustomerOrderShipments(
-  orderId: number
+  orderId: number,
 ): Promise<CustomerOrderShipments> {
   const response = await apiFetch(
-    `/shipments/customer/order/${orderId}`
+    `/shipments/customer/order/${orderId}`,
   );
 
   if (!response.success) {
     throw new Error(
-      response.data?.detail ||
-        "Unable to fetch shipment details."
+      getErrorMessage(response, "Unable to fetch shipment details."),
     );
   }
 

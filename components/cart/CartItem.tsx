@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -23,8 +24,20 @@ export default function CartItem({
   const product = item.product;
 
   function handleBuyNow() {
-    setBuying(true);
-    router.push(`/checkout?buyNow=${encodeURIComponent(String(item.id))}`);
+    if (buying || busy) return;
+
+    try {
+      setBuying(true);
+
+      const attemptId = crypto.randomUUID();
+
+      router.push(
+        `/checkout?buyNow=${encodeURIComponent(String(item.id))}&attempt=${encodeURIComponent(attemptId)}`
+      );
+    } catch (error) {
+      console.error("Unable to start checkout:", error);
+      setBuying(false);
+    }
   }
 
   const price = Number(item.variant?.price ?? product.price ?? 0);
@@ -57,7 +70,10 @@ export default function CartItem({
 
           {item.variant?.option_values?.length ? (
             <p className="mt-1 text-sm text-gray-500">
-              Options: {item.variant.option_values.map((option) => option.value).join(" • ")}
+              Options:{" "}
+              {item.variant.option_values
+                .map((option) => option.value)
+                .join(" • ")}
             </p>
           ) : null}
 
@@ -71,7 +87,9 @@ export default function CartItem({
             <div className="flex items-center gap-3 rounded-full border border-gray-300 p-1">
               <button
                 type="button"
-                onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                onClick={() =>
+                  onUpdateQuantity(item.id, item.quantity - 1)
+                }
                 disabled={busy || item.quantity <= 1}
                 aria-label="Decrease quantity"
                 className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 disabled:opacity-40"
@@ -85,7 +103,9 @@ export default function CartItem({
 
               <button
                 type="button"
-                onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                onClick={() =>
+                  onUpdateQuantity(item.id, item.quantity + 1)
+                }
                 disabled={busy || item.quantity >= stock}
                 aria-label="Increase quantity"
                 className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 disabled:opacity-40"
@@ -111,7 +131,12 @@ export default function CartItem({
         <button
           type="button"
           onClick={handleBuyNow}
-          disabled={buying || busy || stock < item.quantity || stock <= 0}
+          disabled={
+            buying ||
+            busy ||
+            stock < item.quantity ||
+            stock <= 0
+          }
           className="inline-flex items-center gap-2 rounded-md bg-[#fb641b] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e85b16] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ShoppingBag size={16} />

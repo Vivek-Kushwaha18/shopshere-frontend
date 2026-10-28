@@ -130,14 +130,17 @@ export default function CartPage() {
       maximumFractionDigits: 2,
     })}`;
 
-  // PLACE ORDER means checkout with all cart products.
+  // PLACE ORDER checks out all cart products.
+  // A new attempt ID distinguishes a new purchase from a retry.
   function handleCheckout() {
     if (!allItems.length || busy) return;
 
     try {
       sessionStorage.removeItem(BUY_NOW_STORAGE_KEY);
 
-      router.push("/checkout");
+      const attemptId = crypto.randomUUID();
+
+      router.push(`/checkout?attempt=${encodeURIComponent(attemptId)}`);
     } catch (err) {
       console.error("Unable to continue to checkout:", err);
       setActionError(
