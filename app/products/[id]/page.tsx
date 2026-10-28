@@ -1,7 +1,12 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -17,6 +22,9 @@ import {
   ShoppingCart,
   Zap,
   Star,
+  ZoomIn,
+  ZoomOut,
+  X,
 } from "lucide-react";
 
 import {
@@ -41,6 +49,7 @@ import { getStoredUser } from "@/services/auth";
 import { recordViewedProduct } from "@/services/recently-viewed";
 
 const BUY_NOW_STORAGE_KEY = "shopsphere-buy-now-checkout";
+const HOVER_ZOOM_FACTOR = 2.5;
 
 export default function ProductDetailsPage() {
   const params = useParams();
@@ -54,6 +63,19 @@ export default function ProductDetailsPage() {
   const [error, setError] = useState("");
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+
+  // Amazon-style hover magnification.
+  const [isHoverZoomActive, setIsHoverZoomActive] = useState(false);
+  const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 });
+  const [hoverZoomSize, setHoverZoomSize] = useState({
+    width: 0,
+    height: 0,
+  });
+
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
   const [quantity, setQuantity] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState<
     Record<number, number>
@@ -115,6 +137,10 @@ export default function ProductDetailsPage() {
 
         setSelectedOptions(defaultOptions);
         setSelectedImageIndex(0);
+        setIsImageZoomOpen(false);
+        setZoomLevel(1);
+        setIsHoverZoomActive(false);
+        setZoomPosition({ x: 50, y: 50 });
         setIsProductInCart(false);
         setCartMessage("");
         setCartError("");
@@ -296,6 +322,65 @@ export default function ProductDetailsPage() {
       isMounted = false;
     };
   }, [product?.id]);
+
+  useEffect(() => {
+    if (!isImageZoomOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsImageZoomOpen(false);
+        setZoomLevel(1);
+      }
+
+      if (event.key === "+" || event.key === "=") {
+        setZoomLevel((level) => Math.min(3, level + 0.5));
+      }
+
+      if (event.key === "-") {
+        setZoomLevel((level) => Math.max(1, level - 0.5));
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isImageZoomOpen]);
+
+  // Track the mouse position inside the product image.
+  const handleImageMouseMove = (event: MouseEvent<HTMLDivElement>) => {
+    const container = event.currentTarget;
+    const rect = container.getBoundingClientRect();
+
+    if (!rect.width || !rect.height) return;
+
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+    setZoomPosition({
+      x: Math.min(100, Math.max(0, x)),
+      y: Math.min(100, Math.max(0, y)),
+    });
+
+    setHoverZoomSize({
+      width: rect.width,
+      height: rect.height,
+    });
+  };
+
+  const handleImageMouseEnter = (
+    event: MouseEvent<HTMLDivElement>
+  ) => {
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      handleImageMouseMove(event);
+      setIsHoverZoomActive(true);
+    }
+  };
+
+  const handleImageMouseLeave = () => {
+    setIsHoverZoomActive(false);
+  };
 
   const handleWishlist = async () => {
     if (!product) return;
@@ -598,6 +683,9 @@ export default function ProductDetailsPage() {
 
     setQuantity(1);
     setSelectedImageIndex(0);
+    setIsImageZoomOpen(false);
+    setZoomLevel(1);
+    setIsHoverZoomActive(false);
     setCartMessage("");
     setCartError("");
   };
@@ -793,6 +881,9 @@ export default function ProductDetailsPage() {
     setSelectedImageIndex((index) =>
       index >= images.length - 1 ? 0 : index + 1
     );
+
+    setZoomLevel(1);
+    setIsHoverZoomActive(false);
   };
 
   const handlePreviousImage = () => {
@@ -801,14 +892,31 @@ export default function ProductDetailsPage() {
     setSelectedImageIndex((index) =>
       index <= 0 ? images.length - 1 : index - 1
     );
+
+    setZoomLevel(1);
+    setIsHoverZoomActive(false);
+  };
+
+  const openImageZoom = () => {
+    if (!currentImage) return;
+
+    setIsHoverZoomActive(false);
+    setZoomLevel(1);
+    setIsImageZoomOpen(true);
+  };
+
+  const closeImageZoom = () => {
+    setIsImageZoomOpen(false);
+    setZoomLevel(1);
   };
 
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-6xl px-3 py-4 sm:px-5">
         <section className="grid gap-4 lg:grid-cols-2">
-          <div className="border border-gray-200 bg-white">
-            <div className="relative overflow-hidden bg-white">
+          {/* Product image gallery */}
+          <div className="relative h-fit border border-gray-200 bg-white shadow-sm">
+            <div className="relative border-b border-gray-200 bg-white">
               <div className="absolute right-3 top-3 z-20 flex flex-col gap-2">
                 <button
                   type="button"
@@ -848,13 +956,81 @@ export default function ProductDetailsPage() {
                 </div>
               )}
 
-              <div className="aspect-square">
+              <div className="relative aspect-square w-full">
                 {currentImage ? (
-                  <img
-                    src={currentImage}
-                    alt={product.name}
-                    className="h-full w-full object-contain p-2 sm:p-4"
-                  />
+                  <>
+                    <div
+                      ref={imageContainerRef}
+                      onMouseEnter={handleImageMouseEnter}
+                      onMouseMove={handleImageMouseMove}
+                      onMouseLeave={handleImageMouseLeave}
+                      className="group relative h-full w-full overflow-hidden bg-white"
+                    >
+                      <button
+                        type="button"
+                        onClick={openImageZoom}
+                        className="relative block h-full w-full cursor-zoom-in overflow-hidden bg-white"
+                        aria-label="Click to open full-screen product image zoom"
+                      >
+                        <img
+                          src={currentImage}
+                          alt={product.name}
+                          draggable={false}
+                          className="h-full w-full select-none object-contain p-3 transition-transform duration-200 ease-out sm:p-5"
+                        />
+
+                        {!isHoverZoomActive && (
+                          <span className="pointer-events-none absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white/95 text-gray-700 shadow-sm transition-all duration-200 group-hover:border-gray-400 group-hover:bg-gray-100">
+                            <ZoomIn className="h-5 w-5" />
+                          </span>
+                        )}
+
+                        <span className="pointer-events-none absolute bottom-3 left-3 rounded border border-gray-200 bg-white/95 px-2 py-1 text-[11px] text-gray-600 opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100">
+                          Hover to zoom
+                        </span>
+                      </button>
+
+                      {/* Cursor-following magnification lens */}
+                      {isHoverZoomActive && (
+                        <div
+                          aria-hidden="true"
+                          className="pointer-events-none absolute z-10 hidden border border-blue-500/70 bg-blue-200/20 shadow-sm lg:block"
+                          style={{
+                            width: `${Math.min(
+                              38,
+                              (100 / HOVER_ZOOM_FACTOR) * 1.4
+                            )}%`,
+                            height: `${Math.min(
+                              38,
+                              (100 / HOVER_ZOOM_FACTOR) * 1.4
+                            )}%`,
+                            left: `${zoomPosition.x}%`,
+                            top: `${zoomPosition.y}%`,
+                            transform: "translate(-50%, -50%)",
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Amazon-style magnified preview */}
+                    {isHoverZoomActive && (
+                      <div
+                        aria-label="Magnified product image preview"
+                        role="img"
+                        className="pointer-events-none absolute left-[calc(100%+12px)] top-0 z-40 hidden aspect-square w-full overflow-hidden border border-gray-200 bg-white shadow-xl lg:block"
+                        style={{
+                          backgroundImage: `url("${currentImage}")`,
+                          backgroundRepeat: "no-repeat",
+                          backgroundSize: `${HOVER_ZOOM_FACTOR * 100}% ${HOVER_ZOOM_FACTOR * 100}%`,
+                          backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                        }}
+                      >
+                        <div className="absolute left-0 right-0 top-0 flex items-center justify-center border-b border-gray-200 bg-white/90 px-2 py-1.5 text-xs font-medium text-gray-600">
+                          Magnified Preview
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
                     <Package className="h-16 w-16 text-gray-300" />
@@ -867,42 +1043,47 @@ export default function ProductDetailsPage() {
                   <button
                     type="button"
                     onClick={handlePreviousImage}
-                    className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50"
+                    className="absolute left-2 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:border-gray-400 hover:bg-gray-50"
                     aria-label="Previous image"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-5 w-5" />
                   </button>
 
                   <button
                     type="button"
                     onClick={handleNextImage}
-                    className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm hover:bg-gray-50"
+                    className="absolute right-2 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition hover:border-gray-400 hover:bg-gray-50"
                     aria-label="Next image"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-5 w-5" />
                   </button>
                 </>
               )}
             </div>
 
             {images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto border-t border-gray-100 p-3">
+              <div className="flex gap-2 overflow-x-auto bg-white p-3">
                 {images.map((image, index) => (
                   <button
                     key={image.id}
                     type="button"
-                    onClick={() => setSelectedImageIndex(index)}
-                    className={`h-14 w-14 shrink-0 overflow-hidden border-2 bg-gray-50 ${
+                    onClick={() => {
+                      setSelectedImageIndex(index);
+                      setZoomLevel(1);
+                      setIsHoverZoomActive(false);
+                    }}
+                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-sm border-2 bg-white transition sm:h-[72px] sm:w-[72px] ${
                       safeImageIndex === index
-                        ? "border-gray-900"
+                        ? "border-blue-600 shadow-sm"
                         : "border-gray-200 hover:border-gray-400"
                     }`}
                     aria-label={`View product image ${index + 1}`}
+                    aria-pressed={safeImageIndex === index}
                   >
                     <img
                       src={image.image_url}
                       alt={`${product.name} ${index + 1}`}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain p-1 transition-transform duration-200 hover:scale-105"
                     />
                   </button>
                 ))}
@@ -910,7 +1091,8 @@ export default function ProductDetailsPage() {
             )}
           </div>
 
-          <div className="border border-gray-200 bg-white">
+          {/* Product details */}
+          <div className="min-w-0 border border-gray-200 bg-white shadow-sm">
             <div className="p-4 sm:p-5">
               <div className="border-b border-gray-100 pb-4">
                 <h1 className="text-xl font-medium leading-7 text-gray-900 sm:text-2xl">
@@ -1339,6 +1521,124 @@ export default function ProductDetailsPage() {
           </section>
         )}
       </div>
+
+      {/* Full-screen image zoom viewer */}
+      {isImageZoomOpen && currentImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-3 sm:p-6"
+          onClick={closeImageZoom}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Product image zoom viewer"
+        >
+          <div
+            className="relative flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-sm border border-gray-700 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 sm:px-4">
+              <p className="truncate pr-2 text-sm font-medium text-gray-800">
+                {product.name}
+              </p>
+
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setZoomLevel((level) => Math.max(1, level - 0.5))
+                  }
+                  disabled={zoomLevel <= 1}
+                  aria-label="Zoom out"
+                  className="flex h-9 w-9 items-center justify-center border border-gray-300 text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ZoomOut className="h-5 w-5" />
+                </button>
+
+                <span className="min-w-11 text-center text-xs font-medium text-gray-700">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setZoomLevel((level) => Math.min(3, level + 0.5))
+                  }
+                  disabled={zoomLevel >= 3}
+                  aria-label="Zoom in"
+                  className="flex h-9 w-9 items-center justify-center border border-gray-300 text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ZoomIn className="h-5 w-5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel(1)}
+                  aria-label="Reset zoom"
+                  className="flex h-9 items-center justify-center border border-gray-300 px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+                >
+                  Reset
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeImageZoom}
+                  aria-label="Close image viewer"
+                  className="ml-1 flex h-9 w-9 items-center justify-center border border-gray-300 text-gray-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-white">
+              <img
+                src={currentImage}
+                alt={product.name}
+                draggable={false}
+                onDoubleClick={() =>
+                  setZoomLevel((level) => (level > 1 ? 1 : 2))
+                }
+                style={{
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: "center",
+                  transition: "transform 200ms ease",
+                }}
+                className="max-h-full max-w-full select-none object-contain"
+              />
+            </div>
+
+            {images.length > 1 && (
+              <div className="flex shrink-0 items-center justify-center gap-3 border-t border-gray-200 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={handlePreviousImage}
+                  aria-label="Previous zoomed image"
+                  className="flex h-8 w-8 items-center justify-center border border-gray-300 text-gray-700 transition hover:bg-gray-100"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                <span className="text-xs text-gray-500">
+                  {safeImageIndex + 1} of {images.length}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleNextImage}
+                  aria-label="Next zoomed image"
+                  className="flex h-8 w-8 items-center justify-center border border-gray-300 text-gray-700 transition hover:bg-gray-100"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            <p className="shrink-0 border-t border-gray-200 px-3 py-2 text-center text-xs text-gray-500">
+              Use the zoom buttons to enlarge the image. Double-click to toggle
+              zoom. Press Escape to close.
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
