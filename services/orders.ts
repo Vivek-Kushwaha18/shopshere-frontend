@@ -1,5 +1,9 @@
 
-import { apiFetch } from "./api";
+import {
+  apiFetch,
+  API_URL,
+  refreshAuthSession,
+} from "./api";
 
 // =====================================================
 // PAYMENT METHOD AND STATUS
@@ -308,6 +312,133 @@ export async function getSellerRevenue(): Promise<SellerRevenue[]> {
   }
 
   return response.data as SellerRevenue[];
+}
+
+// =====================================================
+// SELLER - DOWNLOAD REVENUE ZIP
+// =====================================================
+
+function getSellerAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token")
+  );
+}
+
+async function getRevenueExportError(
+  response: Response,
+): Promise<string> {
+  try {
+    const data = await response.json();
+
+    if (typeof data?.detail === "string") {
+      return data.detail;
+    }
+
+    if (typeof data?.message === "string") {
+      return data.message;
+    }
+  } catch {
+    // The response may not contain JSON.
+  }
+
+  return "Unable to download seller revenue.";
+}
+
+/**
+ * Downloads the authenticated seller's revenue ZIP.
+ *
+ * The backend determines the seller from the authenticated token.
+ * Seller IDs are not accepted from the frontend.
+ */
+export async function downloadSellerRevenueZip(): Promise<void> {
+  if (typeof window === "undefined") {
+    throw new Error(
+      "Revenue downloads are only available in the browser.",
+    );
+  }
+
+  const baseUrl = API_URL.replace(/\/+$/, "");
+  const exportUrl = `${baseUrl}/orders/seller/revenue/export`;
+
+  async function requestDownload(
+    token: string | null,
+  ): Promise<Response> {
+    const headers = new Headers();
+
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    return fetch(exportUrl, {
+      method: "GET",
+      headers,
+      credentials: "include",
+      cache: "no-store",
+    });
+  }
+
+  let response = await requestDownload(getSellerAccessToken());
+
+  if (response.status === 401) {
+    const refreshed = await refreshAuthSession();
+
+    if (!refreshed?.access_token) {
+      throw new Error(
+        "Your session has expired. Please log in again.",
+      );
+    }
+
+    response = await requestDownload(refreshed.access_token);
+  }
+
+  if (!response.ok) {
+    throw new Error(await getRevenueExportError(response));
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.toLowerCase().includes("application/zip")) {
+    throw new Error(
+      "The server did not return a ZIP file. Check that the seller revenue export endpoint is deployed.",
+    );
+  }
+
+  const blob = await response.blob();
+
+  if (blob.size === 0) {
+    throw new Error("The downloaded ZIP file is empty.");
+  }
+
+  const disposition =
+    response.headers.get("content-disposition") || "";
+
+  const filenameMatch = disposition.match(
+    /filename="?([^";]+)"?/i,
+  );
+
+  const filename =
+    filenameMatch?.[1] ||
+    "shopsphere-seller-revenue.zip";
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = objectUrl;
+  link.download = filename;
+  link.style.display = "none";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 1000);
 }
 
 // =====================================================

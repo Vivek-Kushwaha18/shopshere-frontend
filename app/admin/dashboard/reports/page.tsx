@@ -173,7 +173,7 @@ export default function ReportsPage() {
 
             {downloading
               ? "Preparing Download..."
-              : "Download All Reports (ZIP)"}
+              : "Download All Reports "}
           </button>
         </div>
       </div>
