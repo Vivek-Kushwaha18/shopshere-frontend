@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -9,10 +8,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
-import type { FormEvent } from "react";
 import Swal from "sweetalert2";
-
 import {
   ShoppingCart,
   User,
@@ -36,28 +34,52 @@ import {
   type User as AuthUser,
 } from "@/services/auth";
 
-import { getCategories, type Category } from "@/services/categories";
-import { getProducts, type Product } from "@/services/products";
-import { getCart, CART_UPDATED_EVENT } from "@/services/cart";
+import {
+  getCategories,
+  type Category,
+} from "@/services/categories";
+
+import {
+  getProducts,
+  type Product,
+} from "@/services/products";
+
+import {
+  getCart,
+  CART_UPDATED_EVENT,
+} from "@/services/cart";
 
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const isProductDetailPage = /^\/products\/[^/]+\/?$/.test(pathname);
+  const isProductDetailPage =
+    /^\/products\/[^/]+\/?$/.test(pathname);
+
+  const isAuthPage =
+    /^\/(login|signup|forgot-password|reset-password|verify-email|verify-otp|otp)(\/|$)/.test(
+      pathname
+    );
+
+  const showCategoryNavigation =
+    !isProductDetailPage && !isAuthPage;
 
   const [mobileMenu, setMobileMenu] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false);
+  const [mobileCategoriesOpen, setMobileCategoriesOpen] =
+    useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesLoading, setCategoriesLoading] =
+    useState(false);
+
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [searchSuggestions, setSearchSuggestions] = useState<Product[]>([]);
+  const [searchSuggestions, setSearchSuggestions] =
+    useState<Product[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
 
   const [cartCount, setCartCount] = useState(0);
@@ -67,11 +89,12 @@ export default function Header() {
   const mobileSearchRef = useRef<HTMLDivElement>(null);
 
   function isActive(path: string) {
-    if (path === "/") {
-      return pathname === "/";
-    }
+    if (path === "/") return pathname === "/";
 
-    return pathname === path || pathname.startsWith(`${path}/`);
+    return (
+      pathname === path ||
+      pathname.startsWith(`${path}/`)
+    );
   }
 
   const loadAuthUser = useCallback(() => {
@@ -97,7 +120,10 @@ export default function Header() {
     window.addEventListener("auth-change", loadAuthUser);
 
     return () => {
-      window.removeEventListener("auth-change", loadAuthUser);
+      window.removeEventListener(
+        "auth-change",
+        loadAuthUser
+      );
     };
   }, [loadAuthUser]);
 
@@ -114,7 +140,10 @@ export default function Header() {
           setCategories(result);
         }
       } catch (error) {
-        console.error("Header categories loading error:", error);
+        console.error(
+          "Header categories loading error:",
+          error
+        );
 
         if (active) {
           setCategories([]);
@@ -138,9 +167,12 @@ export default function Header() {
       categories
         .filter(
           (category) =>
-            category.parent_id === null && category.is_active
+            category.parent_id === null &&
+            category.is_active !== false
         )
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort((a, b) =>
+          a.name.localeCompare(b.name)
+        ),
     [categories]
   );
 
@@ -166,7 +198,10 @@ export default function Header() {
           setProducts(result);
         }
       } catch (error) {
-        console.error("Header products loading error:", error);
+        console.error(
+          "Header products loading error:",
+          error
+        );
 
         if (active) {
           setProducts([]);
@@ -194,10 +229,7 @@ export default function Header() {
       const storedUser = getStoredUser();
 
       if (!accessToken || !storedUser) {
-        if (active) {
-          setCartCount(0);
-        }
-
+        if (active) setCartCount(0);
         return;
       }
 
@@ -214,25 +246,29 @@ export default function Header() {
 
           const cart = await getCart();
 
-          if (!active) {
-            return;
-          }
+          if (!active) return;
 
-          const items = Array.isArray(cart.items) ? cart.items : [];
+          const items = Array.isArray(cart.items)
+            ? cart.items
+            : [];
 
           const uniqueProductIds = new Set(
             items
               .map((item) => item.product_id)
               .filter(
                 (productId) =>
-                  productId !== undefined && productId !== null
+                  productId !== undefined &&
+                  productId !== null
               )
           );
 
           setCartCount(uniqueProductIds.size);
         } while (active && refreshRequested);
       } catch (error) {
-        console.error("Header cart loading error:", error);
+        console.error(
+          "Header cart loading error:",
+          error
+        );
       } finally {
         requestInProgress = false;
       }
@@ -250,17 +286,38 @@ export default function Header() {
 
     void loadCartCount();
 
-    window.addEventListener(CART_UPDATED_EVENT, handleCartUpdated);
-    window.addEventListener("auth-change", handleCartUpdated);
-    window.addEventListener("focus", handleCartUpdated);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener(
+      CART_UPDATED_EVENT,
+      handleCartUpdated
+    );
+    window.addEventListener(
+      "auth-change",
+      handleCartUpdated
+    );
+    window.addEventListener(
+      "focus",
+      handleCartUpdated
+    );
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
 
     return () => {
       active = false;
 
-      window.removeEventListener(CART_UPDATED_EVENT, handleCartUpdated);
-      window.removeEventListener("auth-change", handleCartUpdated);
-      window.removeEventListener("focus", handleCartUpdated);
+      window.removeEventListener(
+        CART_UPDATED_EVENT,
+        handleCartUpdated
+      );
+      window.removeEventListener(
+        "auth-change",
+        handleCartUpdated
+      );
+      window.removeEventListener(
+        "focus",
+        handleCartUpdated
+      );
       document.removeEventListener(
         "visibilitychange",
         handleVisibilityChange
@@ -272,25 +329,36 @@ export default function Header() {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
 
-      if (profileRef.current && !profileRef.current.contains(target)) {
+      if (
+        profileRef.current &&
+        !profileRef.current.contains(target)
+      ) {
         setProfileOpen(false);
       }
 
-      const clickedInsideDesktopSearch =
-        desktopSearchRef.current?.contains(target) ?? false;
+      const insideDesktop =
+        desktopSearchRef.current?.contains(target) ??
+        false;
 
-      const clickedInsideMobileSearch =
-        mobileSearchRef.current?.contains(target) ?? false;
+      const insideMobile =
+        mobileSearchRef.current?.contains(target) ??
+        false;
 
-      if (!clickedInsideDesktopSearch && !clickedInsideMobileSearch) {
+      if (!insideDesktop && !insideMobile) {
         setSearchFocused(false);
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener(
+      "mousedown",
+      handleClickOutside
+    );
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
     };
   }, []);
 
@@ -305,7 +373,11 @@ export default function Header() {
     try {
       await logoutSession();
     } catch (error) {
-      console.error("Unable to revoke the logout session:", error);
+      console.error(
+        "Unable to revoke the logout session:",
+        error
+      );
+
       await Swal.fire({
         icon: "error",
         title: "Logout failed",
@@ -314,6 +386,7 @@ export default function Header() {
             ? error.message
             : "Please try again.",
       });
+
       router.replace("/login");
       return;
     }
@@ -321,7 +394,6 @@ export default function Header() {
     setIsLoggedIn(false);
     setUser(null);
     setCartCount(0);
-
     setProfileOpen(false);
     setMobileCategoriesOpen(false);
     setMobileMenu(false);
@@ -337,7 +409,8 @@ export default function Header() {
 
       if (parts.length >= 2) {
         return (
-          parts[0][0] + parts[parts.length - 1][0]
+          parts[0][0] +
+          parts[parts.length - 1][0]
         ).toUpperCase();
       }
 
@@ -346,35 +419,41 @@ export default function Header() {
 
     const email = user?.email?.trim();
 
-    if (email) {
-      return email[0].toUpperCase();
-    }
-
-    return "U";
+    return email
+      ? email[0].toUpperCase()
+      : "U";
   }
 
   function getRoleLabel() {
     if (user?.role === "seller") return "Seller";
     if (user?.role === "admin") return "Admin";
-
     return "Customer";
   }
 
   function getDashboardUrl() {
-    if (user?.role === "admin") return "/admin/dashboard";
-    if (user?.role === "seller") return "/seller/dashboard";
+    if (user?.role === "admin") {
+      return "/admin/dashboard";
+    }
+
+    if (user?.role === "seller") {
+      return "/seller/dashboard";
+    }
 
     return "/";
   }
 
   function getDashboardLabel() {
-    if (user?.role === "admin") return "Admin Dashboard";
-    if (user?.role === "seller") return "Seller Dashboard";
+    if (user?.role === "admin") {
+      return "Admin Dashboard";
+    }
+
+    if (user?.role === "seller") {
+      return "Seller Dashboard";
+    }
 
     return "Dashboard";
   }
 
-  // Search product names only. Do not use descriptions or fuzzy matching.
   function getSearchSuggestions(value: string): Product[] {
     const searchTerms = value
       .trim()
@@ -382,13 +461,14 @@ export default function Header() {
       .split(/\s+/)
       .filter(Boolean);
 
-    if (searchTerms.length === 0) {
-      return [];
-    }
+    if (searchTerms.length === 0) return [];
 
     const suggestions: Product[] = [];
 
-    for (const { product, normalizedName } of searchableProducts) {
+    for (const {
+      product,
+      normalizedName,
+    } of searchableProducts) {
       if (
         searchTerms.every((term) =>
           normalizedName.includes(term)
@@ -396,9 +476,7 @@ export default function Header() {
       ) {
         suggestions.push(product);
 
-        if (suggestions.length === 6) {
-          break;
-        }
+        if (suggestions.length === 6) break;
       }
     }
 
@@ -414,16 +492,20 @@ export default function Header() {
       return;
     }
 
-    setSearchSuggestions(getSearchSuggestions(value));
+    setSearchSuggestions(
+      getSearchSuggestions(value)
+    );
+
     setSearchFocused(true);
   }
 
   function handleSearchFocus() {
-    if (!search.trim()) {
-      return;
-    }
+    if (!search.trim()) return;
 
-    setSearchSuggestions(getSearchSuggestions(search));
+    setSearchSuggestions(
+      getSearchSuggestions(search)
+    );
+
     setSearchFocused(true);
   }
 
@@ -436,7 +518,9 @@ export default function Header() {
     router.push(`/products/${product.slug}`);
   }
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
+  function handleSearch(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     const trimmedSearch = search.trim();
@@ -449,7 +533,11 @@ export default function Header() {
       return;
     }
 
-    router.push(`/products?search=${encodeURIComponent(trimmedSearch)}`);
+    router.push(
+      `/products?search=${encodeURIComponent(
+        trimmedSearch
+      )}`
+    );
   }
 
   function closeMobileMenu() {
@@ -459,9 +547,7 @@ export default function Header() {
   }
 
   function CartCountBadge() {
-    if (cartCount <= 0) {
-      return null;
-    }
+    if (cartCount <= 0) return null;
 
     return (
       <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
@@ -482,7 +568,9 @@ export default function Header() {
             <button
               key={product.id}
               type="button"
-              onClick={() => handleSuggestionClick(product)}
+              onClick={() =>
+                handleSuggestionClick(product)
+              }
               className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50"
             >
               {product.image ? (
@@ -516,10 +604,47 @@ export default function Header() {
     );
   }
 
+  function CategoryIcon({
+    category,
+    size = "large",
+  }: {
+    category: Category;
+    size?: "large" | "small";
+  }) {
+    const dimensions =
+      size === "large"
+        ? "h-10 w-10"
+        : "h-9 w-9";
+
+    return (
+      <div
+        className={`flex ${dimensions} shrink-0 items-center justify-center overflow-hidden rounded-md bg-white`}
+      >
+        {category.icon_url ? (
+          <img
+            src={category.icon_url}
+            alt={category.name}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-105"
+          />
+        ) : (
+          <Package
+            className={
+              size === "large"
+                ? "h-6 w-6 text-gray-300"
+                : "h-5 w-5 text-gray-300"
+            }
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
       <div className="border-b">
-        <div className="mx-auto flex h-[68px] max-w-7xl items-center gap-4 px-4">
+        <div className="mx-auto flex h-[60px] max-w-7xl items-center gap-4 px-4">
           <Link
             href="/"
             className="flex shrink-0 items-center gap-2"
@@ -539,12 +664,14 @@ export default function Header() {
             </div>
           </Link>
 
-          {/* DESKTOP SEARCH */}
           <div
             ref={desktopSearchRef}
             className="relative hidden min-w-0 flex-1 md:block"
           >
-            <form onSubmit={handleSearch} className="relative">
+            <form
+              onSubmit={handleSearch}
+              className="relative"
+            >
               <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
 
               <Input
@@ -554,18 +681,21 @@ export default function Header() {
                 }
                 onFocus={handleSearchFocus}
                 placeholder="Search for products, brands and more"
-                className="h-11 w-full rounded-lg border-0 bg-blue-50 pl-12 pr-4 text-sm shadow-none outline-none ring-0 placeholder:text-gray-500 focus-visible:ring-1 focus-visible:ring-blue-200"
+                className="h-10 w-full rounded-lg border-0 bg-blue-50 pl-12 pr-4 text-sm shadow-none outline-none ring-0 placeholder:text-gray-500 focus-visible:ring-1 focus-visible:ring-blue-200"
               />
             </form>
 
             <SearchSuggestions />
           </div>
 
-          {/* DESKTOP ACTIONS */}
           <div className="hidden shrink-0 items-center gap-1 md:flex">
             <Link
               href="/cart"
-              aria-label={`Cart${cartCount > 0 ? `, ${cartCount} different products` : ""}`}
+              aria-label={`Cart${
+                cartCount > 0
+                  ? `, ${cartCount} different products`
+                  : ""
+              }`}
               className="flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 hover:text-blue-600"
             >
               <span className="relative inline-flex">
@@ -595,12 +725,17 @@ export default function Header() {
                 </Button>
               </>
             ) : (
-              <div ref={profileRef} className="relative ml-1">
+              <div
+                ref={profileRef}
+                className="relative ml-1"
+              >
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() =>
-                    setProfileOpen((previous) => !previous)
+                    setProfileOpen(
+                      (previous) => !previous
+                    )
                   }
                   className="h-10 gap-2 rounded-lg px-2"
                   aria-expanded={profileOpen}
@@ -611,7 +746,9 @@ export default function Header() {
                   </span>
 
                   <span className="hidden max-w-[120px] truncate text-sm font-semibold lg:block">
-                    {user?.full_name || user?.email || "Profile"}
+                    {user?.full_name ||
+                      user?.email ||
+                      "Profile"}
                   </span>
 
                   <ChevronDown
@@ -633,6 +770,7 @@ export default function Header() {
                           <p className="truncate font-semibold text-gray-900">
                             {user?.full_name || "User"}
                           </p>
+
                           <p className="truncate text-xs text-gray-500">
                             {user?.email}
                           </p>
@@ -656,7 +794,9 @@ export default function Header() {
                     <div className="p-2">
                       <Link
                         href="/profile"
-                        onClick={() => setProfileOpen(false)}
+                        onClick={() =>
+                          setProfileOpen(false)
+                        }
                         className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
                           isActive("/profile")
                             ? "bg-gray-100 font-semibold text-black"
@@ -665,22 +805,29 @@ export default function Header() {
                       >
                         <User className="h-4 w-4" />
                         <div>
-                          <p className="font-medium">My Profile</p>
+                          <p className="font-medium">
+                            My Profile
+                          </p>
                           <p className="text-xs text-gray-400">
                             Manage your account
                           </p>
                         </div>
                       </Link>
 
-                      {(user?.role === "seller" || user?.role === "admin") && (
+                      {(user?.role === "seller" ||
+                        user?.role === "admin") && (
                         <Link
                           href={getDashboardUrl()}
-                          onClick={() => setProfileOpen(false)}
+                          onClick={() =>
+                            setProfileOpen(false)
+                          }
                           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                         >
                           <LayoutDashboard className="h-4 w-4" />
                           <div>
-                            <p className="font-medium">{getDashboardLabel()}</p>
+                            <p className="font-medium">
+                              {getDashboardLabel()}
+                            </p>
                             <p className="text-xs text-gray-400">
                               Manage your workspace
                             </p>
@@ -690,12 +837,16 @@ export default function Header() {
 
                       <Link
                         href="/orders"
-                        onClick={() => setProfileOpen(false)}
+                        onClick={() =>
+                          setProfileOpen(false)
+                        }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                       >
                         <Package className="h-4 w-4" />
                         <div>
-                          <p className="font-medium">My Orders</p>
+                          <p className="font-medium">
+                            My Orders
+                          </p>
                           <p className="text-xs text-gray-400">
                             Track your purchases
                           </p>
@@ -704,12 +855,16 @@ export default function Header() {
 
                       <Link
                         href="/wishlist"
-                        onClick={() => setProfileOpen(false)}
+                        onClick={() =>
+                          setProfileOpen(false)
+                        }
                         className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-700 transition hover:bg-gray-100 hover:text-black"
                       >
                         <Heart className="h-4 w-4" />
                         <div>
-                          <p className="font-medium">Wishlist</p>
+                          <p className="font-medium">
+                            Wishlist
+                          </p>
                           <p className="text-xs text-gray-400">
                             Saved products
                           </p>
@@ -725,7 +880,9 @@ export default function Header() {
                       >
                         <LogOut className="h-4 w-4" />
                         <div className="text-left">
-                          <p className="font-medium">Logout</p>
+                          <p className="font-medium">
+                            Logout
+                          </p>
                           <p className="text-xs text-red-400">
                             Sign out of your account
                           </p>
@@ -741,8 +898,14 @@ export default function Header() {
           <button
             type="button"
             className="rounded-lg p-2 transition hover:bg-gray-100 md:hidden"
-            onClick={() => setMobileMenu((previous) => !previous)}
-            aria-label={mobileMenu ? "Close menu" : "Open menu"}
+            onClick={() =>
+              setMobileMenu(
+                (previous) => !previous
+              )
+            }
+            aria-label={
+              mobileMenu ? "Close menu" : "Open menu"
+            }
             aria-expanded={mobileMenu}
           >
             {mobileMenu ? (
@@ -754,48 +917,13 @@ export default function Header() {
         </div>
       </div>
 
-      {!isProductDetailPage && (
-        <div className="hidden border-b bg-white md:block">
-          <nav className="mx-auto flex h-12 max-w-7xl items-center justify-center gap-8 overflow-x-auto px-4">
-            <Link
-              href="/for-you"
-              className={`shrink-0 text-sm font-semibold transition ${
-                isActive("/for-you")
-                  ? "text-blue-600"
-                  : "text-gray-700 hover:text-blue-600"
-              }`}
-            >
-              For You
-            </Link>
-
-            {categoriesLoading ? (
-              <span className="shrink-0 text-sm text-gray-400">
-                Loading categories...
-              </span>
-            ) : (
-              mainCategories.map((category) => (
-                <Link
-                  key={category.id}
-                  href={`/categories/${category.slug}`}
-                  className={`shrink-0 text-sm font-semibold transition ${
-                    pathname.startsWith(`/categories/${category.slug}`)
-                      ? "text-blue-600"
-                      : "text-gray-700 hover:text-blue-600"
-                  }`}
-                >
-                  {category.name}
-                </Link>
-              ))
-            )}
-          </nav>
-        </div>
-      )}
-
-      {/* MOBILE MENU */}
       {mobileMenu && (
         <div className="border-t bg-white md:hidden">
           <div className="mx-auto max-w-7xl px-4 py-4">
-            <div ref={mobileSearchRef} className="relative mb-4">
+            <div
+              ref={mobileSearchRef}
+              className="relative mb-4"
+            >
               <form
                 onSubmit={(event) => {
                   handleSearch(event);
@@ -820,7 +948,7 @@ export default function Header() {
             </div>
 
             <nav className="flex flex-col gap-1">
-              {!isProductDetailPage && (
+              {showCategoryNavigation && (
                 <>
                   <Link
                     href="/for-you"
@@ -838,15 +966,20 @@ export default function Header() {
                     <button
                       type="button"
                       onClick={() =>
-                        setMobileCategoriesOpen((previous) => !previous)
+                        setMobileCategoriesOpen(
+                          (previous) => !previous
+                        )
                       }
                       className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
                       aria-expanded={mobileCategoriesOpen}
                     >
                       <span>Categories</span>
+
                       <ChevronDown
                         className={`h-4 w-4 transition-transform ${
-                          mobileCategoriesOpen ? "rotate-180" : ""
+                          mobileCategoriesOpen
+                            ? "rotate-180"
+                            : ""
                         }`}
                       />
                     </button>
@@ -867,7 +1000,7 @@ export default function Header() {
                               key={category.id}
                               href={`/categories/${category.slug}`}
                               onClick={closeMobileMenu}
-                              className={`flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
+                              className={`group flex items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
                                 pathname.startsWith(
                                   `/categories/${category.slug}`
                                 )
@@ -875,8 +1008,20 @@ export default function Header() {
                                   : "text-gray-700 hover:bg-white hover:text-blue-600"
                               }`}
                             >
-                              <span>{category.name}</span>
-                              <span className="text-xs text-gray-400">→</span>
+                              <div className="flex min-w-0 items-center gap-3">
+                                <CategoryIcon
+                                  category={category}
+                                  size="small"
+                                />
+
+                                <span className="truncate">
+                                  {category.name}
+                                </span>
+                              </div>
+
+                              <span className="text-xs text-gray-400">
+                                →
+                              </span>
                             </Link>
                           ))
                         )}
@@ -899,19 +1044,26 @@ export default function Header() {
               <Link
                 href="/cart"
                 onClick={closeMobileMenu}
-                aria-label={`Cart${cartCount > 0 ? `, ${cartCount} different products` : ""}`}
+                aria-label={`Cart${
+                  cartCount > 0
+                    ? `, ${cartCount} different products`
+                    : ""
+                }`}
                 className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
               >
                 <span className="relative inline-flex">
                   <ShoppingCart className="h-5 w-5" />
                   <CartCountBadge />
                 </span>
+
                 <span>Cart</span>
 
                 {cartCount > 0 && (
                   <span className="ml-auto rounded-full bg-red-50 px-2 py-0.5 text-xs font-bold text-red-600">
                     {cartCount > 99 ? "99+" : cartCount}{" "}
-                    {cartCount === 1 ? "product" : "products"}
+                    {cartCount === 1
+                      ? "product"
+                      : "products"}
                   </span>
                 )}
               </Link>
@@ -925,6 +1077,7 @@ export default function Header() {
                   >
                     Login
                   </Link>
+
                   <Link
                     href="/signup"
                     onClick={closeMobileMenu}
@@ -945,6 +1098,7 @@ export default function Header() {
                         <p className="truncate font-semibold text-gray-900">
                           {user?.full_name || "User"}
                         </p>
+
                         <p className="truncate text-xs text-gray-500">
                           {user?.email}
                         </p>
@@ -977,7 +1131,8 @@ export default function Header() {
                     My Profile
                   </Link>
 
-                  {(user?.role === "seller" || user?.role === "admin") && (
+                  {(user?.role === "seller" ||
+                    user?.role === "admin") && (
                     <Link
                       href={getDashboardUrl()}
                       onClick={closeMobileMenu}

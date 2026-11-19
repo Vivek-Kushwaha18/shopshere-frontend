@@ -336,7 +336,7 @@ export default function AdminAIConversationsPage() {
   }, [conversations]);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 text-gray-900 sm:p-6 lg:p-8">
+    <main className="min-h-screen bg-gray-50 px-4 pb-6 pt-28 text-gray-900 sm:px-6 sm:pb-8 sm:pt-28 lg:px-8 lg:pb-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>

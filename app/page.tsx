@@ -1,18 +1,85 @@
-
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Package } from "lucide-react";
 
 import { getProducts, type Product } from "@/services/products";
 import { getCategories, type Category } from "@/services/categories";
 
+function ProductScrollRow({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const maxScrollLeft = element.scrollWidth - element.clientWidth;
+    setCanScrollLeft(element.scrollLeft > 2);
+    setCanScrollRight(maxScrollLeft > 2 && element.scrollLeft < maxScrollLeft - 2);
+  }, []);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    updateScrollButtons();
+    const observer = new ResizeObserver(updateScrollButtons);
+    observer.observe(element);
+    for (const child of Array.from(element.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [children, updateScrollButtons]);
+
+  function scrollProducts(direction: "left" | "right") {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollBy({
+      left: (direction === "left" ? -1 : 1) * element.clientWidth * 0.75,
+      behavior: "smooth",
+    });
+  }
+
+  return (
+    <div className="relative">
+      {canScrollLeft && (
+        <button type="button" aria-label="Scroll products left"
+          onClick={() => scrollProducts("left")}
+          className="absolute left-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md transition-colors hover:bg-gray-100 md:flex">
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+      )}
+      <div ref={scrollRef} onScroll={updateScrollButtons}
+        className="grid grid-flow-col auto-cols-[50%] overflow-x-auto overscroll-x-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[33.333%] md:auto-cols-[25%]">
+        {children}
+      </div>
+      {canScrollRight && (
+        <button type="button" aria-label="Scroll products right"
+          onClick={() => scrollProducts("right")}
+          className="absolute right-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md transition-colors hover:bg-gray-100 md:flex">
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+
+  useEffect(() => {
+    const updateCategoryBar = () => {
+      setCategoriesCollapsed(window.scrollY > 60);
+    };
+
+    updateCategoryBar();
+    window.addEventListener("scroll", updateCategoryBar, { passive: true });
+
+    return () => window.removeEventListener("scroll", updateCategoryBar);
+  }, []);
 
   const loadPageData = useCallback(async () => {
     setLoading(true);
@@ -79,21 +146,21 @@ export default function Home() {
     return (
       <article
         key={product.id}
-        className="group min-w-0 overflow-hidden border-r border-b border-gray-200 bg-white transition-colors hover:bg-gray-50"
+        className="group min-w-0 overflow-hidden bg-white transition-colors hover:bg-gray-50"
       >
         <Link
           href={`/products/${product.slug}`}
           aria-label={`View ${product.name}`}
-          className="block px-1 pt-1 sm:px-1.5 sm:pt-1.5"
+          className="block p-2 sm:p-3"
         >
-          <div className="relative flex h-52 items-center justify-center overflow-hidden bg-white sm:h-60 md:h-64">
+          <div className="relative flex h-60 items-center justify-center overflow-hidden rounded-2xl bg-gray-50 sm:h-72 lg:h-80">
             {image ? (
               <img
                 src={image}
                 alt={product.name}
                 loading="lazy"
                 decoding="async"
-                className="block h-full w-full scale-[1.12] object-contain transition-transform duration-200 group-hover:scale-[1.16]"
+                className="block h-full w-full rounded-2xl object-contain transition-transform duration-200 group-hover:scale-[1.03]"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
@@ -109,37 +176,37 @@ export default function Home() {
           </div>
         </Link>
 
-        <div className="min-w-0 px-2 pb-2 pt-1 sm:px-2.5">
+        <div className="min-w-0 px-3 pb-4 pt-1 sm:px-4">
           <Link
             href={`/products/${product.slug}`}
-            className="block text-[12px] font-medium leading-4 text-gray-800 hover:text-blue-600 sm:text-[13px] sm:leading-[18px]"
+            className="block text-sm font-medium leading-5 text-gray-800 hover:text-blue-600 sm:text-base"
           >
-            <span className="line-clamp-2">{product.name}</span>
+            <span className="block truncate">{product.name}</span>
           </Link>
 
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            <span className="rounded-sm bg-green-700 px-1 py-0.5 text-[10px] font-semibold leading-3.5 text-white">
+            <span className="rounded-sm bg-green-700 px-1.5 py-0.5 text-xs font-semibold leading-4 text-white">
               {(product.rating ?? 0).toFixed(1)} ★
             </span>
 
-            <span className="text-[10px] text-gray-500 sm:text-[11px]">
+            <span className="text-xs text-gray-500">
               ({product.reviews_count ?? 0})
             </span>
           </div>
 
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
-            <span className="text-[13px] font-bold text-gray-900 sm:text-sm">
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="text-base font-bold text-gray-900 sm:text-lg">
               ₹{product.price.toLocaleString("en-IN")}
             </span>
 
             {hasDiscount && (
-              <span className="text-[10px] text-gray-400 line-through sm:text-[11px]">
+              <span className="text-xs text-gray-400 line-through sm:text-sm">
                 ₹{product.original_price!.toLocaleString("en-IN")}
               </span>
             )}
 
             {hasDiscount && (
-              <span className="text-[10px] font-medium text-green-700 sm:text-[11px]">
+              <span className="text-xs font-medium text-green-700 sm:text-sm">
                 {discount}% off
               </span>
             )}
@@ -159,46 +226,11 @@ export default function Home() {
     );
   }
 
-  function renderHorizontalRow(
-    rowProducts: Product[],
-    rowId: string
-  ) {
+  function renderHorizontalRow(rowProducts: Product[], rowId: string) {
     return (
-      <div className="relative">
-        <button
-          type="button"
-          aria-label="Scroll products left"
-          onClick={(event) => {
-            event.currentTarget.parentElement
-              ?.querySelector("[data-product-row]")
-              ?.scrollBy({ left: -600, behavior: "smooth" });
-          }}
-          className="absolute left-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md transition-colors hover:bg-gray-100 md:flex"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-
-        <div
-          key={rowId}
-          data-product-row
-          className="grid grid-flow-col auto-cols-[50%] overflow-x-auto overscroll-x-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[33.333%] md:auto-cols-[25%] lg:auto-cols-[20%] xl:auto-cols-[16.6667%]"
-        >
-          {rowProducts.map(renderProduct)}
-        </div>
-
-        <button
-          type="button"
-          aria-label="Scroll products right"
-          onClick={(event) => {
-            event.currentTarget.parentElement
-              ?.querySelector("[data-product-row]")
-              ?.scrollBy({ left: 600, behavior: "smooth" });
-          }}
-          className="absolute right-2 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white shadow-md transition-colors hover:bg-gray-100 md:flex"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      </div>
+      <ProductScrollRow key={rowId}>
+        {rowProducts.map(renderProduct)}
+      </ProductScrollRow>
     );
   }
 
@@ -235,10 +267,61 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen bg-gray-100">
-      <div className="mx-auto max-w-[1440px] space-y-3 px-2 py-3 sm:px-4 lg:px-5">
+    <main className="min-h-screen bg-white">
+      <style jsx global>{`
+        html {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+      `}</style>
+      <div className={`sticky top-[60px] z-40 border-b border-gray-200 transition-colors duration-200 ${categoriesCollapsed ? "bg-white/90 backdrop-blur-sm" : "bg-white"}`}>
+        <nav
+          aria-label="Shop by category"
+          className="mx-auto flex max-w-[1680px] items-stretch justify-start gap-2 overflow-x-auto px-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-3 sm:px-4"
+        >
+          {categories
+            .filter((category) => category.parent_id === null)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((category) => (
+              <Link
+                key={category.id}
+                href={`/categories/${category.slug}`}
+                title={category.name}
+                className={`group flex min-w-[85px] max-w-[110px] shrink-0 flex-col items-center justify-center border-b-[3px] border-transparent px-1 text-center transition-[height] duration-200 hover:border-blue-600 ${
+                  categoriesCollapsed ? "h-[46px]" : "h-[106px]"
+                }`}
+              >
+                {!categoriesCollapsed && (
+                  <div className="mb-1.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                    {category.icon_url ? (
+                      <img
+                        src={category.icon_url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <Package className="h-6 w-6 text-gray-400" />
+                    )}
+                  </div>
+                )}
+                <span className="block w-full truncate text-sm font-medium leading-5 text-gray-900 transition-colors group-hover:text-blue-600">
+                  {category.name}
+                </span>
+              </Link>
+            ))}
+        </nav>
+      </div>
+      <div className="w-full bg-white">
         {loading ? (
-          <div className="flex min-h-56 items-center justify-center rounded-sm border border-gray-200 bg-white">
+          <div className="flex min-h-56 items-center justify-center bg-white">
             <div className="text-center">
               <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
               <p className="mt-3 text-sm text-gray-500">
@@ -247,7 +330,7 @@ export default function Home() {
             </div>
           </div>
         ) : productsError ? (
-          <div className="rounded-sm border border-red-200 bg-white p-8 text-center">
+          <div className="bg-white p-8 text-center">
             <p className="font-semibold text-red-700">
               Unable to load products
             </p>
@@ -265,7 +348,7 @@ export default function Home() {
             </button>
           </div>
         ) : products.length === 0 ? (
-          <div className="rounded-sm border border-gray-200 bg-white p-10 text-center">
+          <div className="bg-white p-10 text-center">
             <Package className="mx-auto h-12 w-12 text-gray-300" />
 
             <h2 className="mt-4 text-lg font-semibold text-gray-800">
@@ -277,14 +360,8 @@ export default function Home() {
             {categoryRows.map(({ category, products: rowProducts }) => (
               <section
                 key={category.id}
-                className="overflow-hidden rounded-sm border border-gray-200 bg-white"
+                className="overflow-hidden bg-white"
               >
-                <div className="border-b border-gray-200 px-3 py-3 sm:px-4">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    {category.name}
-                  </h2>
-                </div>
-
                 {renderHorizontalRow(
                   rowProducts,
                   `category-${category.id}`
@@ -293,13 +370,7 @@ export default function Home() {
             ))}
 
             {uncategorizedProducts.length > 0 && (
-              <section className="overflow-hidden rounded-sm border border-gray-200 bg-white">
-                <div className="border-b border-gray-200 px-3 py-3 sm:px-4">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    More Products
-                  </h2>
-                </div>
-
+              <section className="overflow-hidden bg-white">
                 {renderHorizontalRow(
                   uncategorizedProducts,
                   "more-products"

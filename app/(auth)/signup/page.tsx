@@ -83,6 +83,41 @@ function getResponseMessage(value: unknown): string {
   return "";
 }
 
+function getApiErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const value = error as {
+      message?: unknown;
+      detail?: unknown;
+      response?: { data?: { detail?: unknown; message?: unknown } };
+    };
+
+    return (
+      getResponseMessage(value.response?.data?.detail) ||
+      getResponseMessage(value.response?.data?.message) ||
+      getResponseMessage(value.detail) ||
+      getResponseMessage(value.message) ||
+      "Something went wrong. Please try again."
+    );
+  }
+
+  return typeof error === "string"
+    ? error
+    : "Something went wrong. Please try again.";
+}
+
+function isOtpLimitError(error: unknown): boolean {
+  const message = getApiErrorMessage(error).toLowerCase();
+  return (
+    message.includes("verification codes per 10 minutes") ||
+    message.includes("otp sending is temporarily paused") ||
+    (message.includes("otp") && message.includes("limit"))
+  );
+}
+
 function isAlreadyVerifiedError(error: unknown): boolean {
   const message =
     error instanceof Error ? error.message : String(error ?? "");
@@ -171,12 +206,14 @@ function SignupForm() {
   };
 
   const showError = async (title: string, error: unknown) => {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Something went wrong. Please try again.";
+    const message = getApiErrorMessage(error);
 
-    await Swal.fire(title, message, "error");
+    await Swal.fire({
+      title: isOtpLimitError(error) ? "OTP limit reached" : title,
+      text: message,
+      icon: isOtpLimitError(error) ? "warning" : "error",
+      confirmButtonText: "OK",
+    });
   };
 
   const handleAlreadyVerified = async () => {
@@ -247,6 +284,12 @@ function SignupForm() {
       if (isAlreadyVerifiedError(error)) {
         await handleAlreadyVerified();
         return;
+      }
+
+      if (isOtpLimitError(error)) {
+        sessionStorage.setItem("verification_email", normalizedEmail);
+        sessionStorage.setItem("verification_method", "email");
+        setOtpMode("email");
       }
 
       await showError("Signup failed", error);

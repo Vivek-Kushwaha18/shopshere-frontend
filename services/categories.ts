@@ -1,3 +1,4 @@
+
 import { apiFetch } from "./api";
 
 export interface Category {
@@ -5,6 +6,7 @@ export interface Category {
   name: string;
   slug: string;
   description?: string | null;
+  icon_url?: string | null;
   parent_id: number | null;
   is_active: boolean;
 }
@@ -13,6 +15,7 @@ export interface CategoryCreateData {
   name: string;
   description?: string | null;
   parent_id?: number | null;
+  file?: File | null;
 }
 
 export interface CategoryUpdateData {
@@ -24,32 +27,15 @@ export interface CategoryUpdateData {
 const ADMIN_INACTIVE_CATEGORIES_KEY =
   "shopsphere_admin_inactive_categories";
 
-// =====================================================
-// CATEGORY CACHE
-// =====================================================
-
 let categoriesCache: Category[] | null = null;
-
-let categoriesRequest: Promise<Category[]> | null =
-  null;
-
-// =====================================================
-// CLEAR CATEGORY CACHE
-// =====================================================
+let categoriesRequest: Promise<Category[]> | null = null;
 
 export function clearCategoriesCache(): void {
   categoriesCache = null;
 }
 
-// =====================================================
-// ERROR HELPER
-// =====================================================
-
 function getErrorMessage(
-  response: {
-    status?: number;
-    data?: any;
-  },
+  response: { status?: number; data?: any },
   fallback: string
 ): string {
   const detail = response.data?.detail;
@@ -69,15 +55,9 @@ function getErrorMessage(
   }
 
   return `${fallback}${
-    response.status
-      ? ` Status: ${response.status}`
-      : ""
+    response.status ? ` Status: ${response.status}` : ""
   }`;
 }
-
-// =====================================================
-// LOCAL STORAGE
-// =====================================================
 
 function getStoredInactiveCategories(): Category[] {
   if (typeof window === "undefined") {
@@ -127,10 +107,7 @@ function saveStoredInactiveCategories(
 function addStoredInactiveCategory(
   category: Category
 ): void {
-  const current =
-    getStoredInactiveCategories();
-
-  const updated = current.filter(
+  const updated = getStoredInactiveCategories().filter(
     (item) => item.id !== category.id
   );
 
@@ -145,23 +122,16 @@ function addStoredInactiveCategory(
 function removeStoredInactiveCategory(
   categoryId: number
 ): void {
-  const current =
-    getStoredInactiveCategories();
-
   saveStoredInactiveCategories(
-    current.filter(
+    getStoredInactiveCategories().filter(
       (item) => item.id !== categoryId
     )
   );
 }
 
-// =====================================================
-// GET ACTIVE CATEGORIES
-//
-// GET /categories/
-// =====================================================
-
-export async function getCategories(): Promise<Category[]> {
+export async function getCategories(): Promise<
+  Category[]
+> {
   if (categoriesCache !== null) {
     return categoriesCache;
   }
@@ -170,9 +140,7 @@ export async function getCategories(): Promise<Category[]> {
     return categoriesRequest;
   }
 
-  categoriesRequest = apiFetch(
-    "/categories/"
-  )
+  categoriesRequest = apiFetch("/categories/")
     .then((response) => {
       if (!response.success) {
         throw new Error(
@@ -184,13 +152,10 @@ export async function getCategories(): Promise<Category[]> {
       }
 
       if (!Array.isArray(response.data)) {
-        throw new Error(
-          "Invalid categories response."
-        );
+        throw new Error("Invalid categories response.");
       }
 
-      const categories =
-        response.data as Category[];
+      const categories = response.data as Category[];
 
       categoriesCache = categories;
 
@@ -203,27 +168,21 @@ export async function getCategories(): Promise<Category[]> {
   return categoriesRequest;
 }
 
-// =====================================================
-// GET ADMIN CATEGORIES
-// =====================================================
-
-export async function getAdminCategories(): Promise<Category[]> {
-  const activeCategories =
-    await getCategories();
+export async function getAdminCategories(): Promise<
+  Category[]
+> {
+  const activeCategories = await getCategories();
 
   const inactiveCategories =
     getStoredInactiveCategories();
 
   const activeIds = new Set(
-    activeCategories.map(
-      (category) => category.id
-    )
+    activeCategories.map((category) => category.id)
   );
 
   const validInactiveCategories =
     inactiveCategories.filter(
-      (category) =>
-        !activeIds.has(category.id)
+      (category) => !activeIds.has(category.id)
     );
 
   saveStoredInactiveCategories(
@@ -233,16 +192,8 @@ export async function getAdminCategories(): Promise<Category[]> {
   return [
     ...activeCategories,
     ...validInactiveCategories,
-  ].sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
+  ].sort((a, b) => a.name.localeCompare(b.name));
 }
-
-// =====================================================
-// GET SINGLE CATEGORY
-//
-// GET /categories/{category_id}
-// =====================================================
 
 export async function getCategory(
   categoryId: number
@@ -263,26 +214,48 @@ export async function getCategory(
   return response.data as Category;
 }
 
-// =====================================================
-// CREATE CATEGORY - ADMIN
-//
-// POST /categories/
-// =====================================================
-
 export async function createCategory(
   categoryData: CategoryCreateData
 ): Promise<Category> {
-  const cleanedData: CategoryCreateData = {
-    name: categoryData.name.trim(),
-    description:
-      categoryData.description?.trim() || null,
-    parent_id:
-      categoryData.parent_id ?? null,
-  };
+  const name = categoryData.name.trim();
 
-  if (!cleanedData.name) {
+  if (!name) {
     throw new Error(
       "Category name cannot be empty."
+    );
+  }
+
+  if (
+    categoryData.parent_id == null &&
+    !categoryData.file
+  ) {
+    throw new Error(
+      "Main category icon is required."
+    );
+  }
+
+  const formData = new FormData();
+
+  formData.append("name", name);
+
+  if (categoryData.description?.trim()) {
+    formData.append(
+      "description",
+      categoryData.description.trim()
+    );
+  }
+
+  if (categoryData.parent_id != null) {
+    formData.append(
+      "parent_id",
+      String(categoryData.parent_id)
+    );
+  }
+
+  if (categoryData.file) {
+    formData.append(
+      "file",
+      categoryData.file
     );
   }
 
@@ -290,7 +263,7 @@ export async function createCategory(
     "/categories/",
     {
       method: "POST",
-      body: JSON.stringify(cleanedData),
+      body: formData,
     }
   );
 
@@ -303,12 +276,44 @@ export async function createCategory(
     );
   }
 
-  const category =
-    response.data as Category;
+  const category = response.data as Category;
 
-  removeStoredInactiveCategory(
-    category.id
+  removeStoredInactiveCategory(category.id);
+  clearCategoriesCache();
+
+  return category;
+}
+
+export async function uploadCategoryIcon(
+  categoryId: number,
+  file: File
+): Promise<Category> {
+  const formData = new FormData();
+
+  formData.append("file", file);
+
+  const response = await apiFetch(
+    `/categories/${categoryId}/icon`,
+    {
+      method: "POST",
+      body: formData,
+    }
   );
+
+  if (!response.success) {
+    throw new Error(
+      getErrorMessage(
+        response,
+        "Unable to upload category icon."
+      )
+    );
+  }
+
+  const category = response.data as Category;
+
+  if (!category.is_active) {
+    addStoredInactiveCategory(category);
+  }
 
   clearCategoriesCache();
 
@@ -316,10 +321,38 @@ export async function createCategory(
 }
 
 // =====================================================
-// UPDATE CATEGORY - ADMIN
-//
-// PUT /categories/{category_id}
+// DELETE CATEGORY ICON
 // =====================================================
+
+export async function deleteCategoryIcon(
+  categoryId: number
+): Promise<Category> {
+  const response = await apiFetch(
+    `/categories/${categoryId}/icon`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.success) {
+    throw new Error(
+      getErrorMessage(
+        response,
+        "Unable to delete category icon."
+      )
+    );
+  }
+
+  const category = response.data as Category;
+
+  if (!category.is_active) {
+    addStoredInactiveCategory(category);
+  }
+
+  clearCategoriesCache();
+
+  return category;
+}
 
 export async function updateCategory(
   categoryId: number,
@@ -356,8 +389,7 @@ export async function updateCategory(
     );
   }
 
-  const category =
-    response.data as Category;
+  const category = response.data as Category;
 
   const existingInactive =
     getStoredInactiveCategories().some(
@@ -373,21 +405,13 @@ export async function updateCategory(
       is_active: false,
     });
   } else {
-    removeStoredInactiveCategory(
-      categoryId
-    );
+    removeStoredInactiveCategory(categoryId);
   }
 
   clearCategoriesCache();
 
   return category;
 }
-
-// =====================================================
-// ACTIVATE CATEGORY - ADMIN
-//
-// PATCH /categories/{category_id}/activate
-// =====================================================
 
 export async function activateCategory(
   categoryId: number
@@ -413,20 +437,11 @@ export async function activateCategory(
     is_active: true,
   };
 
-  removeStoredInactiveCategory(
-    categoryId
-  );
-
+  removeStoredInactiveCategory(categoryId);
   clearCategoriesCache();
 
   return category;
 }
-
-// =====================================================
-// DEACTIVATE CATEGORY - ADMIN
-//
-// PATCH /categories/{category_id}/deactivate
-// =====================================================
 
 export async function deactivateCategory(
   categoryId: number
@@ -452,20 +467,11 @@ export async function deactivateCategory(
     is_active: false,
   };
 
-  addStoredInactiveCategory(
-    category
-  );
-
+  addStoredInactiveCategory(category);
   clearCategoriesCache();
 
   return category;
 }
-
-// =====================================================
-// DELETE CATEGORY - ADMIN
-//
-// DELETE /categories/{category_id}
-// =====================================================
 
 export async function deleteCategory(
   categoryId: number
@@ -486,9 +492,6 @@ export async function deleteCategory(
     );
   }
 
-  removeStoredInactiveCategory(
-    categoryId
-  );
-
+  removeStoredInactiveCategory(categoryId);
   clearCategoriesCache();
 }

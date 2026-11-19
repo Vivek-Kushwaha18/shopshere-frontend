@@ -1,4 +1,3 @@
-
 import { API_URL, apiFetch, refreshAuthSession } from "./api";
 
 // =====================================================
@@ -427,7 +426,13 @@ export async function sendVerificationCode(
       body: JSON.stringify({ email }),
     });
 
-    return response as ApiResult<unknown>;
+    const result = response as ApiResult<unknown>;
+
+    if (!result.success) {
+      throw new Error(getErrorMessage(result.data));
+    }
+
+    return result;
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
