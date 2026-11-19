@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -71,14 +72,36 @@ export default function Home() {
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
 
   useEffect(() => {
+    let animationFrame = 0;
+
     const updateCategoryBar = () => {
-      setCategoriesCollapsed(window.scrollY > 60);
+      cancelAnimationFrame(animationFrame);
+
+      animationFrame = requestAnimationFrame(() => {
+        setCategoriesCollapsed((previous) => {
+          if (!previous && window.scrollY > 120) {
+            return true;
+          }
+
+          if (previous && window.scrollY < 40) {
+            return false;
+          }
+
+          return previous;
+        });
+      });
     };
 
     updateCategoryBar();
-    window.addEventListener("scroll", updateCategoryBar, { passive: true });
 
-    return () => window.removeEventListener("scroll", updateCategoryBar);
+    window.addEventListener("scroll", updateCategoryBar, {
+      passive: true,
+    });
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener("scroll", updateCategoryBar);
+    };
   }, []);
 
   const loadPageData = useCallback(async () => {
@@ -280,45 +303,56 @@ export default function Home() {
           height: 0;
         }
       `}</style>
-      <div className={`sticky top-[60px] z-40 border-b border-gray-200 transition-colors duration-200 ${categoriesCollapsed ? "bg-white/90 backdrop-blur-sm" : "bg-white"}`}>
-        <nav
-          aria-label="Shop by category"
-          className="mx-auto flex max-w-[1680px] items-stretch justify-start gap-2 overflow-x-auto px-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-3 sm:px-4"
+
+      <div className="sticky top-[60px] z-40 h-[106px]">
+        <div
+          className={`border-b border-gray-200 transition-colors duration-200 ${
+            categoriesCollapsed
+              ? "bg-white/90 backdrop-blur-sm"
+              : "bg-white"
+          }`}
         >
-          {categories
-            .filter((category) => category.parent_id === null)
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((category) => (
-              <Link
-                key={category.id}
-                href={`/categories/${category.slug}`}
-                title={category.name}
-                className={`group flex min-w-[85px] max-w-[110px] shrink-0 flex-col items-center justify-center border-b-[3px] border-transparent px-1 text-center transition-[height] duration-200 hover:border-blue-600 ${
-                  categoriesCollapsed ? "h-[46px]" : "h-[106px]"
-                }`}
-              >
-                {!categoriesCollapsed && (
-                  <div className="mb-1.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
-                    {category.icon_url ? (
-                      <img
-                        src={category.icon_url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <Package className="h-6 w-6 text-gray-400" />
-                    )}
-                  </div>
-                )}
-                <span className="block w-full truncate text-sm font-medium leading-5 text-gray-900 transition-colors group-hover:text-blue-600">
-                  {category.name}
-                </span>
-              </Link>
-            ))}
-        </nav>
+          <nav
+            aria-label="Shop by category"
+            className="mx-auto flex max-w-[1680px] items-stretch justify-start gap-2 overflow-x-auto px-2 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-3 sm:px-4"
+          >
+            {categories
+              .filter((category) => category.parent_id === null)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((category) => (
+                <Link
+                  key={category.id}
+                  href={`/categories/${category.slug}`}
+                  title={category.name}
+                  className={`group flex min-w-[85px] max-w-[110px] shrink-0 flex-col items-center justify-center border-b-[3px] border-transparent px-1 text-center transition-[height] duration-200 hover:border-blue-600 ${
+                    categoriesCollapsed ? "h-[46px]" : "h-[106px]"
+                  }`}
+                >
+                  {!categoriesCollapsed && (
+                    <div className="mb-1.5 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                      {category.icon_url ? (
+                        <img
+                          src={category.icon_url}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <Package className="h-6 w-6 text-gray-400" />
+                      )}
+                    </div>
+                  )}
+
+                  <span className="block w-full truncate text-sm font-medium leading-5 text-gray-900 transition-colors group-hover:text-blue-600">
+                    {category.name}
+                  </span>
+                </Link>
+              ))}
+          </nav>
+        </div>
       </div>
+
       <div className="w-full bg-white">
         {loading ? (
           <div className="flex min-h-56 items-center justify-center bg-white">
